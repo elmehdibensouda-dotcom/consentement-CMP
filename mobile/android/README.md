@@ -1,0 +1,97 @@
+# Aman Consent Android SDK
+
+This Gradle project contains the `aman-consent` Android library module and a small integration sample app. The SDK currently targets Android API 23+ and reads the public, published Aman policy for one property. It stores choices in app-private `SharedPreferences`; it does not upload them automatically. An explicit API call can report a user-submitted choice after the client approves the collection model.
+
+## Build locally
+
+Requirements: JDK 17, Android SDK platform 37, and Gradle 9.6. This repository does not include the Gradle wrapper JAR or launcher scripts, so use an installed Gradle or configure Android Studio with those tools.
+
+```sh
+gradle :aman-consent:assembleRelease
+gradle :sample:assembleDebug
+```
+
+The library AAR is produced at `aman-consent/build/outputs/aar/aman-consent-release.aar`. To create a local Maven repository for inspection or internal distribution:
+
+```sh
+gradle :aman-consent:publish
+```
+
+The local publication is written below `aman-consent/build/repository/`; change the repository block and credentials through the consuming organization's approved artifact repository before distributing releases.
+
+## Integrate from an Android application
+
+For a source checkout, include `:aman-consent` as a Gradle project module. For an internal artifact repository, use the coordinates `ma.aman:aman-consent-android:0.1.0` after publishing a reviewed release. The app must have network access to the published policy endpoint; the library manifest declares Android's `INTERNET` permission. Remote policy endpoints must use HTTPS. HTTP is accepted only for loopback development hosts (`localhost`, `127.0.0.1`, and `::1`).
+
+```kotlin
+val policyClient = AmanConsentAPIClient(applicationContext)
+policyClient.fetchPublishedPolicy("https://cmp.example.ma", "PROPERTY_ID") { result ->
+    result.onSuccess { policy ->
+        val consent = AmanConsentManager(applicationContext, policy)
+        consent.addEffectivePurposeStatesChangedListener { states ->
+            runOnUiThread {
+                if (states["analytics"] == true) startAnalyticsIfNotStarted()
+                else stopAnalyticsIfSupported()
+            }
+        }
+        if (consent.decision == null) consent.showConsentDialog(this)
+        if (consent.isAllowed("analytics")) startAnalyticsIfNotStarted()
+    }
+}
+```
+
+Policy and decision API callbacks run on the Android main thread by default. Pass a custom `callbackExecutor` to `AmanConsentAPIClient` if the host needs another callback thread; the network work always stays on its background executor. Effective-state callbacks run on the thread that saved the choice or called `updatePolicy`; dispatch UI and SDK lifecycle work to the main thread. The host app is responsible for wiring each purpose to its actual SDK start/stop lifecycle and for describing third-party SDK practices in its platform disclosures. When `consentRequired` is false, a purpose starts active by default but its switch remains available; an explicit refusal is retained. Aman cannot unload a native library that the host initialized earlier.
+
+Before caching or applying a policy, the client rejects unknown schema versions, unsupported languages or purposes, contradictory purpose rules, and retention periods outside the shared schema limits. If `defaultLanguage` is absent, the first declared language is used.
+
+Without the optional `language` argument, `showConsentDialog` uses `defaultLanguage` from the published policy (`fr` or `ar`). The host application can still pass a language explicitly when its own language preference should take precedence.
+
+Translated notice content is read from `noticeTranslations.fr` and `noticeTranslations.ar`; the dialog selects the block matching its display language and falls back to the legacy `notice` field. The client must supply and review its content in every language it offers.
+
+`addEffectivePurposeStatesChangedListener` receives the effective state after a saved choice and after `updatePolicy`. If a newly fetched policy invalidates the saved choice, it sends the new policy defaults so the host can stop or start SDKs accordingly. This state callback is not a user decision and must not be uploaded as one. Apply `isAllowed(...)` once after manager creation because listener registration does not immediately invoke the listener.
+
+The manager schedules an effective-state update when a saved choice expires while the process is active. Also refresh it when the app returns to the foreground so an expiry during suspension is applied before the host resumes optional SDKs:
+
+```kotlin
+override fun onResume() {
+    super.onResume()
+    consentManager?.refreshExpiredDecision()
+}
+```
+
+Connect `addEffectivePurposeStatesChangedListener` to the actual start/stop calls for each optional SDK. Expiration clears the local choice and notifies this state listener, but does not call `addConsentChangedListener`; do not upload it as a new visitor decision.
+
+After fetching a newer published policy, update the existing manager so the state listener can reconcile the host SDKs:
+
+```kotlin
+policyClient.fetchPublishedPolicy(apiBaseUrl, propertyId) { result ->
+    result.onSuccess { refreshedPolicy ->
+        runOnUiThread { consent.updatePolicy(refreshedPolicy) }
+    }
+}
+```
+
+### Optional central decision reporting
+
+Only after the client approves the visitor notice and collection design, the app may explicitly report each submitted choice from the decision listener:
+
+```kotlin
+consent.addConsentChangedListener { decision ->
+    policyClient.recordDecision("https://cmp.example.ma", decision) { upload ->
+        upload.onFailure { error ->
+            // Report technical delivery status without logging purpose values.
+        }
+    }
+}
+```
+
+The call uses an event-specific random ID so retrying the same local decision is idempotent. It does not attach an account or persistent device ID. The API stores the purpose booleans and server receipt time; it does not verify identity, screen display or app authenticity. These client-reported events do not constitute a legal proof by themselves, and network errors leave the local decision intact.
+
+The `sample` app lets an integrator enter an API URL and property ID, fetch a published Android policy, display the consent dialog, and inspect the analytics decision. Its analytics action is intentionally a placeholder; it does not include a third-party analytics library.
+
+## Current integration limits
+
+- Source API and UI are an MVP starter, not yet security-reviewed or approved for a bank production app.
+- No artifact has been built or published from this checkout; release signing, reproducible builds, SBOM, vulnerability scanning, and compatibility matrix remain to be established.
+- Consent decisions persist locally. Optional central reporting is a separate `addConsentChangedListener` app call; effective-state listeners also fire on policy changes but are not decision events. There is no retry queue, cross-device synchronization, public rate limiting or production deployment support.
+- Validate Android version, accessibility, network/offline behavior and each third-party SDK's revocation behavior in the target app before a pilot.

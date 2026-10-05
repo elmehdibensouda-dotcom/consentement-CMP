@@ -1,0 +1,1804 @@
+"""Aman API: local development control plane, not a production bank deployment.
+
+The API uses SQLite for a runnable local vertical slice. Production must move to
+managed PostgreSQL, TLS, a secret manager, external rate limiting, migrations,
+centralized monitoring, and a reviewed hosting/data-transfer arrangement.
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import ipaddress
+import json
+import os
+import secrets
+import sqlite3
+import time
+import csv
+import io
+import asyncio
+import logging
+import re
+from collections import deque
+from contextlib import asynccontextmanager, contextmanager, suppress
+from datetime import datetime
+from pathlib import Path
+from threading import Lock
+from typing import Any, Deque, Dict, Generator, Literal, Optional, Tuple
+from urllib.parse import urlsplit
+
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from jsonschema import Draft202012Validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, constr
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCHEMA_PATH = ROOT / "schemas" / "consent-policy.schema.json"
+DATABASE_PATH = Path(os.environ.get("AMAN_DATABASE_PATH", "/tmp/aman-dev.sqlite3"))
+ENVIRONMENT = os.environ.get("AMAN_ENVIRONMENT", "development").lower()
+SESSION_COOKIE = "aman_session"
+CSRF_COOKIE = "aman_csrf"
+SESSION_TTL_SECONDS = 8 * 60 * 60
+INVITE_TTL_SECONDS = 72 * 60 * 60
+OWNERSHIP_TRANSFER_TTL_SECONDS = 24 * 60 * 60
+LOGIN_FAILURE_LIMIT = 20
+LOGIN_WINDOW_SECONDS = 10 * 60
+LOGIN_LOCK_SECONDS = 10 * 60
+CONSENT_EVENT_WINDOW_SECONDS = 60
+CONSENT_EVENT_CLIENT_LIMIT = 120
+CONSENT_EVENT_PROPERTY_LIMIT = 6000
+CONSENT_EVENT_MAX_BUCKETS = 20000
+INVITATION_PREVIEW_LIMIT = 120
+INVITATION_ACCEPT_LIMIT = 20
+INVITATION_RATE_WINDOW_SECONDS = 60
+INVITATION_RATE_MAX_BUCKETS = 20000
+SCAN_REPORT_MAX_BYTES = 1_048_576
+SCAN_REPORTS_PER_PROPERTY = 20
+_LOGIN_LOCK = Lock()
+_LOGIN_FAILURES: Dict[str, Deque[int]] = {}
+_LOGIN_BLOCKED_UNTIL: Dict[str, int] = {}
+_LOGIN_LAST_CLEANUP = 0
+_CONSENT_RATE_LOCK = Lock()
+_CONSENT_RATE_BUCKETS: Dict[str, Deque[int]] = {}
+_CONSENT_RATE_LAST_CLEANUP = 0
+_INVITATION_RATE_LOCK = Lock()
+_INVITATION_RATE_BUCKETS: Dict[str, Deque[int]] = {}
+_INVITATION_RATE_LAST_CLEANUP = 0
+_CONSENT_RATE_SECRET = secrets.token_bytes(32)
+COOKIE_SECURE = ENVIRONMENT == "production"
+if ENVIRONMENT == "production":
+    raise RuntimeError(
+        "This development API is not production-deployable: it uses SQLite and has no reviewed deployment controls."
+    )
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("AMAN_CORS_ORIGINS", "http://localhost:8000").split(",")
+    if origin.strip()
+]
+
+SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+POLICY_VALIDATOR = Draft202012Validator(SCHEMA)
+LOGGER = logging.getLogger("aman.consent")
+
+
+def utc_now() -> int:
+    return int(time.time())
+
+
+def db_connect() -> sqlite3.Connection:
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DATABASE_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+@contextmanager
+def connection() -> Generator[sqlite3.Connection, None, None]:
+    conn = db_connect()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def transaction() -> Generator[sqlite3.Connection, None, None]:
+    conn = db_connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def init_db() -> None:
+    with connection() as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+              id TEXT PRIMARY KEY,
+              email TEXT NOT NULL UNIQUE,
+              password_hash TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              disabled INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS organizations (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              require_two_person_publish INTEGER NOT NULL DEFAULT 1,
+              created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS memberships (
+              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              role TEXT NOT NULL CHECK (role IN ('owner','admin','editor','viewer')),
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY (org_id, user_id)
+            );
+            CREATE TABLE IF NOT EXISTS invitations (
+              id TEXT PRIMARY KEY,
+              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+              email TEXT NOT NULL,
+              role TEXT NOT NULL CHECK (role IN ('admin','editor','viewer')),
+              token_hash TEXT NOT NULL UNIQUE,
+              invited_by TEXT NOT NULL REFERENCES users(id),
+              expires_at INTEGER NOT NULL,
+              accepted_at INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS ownership_transfers (
+              id TEXT PRIMARY KEY,
+              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+              current_owner_id TEXT NOT NULL REFERENCES users(id),
+              proposed_owner_id TEXT NOT NULL REFERENCES users(id),
+              token_hash TEXT NOT NULL UNIQUE,
+              created_at INTEGER NOT NULL,
+              expires_at INTEGER NOT NULL,
+              accepted_at INTEGER,
+              revoked_at INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS properties (
+              id TEXT PRIMARY KEY,
+              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+              name TEXT NOT NULL,
+              channel TEXT NOT NULL CHECK (channel IN ('web','ios','android')),
+              environment TEXT NOT NULL DEFAULT 'development' CHECK (environment IN ('development','staging','production')),
+              origin TEXT,
+              created_at INTEGER NOT NULL,
+              UNIQUE (org_id, name, channel)
+            );
+            CREATE TABLE IF NOT EXISTS policies (
+              id TEXT PRIMARY KEY,
+              property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+              version INTEGER NOT NULL,
+              revision INTEGER NOT NULL DEFAULT 1,
+              last_edited_by TEXT REFERENCES users(id),
+              status TEXT NOT NULL CHECK (status IN ('draft','published','retired')),
+              body TEXT NOT NULL,
+              created_by TEXT NOT NULL REFERENCES users(id),
+              created_at INTEGER NOT NULL,
+              published_by TEXT REFERENCES users(id),
+              published_at INTEGER,
+              UNIQUE (property_id, version)
+            );
+            CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
+            CREATE INDEX IF NOT EXISTS idx_properties_org ON properties(org_id);
+            CREATE INDEX IF NOT EXISTS idx_policies_property_status ON policies(property_id, status);
+            CREATE TABLE IF NOT EXISTS sessions (
+              token_hash TEXT PRIMARY KEY,
+              csrf_hash TEXT NOT NULL,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              expires_at INTEGER NOT NULL,
+              created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+            CREATE TABLE IF NOT EXISTS audit_events (
+              id TEXT PRIMARY KEY,
+              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+              actor_user_id TEXT NOT NULL REFERENCES users(id),
+              action TEXT NOT NULL,
+              resource_type TEXT NOT NULL,
+              resource_id TEXT NOT NULL,
+              occurred_at INTEGER NOT NULL,
+              details TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_org_time ON audit_events(org_id, occurred_at DESC);
+            CREATE TABLE IF NOT EXISTS consent_events (
+              event_id TEXT PRIMARY KEY,
+              property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+              policy_version TEXT NOT NULL,
+              channel TEXT NOT NULL CHECK (channel IN ('web','ios','android')),
+              action TEXT NOT NULL CHECK (action IN ('accept_all','reject_all','custom')),
+              purposes TEXT NOT NULL,
+              recorded_at INTEGER NOT NULL,
+              expires_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_consent_events_property_time ON consent_events(property_id, recorded_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_consent_events_expiry ON consent_events(expires_at);
+            CREATE TABLE IF NOT EXISTS scan_reports (
+              id TEXT PRIMARY KEY,
+              property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+              imported_by TEXT NOT NULL REFERENCES users(id),
+              scanned_at INTEGER NOT NULL,
+              imported_at INTEGER NOT NULL,
+              page_origin TEXT NOT NULL,
+              resource_count INTEGER NOT NULL,
+              cookie_count INTEGER NOT NULL,
+              report_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_scan_reports_property_time ON scan_reports(property_id, imported_at DESC);
+            """
+        )
+        policy_columns = {row["name"] for row in conn.execute("PRAGMA table_info(policies)").fetchall()}
+        property_columns = {row["name"] for row in conn.execute("PRAGMA table_info(properties)").fetchall()}
+        if "origin" not in property_columns:
+            conn.execute("ALTER TABLE properties ADD COLUMN origin TEXT")
+        if "environment" not in property_columns:
+            conn.execute("ALTER TABLE properties ADD COLUMN environment TEXT NOT NULL DEFAULT 'development' "
+                         "CHECK (environment IN ('development','staging','production'))")
+        if "revision" not in policy_columns:
+            conn.execute("ALTER TABLE policies ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+        if "last_edited_by" not in policy_columns:
+            conn.execute("ALTER TABLE policies ADD COLUMN last_edited_by TEXT REFERENCES users(id)")
+        conn.execute("UPDATE policies SET last_edited_by=created_by WHERE last_edited_by IS NULL")
+        conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
+        conn.commit()
+
+
+def digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def hash_password(password: str, salt: Optional[bytes] = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    derived = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=64)
+    return f"scrypt${salt.hex()}${derived.hex()}"
+
+
+def check_password(password: str, stored: str) -> bool:
+    try:
+        kind, salt_hex, hash_hex = stored.split("$", 2)
+        if kind != "scrypt":
+            return False
+        candidate = hash_password(password, bytes.fromhex(salt_hex)).split("$", 2)[2]
+        return hmac.compare_digest(candidate, hash_hex)
+    except (ValueError, TypeError):
+        return False
+
+
+def login_client_key(request: Request) -> str:
+    # Trust only the socket peer. Forwarded headers require an explicitly trusted proxy.
+    remote_ip = request.client.host if request.client else "unknown"
+    return digest("aman-login-ip:" + remote_ip)
+
+
+def prune_login_state(now: int) -> None:
+    global _LOGIN_LAST_CLEANUP
+    cutoff = now - LOGIN_WINDOW_SECONDS
+    for key, failures in list(_LOGIN_FAILURES.items()):
+        while failures and failures[0] <= cutoff:
+            failures.popleft()
+        if not failures:
+            _LOGIN_FAILURES.pop(key, None)
+    for key, blocked_until in list(_LOGIN_BLOCKED_UNTIL.items()):
+        if blocked_until <= now:
+            _LOGIN_BLOCKED_UNTIL.pop(key, None)
+    _LOGIN_LAST_CLEANUP = now
+
+
+def enforce_login_rate_limit(client_key: str) -> None:
+    now = utc_now()
+    with _LOGIN_LOCK:
+        if now - _LOGIN_LAST_CLEANUP >= 60:
+            prune_login_state(now)
+        blocked_until = _LOGIN_BLOCKED_UNTIL.get(client_key, 0)
+        if blocked_until > now:
+            retry_after = blocked_until - now
+            raise HTTPException(
+                status_code=429,
+                detail="Too many sign-in failures from this network. Try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+
+def note_failed_login(client_key: str) -> int:
+    now = utc_now()
+    with _LOGIN_LOCK:
+        failures = _LOGIN_FAILURES.setdefault(client_key, deque())
+        cutoff = now - LOGIN_WINDOW_SECONDS
+        while failures and failures[0] <= cutoff:
+            failures.popleft()
+        failures.append(now)
+        if len(failures) < LOGIN_FAILURE_LIMIT:
+            return 0
+        blocked_until = now + LOGIN_LOCK_SECONDS
+        _LOGIN_BLOCKED_UNTIL[client_key] = blocked_until
+        _LOGIN_FAILURES.pop(client_key, None)
+        return LOGIN_LOCK_SECONDS
+
+
+def clear_login_failures(client_key: str) -> None:
+    with _LOGIN_LOCK:
+        _LOGIN_FAILURES.pop(client_key, None)
+        _LOGIN_BLOCKED_UNTIL.pop(client_key, None)
+
+
+def enforce_consent_event_rate_limit(request: Request, property_id: str) -> None:
+    """Bound local ingestion using short-lived client keys that are never persisted."""
+    global _CONSENT_RATE_LAST_CLEANUP
+    now = utc_now()
+    remote_ip = request.client.host if request.client else "unknown"
+    client_key = hmac.new(_CONSENT_RATE_SECRET, remote_ip.encode("utf-8"), hashlib.sha256).hexdigest()
+    bucket_specs: Tuple[Tuple[str, int], ...] = (
+        ("client:" + client_key, CONSENT_EVENT_CLIENT_LIMIT),
+        ("property:" + property_id, CONSENT_EVENT_PROPERTY_LIMIT),
+    )
+    cutoff = now - CONSENT_EVENT_WINDOW_SECONDS
+    with _CONSENT_RATE_LOCK:
+        if now - _CONSENT_RATE_LAST_CLEANUP >= 30:
+            for key, bucket in list(_CONSENT_RATE_BUCKETS.items()):
+                while bucket and bucket[0] <= cutoff:
+                    bucket.popleft()
+                if not bucket:
+                    _CONSENT_RATE_BUCKETS.pop(key, None)
+            _CONSENT_RATE_LAST_CLEANUP = now
+        new_keys = sum(key not in _CONSENT_RATE_BUCKETS for key, _ in bucket_specs)
+        if len(_CONSENT_RATE_BUCKETS) + new_keys > CONSENT_EVENT_MAX_BUCKETS:
+            raise HTTPException(status_code=429, detail="Consent event capacity is temporarily limited",
+                                headers={"Retry-After": str(CONSENT_EVENT_WINDOW_SECONDS)})
+        for key, limit in bucket_specs:
+            bucket = _CONSENT_RATE_BUCKETS.get(key)
+            if bucket and len(bucket) >= limit:
+                retry_after = max(1, bucket[0] + CONSENT_EVENT_WINDOW_SECONDS - now)
+                raise HTTPException(status_code=429, detail="Too many consent events; retry later",
+                                    headers={"Retry-After": str(retry_after)})
+        for key, _ in bucket_specs:
+            _CONSENT_RATE_BUCKETS.setdefault(key, deque()).append(now)
+
+
+def enforce_invitation_rate_limit(request: Request, operation: str, limit: int) -> None:
+    """Bound public invitation-token lookups and acceptance attempts per socket peer."""
+    global _INVITATION_RATE_LAST_CLEANUP
+    now = utc_now()
+    remote_ip = request.client.host if request.client else "unknown"
+    client_key = hmac.new(_CONSENT_RATE_SECRET, remote_ip.encode("utf-8"), hashlib.sha256).hexdigest()
+    bucket_key = f"{operation}:{client_key}"
+    cutoff = now - INVITATION_RATE_WINDOW_SECONDS
+    with _INVITATION_RATE_LOCK:
+        if now - _INVITATION_RATE_LAST_CLEANUP >= 30:
+            for key, bucket in list(_INVITATION_RATE_BUCKETS.items()):
+                while bucket and bucket[0] <= cutoff:
+                    bucket.popleft()
+                if not bucket:
+                    _INVITATION_RATE_BUCKETS.pop(key, None)
+            _INVITATION_RATE_LAST_CLEANUP = now
+        bucket = _INVITATION_RATE_BUCKETS.get(bucket_key)
+        if bucket and len(bucket) >= limit:
+            retry_after = max(1, bucket[0] + INVITATION_RATE_WINDOW_SECONDS - now)
+            raise HTTPException(
+                status_code=429,
+                detail="Too many invitation attempts from this network. Try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
+        if bucket is None:
+            if len(_INVITATION_RATE_BUCKETS) >= INVITATION_RATE_MAX_BUCKETS:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Invitation service is temporarily busy. Try again later.",
+                    headers={"Retry-After": str(INVITATION_RATE_WINDOW_SECONDS)},
+                )
+            bucket = deque()
+            _INVITATION_RATE_BUCKETS[bucket_key] = bucket
+        bucket.append(now)
+
+
+def audit(conn: sqlite3.Connection, org_id: str, actor: str, action: str,
+          resource_type: str, resource_id: str, details: Optional[dict] = None) -> None:
+    conn.execute(
+        "INSERT INTO audit_events(id,org_id,actor_user_id,action,resource_type,resource_id,occurred_at,details) "
+        "VALUES(?,?,?,?,?,?,?,?)",
+        (secrets.token_hex(16), org_id, actor, action, resource_type, resource_id, utc_now(),
+         json.dumps(details or {}, separators=(",", ":"), ensure_ascii=False)),
+    )
+
+
+class LoginBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class OrganizationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=2, max_length=160)
+    requireTwoPersonPublish: bool = True
+
+
+class PropertyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=2, max_length=180)
+    channel: Literal["web", "ios", "android"]
+    environment: Literal["development", "staging", "production"] = "development"
+    origin: Optional[str] = Field(default=None, min_length=1, max_length=512)
+
+
+class PropertyOriginBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    origin: str = Field(min_length=1, max_length=512)
+
+
+class InviteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    role: Literal["admin", "editor", "viewer"]
+
+
+class MemberRoleBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["admin", "editor", "viewer"]
+
+
+class OwnershipTransferBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    proposedOwnerId: str = Field(min_length=1, max_length=128)
+
+
+class AcceptOwnershipTransferBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=40, max_length=256)
+
+
+class AcceptInviteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=40, max_length=256)
+    password: str = Field(min_length=12, max_length=1024)
+
+
+class InvitationPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=40, max_length=256)
+
+
+class PolicyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    policy: Dict[str, Any]
+    expectedRevision: Optional[int] = Field(default=None, ge=1)
+
+
+class ConsentEventBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    eventId: str = Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+    policyVersion: str = Field(min_length=1, max_length=64)
+    channel: Literal["web", "ios", "android"]
+    action: Literal["accept_all", "reject_all", "custom"]
+    purposes: Dict[constr(pattern=r"^[a-z][a-z0-9_-]{1,63}$"), StrictBool] = Field(max_length=64)
+
+
+class ScanCookieBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=256)
+    classification: Literal["à examiner", "essentiel", "mesure d’audience", "personnalisation", "publicité"]
+
+
+class ScanResourceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: str = Field(min_length=1, max_length=48)
+    url: str = Field(min_length=1, max_length=2048)
+    origin: str = Field(min_length=1, max_length=512)
+    firstParty: StrictBool
+    detail: str = Field(default="", max_length=200)
+    amanControl: Optional[Literal["marker_present", "marker_missing"]] = None
+    classification: Literal["à examiner", "essentiel", "mesure d’audience", "personnalisation", "publicité"]
+
+
+class ScanReportBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_name: Literal["aman-local-inventory-v1"] = Field(alias="schema")
+    scannedAt: datetime
+    page: str = Field(min_length=1, max_length=2048)
+    scope: Literal["current-page-only; no network upload"]
+    limitations: list[str] = Field(max_length=10)
+    cookies: list[ScanCookieBody] = Field(max_length=250)
+    resources: list[ScanResourceBody] = Field(max_length=750)
+
+
+class SessionContext(BaseModel):
+    user_id: str
+    email: str
+    session_hash: str
+
+
+def require_csrf(request: Request, context: SessionContext, x_aman_csrf: Optional[str]) -> None:
+    cookie_value = request.cookies.get(CSRF_COOKIE)
+    if not cookie_value or not x_aman_csrf or not hmac.compare_digest(cookie_value, x_aman_csrf):
+        raise HTTPException(status_code=403, detail="CSRF validation failed")
+    with connection() as conn:
+        row = conn.execute("SELECT csrf_hash FROM sessions WHERE token_hash=?", (context.session_hash,)).fetchone()
+    if not row or not hmac.compare_digest(digest(cookie_value), row["csrf_hash"]):
+        raise HTTPException(status_code=403, detail="CSRF validation failed")
+
+
+def current_session(request: Request) -> SessionContext:
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token_hash = digest(token)
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT s.user_id,s.expires_at,u.email,u.disabled FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?",
+            (token_hash,),
+        ).fetchone()
+        if not row or row["expires_at"] <= utc_now() or row["disabled"]:
+            conn.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
+            raise HTTPException(status_code=401, detail="Session expired")
+    return SessionContext(user_id=row["user_id"], email=row["email"], session_hash=token_hash)
+
+
+def membership(conn: sqlite3.Connection, org_id: str, user_id: str) -> str:
+    row = conn.execute("SELECT role FROM memberships WHERE org_id=? AND user_id=?", (org_id, user_id)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return row["role"]
+
+
+def require_role(role: str, allowed: set) -> None:
+    if role not in allowed:
+        raise HTTPException(status_code=403, detail="Insufficient organization role")
+
+
+def validate_policy(body: Dict[str, Any], property_id: str, channel: str) -> dict:
+    errors = sorted(POLICY_VALIDATOR.iter_errors(body), key=lambda err: list(err.path))
+    if errors:
+        first = errors[0]
+        field_path = ".".join(str(part) for part in first.path) or "policy"
+        raise HTTPException(status_code=422, detail=f"Policy schema: {field_path}: {first.message}")
+    if body["propertyId"] != property_id:
+        raise HTTPException(status_code=422, detail="Policy propertyId must match its property")
+    if body["status"] != "draft":
+        raise HTTPException(status_code=422, detail="Policies must be submitted as draft")
+    purpose_ids = [purpose["id"] for purpose in body["purposes"]]
+    if len(purpose_ids) != len(set(purpose_ids)):
+        raise HTTPException(status_code=422, detail="Purpose IDs must be unique within a policy")
+    if channel == "web" and body["retentionDays"] > 180:
+        raise HTTPException(status_code=422, detail="Web cookie-choice retention cannot exceed 180 days in this Morocco-focused policy flow")
+    if channel not in {channel for purpose in body["purposes"] for channel in purpose["channels"]}:
+        raise HTTPException(status_code=422, detail=f"At least one purpose must target the {channel} channel")
+    for purpose in body["purposes"]:
+        if purpose["required"] and purpose["consentRequired"]:
+            raise HTTPException(status_code=422, detail="Required purposes cannot require an optional consent choice")
+    return body
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    sweeper = asyncio.create_task(purge_expired_consent_events())
+    try:
+        yield
+    finally:
+        sweeper.cancel()
+        with suppress(asyncio.CancelledError):
+            await sweeper
+
+
+async def purge_expired_consent_events() -> None:
+    """Physically remove expired local event records while the API is running."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            with transaction() as conn:
+                conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
+        except sqlite3.Error:
+            LOGGER.exception("Consent event expiry sweep failed")
+
+
+app = FastAPI(title="Aman Consent API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-Aman-CSRF", "If-None-Match"],
+)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = response.headers.get("Cache-Control", "no-store")
+    if ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+@app.middleware("http")
+async def limit_scan_upload_size(request: Request, call_next):
+    scan_upload = request.method == "POST" and re.fullmatch(
+        r"/v1/organizations/[^/]+/properties/[^/]+/scans", request.url.path
+    )
+    if scan_upload:
+        if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+            return JSONResponse({"detail": "Scan reports must be uploaded as application/json"}, status_code=415)
+        raw_length = request.headers.get("content-length")
+        if not raw_length or not raw_length.isdecimal():
+            return JSONResponse({"detail": "A Content-Length header is required for scan imports"}, status_code=411)
+        if int(raw_length) > SCAN_REPORT_MAX_BYTES:
+            return JSONResponse({"detail": "Scan report exceeds the 1 MiB import limit"}, status_code=413)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def property_public_cors(request: Request, call_next):
+    """Allow a registered web property to call only the public API, without cookies."""
+    route = re.fullmatch(r"/v1/public/properties/([^/]+)/(policy|consent-events)", request.url.path)
+    origin = request.headers.get("origin")
+    if not route or not origin:
+        return await call_next(request)
+    property_id, resource = route.groups()
+    expected_method = "GET" if resource == "policy" else "POST"
+    with connection() as conn:
+        prop = conn.execute(
+            "SELECT origin,channel FROM properties WHERE id=?", (property_id,)
+        ).fetchone()
+    if not prop or prop["channel"] != "web" or not prop["origin"] or origin != prop["origin"]:
+        return await call_next(request)
+
+    if request.method == "OPTIONS":
+        requested_method = request.headers.get("access-control-request-method", "").upper()
+        requested_headers = {
+            item.strip().lower()
+            for item in request.headers.get("access-control-request-headers", "").split(",")
+            if item.strip()
+        }
+        allowed_headers = {"content-type", "if-none-match"}
+        if requested_method != expected_method or not requested_headers.issubset(allowed_headers):
+            return Response(status_code=403)
+        return Response(status_code=204, headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": f"{expected_method}, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+            "Access-Control-Max-Age": "600",
+            "Vary": "Origin",
+        })
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Expose-Headers"] = "ETag"
+    if "Access-Control-Allow-Credentials" in response.headers:
+        del response.headers["Access-Control-Allow-Credentials"]
+    response.headers["Vary"] = "Origin"
+    return response
+
+
+@app.get("/health")
+def health():
+    return {"service": "aman-consent-api", "status": "ok", "environment": ENVIRONMENT}
+
+
+@app.post("/v1/auth/login")
+def login(body: LoginBody, request: Request, response: Response):
+    client_key = login_client_key(request)
+    enforce_login_rate_limit(client_key)
+    email = str(body.email).strip().lower()
+    with connection() as conn:
+        user = conn.execute("SELECT id,password_hash,disabled FROM users WHERE email=?", (email,)).fetchone()
+    if not user or user["disabled"] or not check_password(body.password, user["password_hash"]):
+        retry_after = note_failed_login(client_key)
+        if retry_after:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many sign-in failures from this network. Try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
+        raise HTTPException(status_code=401, detail="Email or password is incorrect")
+
+    clear_login_failures(client_key)
+
+    token = secrets.token_urlsafe(48)
+    csrf_token = secrets.token_urlsafe(32)
+    now = utc_now()
+    with transaction() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at<=?", (now,))
+        conn.execute(
+            "INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,created_at) VALUES(?,?,?,?,?)",
+            (digest(token), digest(csrf_token), user["id"], now + SESSION_TTL_SECONDS, now),
+        )
+    response.set_cookie(SESSION_COOKIE, token, httponly=True, secure=COOKIE_SECURE,
+                        samesite="strict", max_age=SESSION_TTL_SECONDS, path="/")
+    response.set_cookie(CSRF_COOKIE, csrf_token, httponly=False, secure=COOKIE_SECURE,
+                        samesite="strict", max_age=SESSION_TTL_SECONDS, path="/")
+    return {"csrfToken": csrf_token, "expiresAt": now + SESSION_TTL_SECONDS}
+
+
+@app.post("/v1/auth/logout")
+def logout(request: Request, response: Response, x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with transaction() as conn:
+        conn.execute("DELETE FROM sessions WHERE token_hash=?", (context.session_hash,))
+    response.delete_cookie(SESSION_COOKIE, path="/", samesite="strict")
+    response.delete_cookie(CSRF_COOKIE, path="/", samesite="strict")
+    return {"ok": True}
+
+
+@app.get("/v1/auth/me")
+def who_am_i(request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        orgs = conn.execute(
+            "SELECT o.id,o.name,m.role FROM organizations o JOIN memberships m ON m.org_id=o.id "
+            "WHERE m.user_id=? ORDER BY o.name", (context.user_id,),
+        ).fetchall()
+    return {"userId": context.user_id, "email": context.email,
+            "organizations": [dict(row) for row in orgs]}
+
+
+@app.get("/v1/dashboard")
+def dashboard(request: Request):
+    """Return real control-plane counts only for organizations in the current session."""
+    context = current_session(request)
+    now = utc_now()
+    metrics_since = now - 30 * 86_400
+    with connection() as conn:
+        organizations = conn.execute(
+            "SELECT o.id,o.name,m.role FROM organizations o "
+            "JOIN memberships m ON m.org_id=o.id WHERE m.user_id=? ORDER BY o.name",
+            (context.user_id,),
+        ).fetchall()
+        properties = conn.execute(
+            "SELECT p.id,p.org_id,o.name AS organization_name,p.name,p.channel,p.environment,p.origin,p.created_at,"
+            "(SELECT MAX(x.version) FROM policies x WHERE x.property_id=p.id AND x.status='published') "
+            "AS published_version,"
+            "(SELECT COUNT(*) FROM policies x WHERE x.property_id=p.id AND x.status='draft') AS draft_count,"
+            "(SELECT MAX(x.version) FROM policies x WHERE x.property_id=p.id AND x.status='draft') "
+            "AS draft_version "
+            "FROM properties p JOIN organizations o ON o.id=p.org_id "
+            "JOIN memberships m ON m.org_id=o.id "
+            "WHERE m.user_id=? ORDER BY o.name,p.name",
+            (context.user_id,),
+        ).fetchall()
+        recent_events = conn.execute(
+            "SELECT e.id,e.org_id,o.name AS organization_name,e.actor_user_id,e.action,"
+            "e.resource_type,e.resource_id,e.occurred_at,e.details "
+            "FROM audit_events e JOIN organizations o ON o.id=e.org_id "
+            "JOIN memberships m ON m.org_id=o.id "
+            "WHERE m.user_id=? ORDER BY e.occurred_at DESC,e.id DESC LIMIT 12",
+            (context.user_id,),
+        ).fetchall()
+        consent_counts = conn.execute(
+            "SELECT ce.property_id,COUNT(*) AS decision_count,"
+            "SUM(CASE WHEN ce.action='accept_all' THEN 1 ELSE 0 END) AS accept_all_count,"
+            "SUM(CASE WHEN ce.action='reject_all' THEN 1 ELSE 0 END) AS reject_all_count,"
+            "SUM(CASE WHEN ce.action='custom' THEN 1 ELSE 0 END) AS custom_count "
+            "FROM consent_events ce JOIN properties p ON p.id=ce.property_id "
+            "JOIN memberships m ON m.org_id=p.org_id "
+            "WHERE m.user_id=? AND ce.recorded_at>=? AND ce.expires_at>? "
+            "GROUP BY ce.property_id",
+            (context.user_id, metrics_since, now),
+        ).fetchall()
+
+    property_items = [dict(row) for row in properties]
+    counts_by_property = {row["property_id"]: dict(row) for row in consent_counts}
+    for item in property_items:
+        counts = counts_by_property.get(item["id"], {})
+        item["consent_decision_count_30d"] = counts.get("decision_count", 0)
+        item["consent_accept_all_count_30d"] = counts.get("accept_all_count", 0)
+        item["consent_reject_all_count_30d"] = counts.get("reject_all_count", 0)
+        item["consent_custom_count_30d"] = counts.get("custom_count", 0)
+    organization_items = [dict(row) for row in organizations]
+    for organization in organization_items:
+        scoped = [item for item in property_items if item["org_id"] == organization["id"]]
+        organization["property_count"] = len(scoped)
+        organization["published_property_count"] = sum(item["published_version"] is not None for item in scoped)
+        organization["draft_count"] = sum(item["draft_count"] for item in scoped)
+    events = [{**dict(row), "details": json.loads(row["details"])} for row in recent_events]
+    return {
+        "summary": {
+            "organization_count": len(organization_items),
+            "property_count": len(property_items),
+            "published_property_count": sum(item["published_version"] is not None for item in property_items),
+            "draft_count": sum(item["draft_count"] for item in property_items),
+        },
+        "organizations": organization_items,
+        "properties": property_items,
+        "recent_events": events,
+    }
+
+
+@app.post("/v1/auth/invitations/preview")
+def preview_invitation(body: InvitationPreviewBody, request: Request):
+    enforce_invitation_rate_limit(request, "preview", INVITATION_PREVIEW_LIMIT)
+    now = utc_now()
+    with connection() as conn:
+        invite = conn.execute(
+            "SELECT i.email,i.role,i.expires_at,o.name AS organization_name "
+            "FROM invitations i JOIN organizations o ON o.id=i.org_id "
+            "WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.expires_at>?",
+            (digest(body.token), now),
+        ).fetchone()
+    if not invite:
+        raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+    email_local, email_domain = invite["email"].rsplit("@", 1)
+    masked_email = f"{email_local[:1]}***@{email_domain}"
+    return {
+        "organizationName": invite["organization_name"],
+        "role": invite["role"],
+        "inviteeEmailMasked": masked_email,
+        "expiresAt": invite["expires_at"],
+    }
+
+
+@app.post("/v1/auth/invitations/accept", status_code=status.HTTP_201_CREATED)
+def accept_invitation(body: AcceptInviteBody, request: Request):
+    enforce_invitation_rate_limit(request, "accept", INVITATION_ACCEPT_LIMIT)
+    now = utc_now()
+    token_hash = digest(body.token)
+    with transaction() as conn:
+        invite = conn.execute(
+            "SELECT id,org_id,email,role,expires_at,accepted_at FROM invitations WHERE token_hash=?", (token_hash,)
+        ).fetchone()
+        if not invite or invite["accepted_at"] or invite["expires_at"] <= now:
+            raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+        existing_user = conn.execute(
+            "SELECT id,password_hash,disabled FROM users WHERE email=?", (invite["email"],)
+        ).fetchone()
+        if existing_user:
+            if existing_user["disabled"]:
+                raise HTTPException(status_code=403, detail="This Aman account is disabled")
+            if not check_password(body.password, existing_user["password_hash"]):
+                raise HTTPException(status_code=401, detail="The password does not match the invited Aman account")
+            user_id = existing_user["id"]
+            account_created = False
+        else:
+            user_id = secrets.token_hex(16)
+            conn.execute("INSERT INTO users(id,email,password_hash,created_at) VALUES(?,?,?,?)",
+                         (user_id, invite["email"], hash_password(body.password), now))
+            account_created = True
+        if conn.execute("SELECT 1 FROM memberships WHERE org_id=? AND user_id=?",
+                        (invite["org_id"], user_id)).fetchone():
+            raise HTTPException(status_code=409, detail="This account is already a member of the organization")
+        conn.execute("INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)",
+                     (invite["org_id"], user_id, invite["role"], now))
+        conn.execute("UPDATE invitations SET accepted_at=? WHERE id=?", (now, invite["id"]))
+        audit(conn, invite["org_id"], user_id, "member.joined", "user", user_id, {"role": invite["role"]})
+    return {"ok": True, "accountCreated": account_created}
+
+
+@app.post("/v1/auth/ownership-transfers/accept")
+def accept_ownership_transfer(body: AcceptOwnershipTransferBody, request: Request,
+                             x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        transfer = conn.execute(
+            "SELECT id,org_id,current_owner_id,proposed_owner_id,expires_at,accepted_at,revoked_at "
+            "FROM ownership_transfers WHERE token_hash=?",
+            (digest(body.token),),
+        ).fetchone()
+        if not transfer or transfer["accepted_at"] is not None or transfer["revoked_at"] is not None \
+                or transfer["expires_at"] <= now:
+            raise HTTPException(status_code=400, detail="Ownership transfer is invalid or expired")
+        if transfer["proposed_owner_id"] != context.user_id:
+            raise HTTPException(status_code=403, detail="This transfer is addressed to another Aman account")
+        source = conn.execute(
+            "SELECT role FROM memberships WHERE org_id=? AND user_id=?",
+            (transfer["org_id"], transfer["current_owner_id"]),
+        ).fetchone()
+        target = conn.execute(
+            "SELECT role FROM memberships WHERE org_id=? AND user_id=?",
+            (transfer["org_id"], context.user_id),
+        ).fetchone()
+        if not source or source["role"] != "owner" or not target or target["role"] != "admin":
+            raise HTTPException(status_code=409, detail="Organization ownership changed before acceptance")
+        conn.execute(
+            "UPDATE memberships SET role='admin' WHERE org_id=? AND user_id=?",
+            (transfer["org_id"], transfer["current_owner_id"]),
+        )
+        conn.execute(
+            "UPDATE memberships SET role='owner' WHERE org_id=? AND user_id=?",
+            (transfer["org_id"], context.user_id),
+        )
+        conn.execute("UPDATE ownership_transfers SET accepted_at=? WHERE id=?", (now, transfer["id"]))
+        conn.execute(
+            "UPDATE ownership_transfers SET revoked_at=? WHERE org_id=? AND accepted_at IS NULL "
+            "AND revoked_at IS NULL AND id<>?",
+            (now, transfer["org_id"], transfer["id"]),
+        )
+        audit(conn, transfer["org_id"], context.user_id, "organization.ownership_transferred",
+              "organization", transfer["org_id"],
+              {"fromUserId": transfer["current_owner_id"], "toUserId": context.user_id})
+    return {"ok": True, "organizationId": transfer["org_id"], "role": "owner"}
+
+
+@app.get("/v1/organizations")
+def list_organizations(request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT o.id,o.name,o.require_two_person_publish AS requireTwoPersonPublish,m.role,o.created_at "
+            "FROM organizations o JOIN memberships m ON m.org_id=o.id WHERE m.user_id=? ORDER BY o.name",
+            (context.user_id,),
+        ).fetchall()
+    return {"organizations": [dict(row) for row in rows]}
+
+
+@app.post("/v1/organizations", status_code=status.HTTP_201_CREATED)
+def create_organization(body: OrganizationBody, request: Request,
+                        x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    org_id = secrets.token_urlsafe(18)
+    now = utc_now()
+    with transaction() as conn:
+        conn.execute("INSERT INTO organizations(id,name,require_two_person_publish,created_at) VALUES(?,?,?,?)",
+                     (org_id, body.name.strip(), int(body.requireTwoPersonPublish), now))
+        conn.execute("INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)",
+                     (org_id, context.user_id, "owner", now))
+        audit(conn, org_id, context.user_id, "organization.created", "organization", org_id)
+    return {"id": org_id, "name": body.name.strip(), "role": "owner",
+            "requireTwoPersonPublish": body.requireTwoPersonPublish}
+
+
+@app.post("/v1/organizations/{org_id}/invitations", status_code=status.HTTP_201_CREATED)
+def invite_member(org_id: str, body: InviteBody, request: Request,
+                  x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    token = secrets.token_urlsafe(40)
+    now = utc_now()
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        email = str(body.email).strip().lower()
+        existing_user = conn.execute("SELECT id,disabled FROM users WHERE email=?", (email,)).fetchone()
+        if existing_user and existing_user["disabled"]:
+            raise HTTPException(status_code=409, detail="This Aman account is disabled")
+        if existing_user and conn.execute(
+            "SELECT 1 FROM memberships WHERE org_id=? AND user_id=?", (org_id, existing_user["id"])
+        ).fetchone():
+            raise HTTPException(status_code=409, detail="This account is already a member of the organization")
+        active_invitation = conn.execute(
+            "SELECT 1 FROM invitations WHERE org_id=? AND email=? AND accepted_at IS NULL AND expires_at>? LIMIT 1",
+            (org_id, email, now),
+        ).fetchone()
+        if active_invitation:
+            raise HTTPException(status_code=409, detail="An active invitation already exists for this email")
+        invite_id = secrets.token_hex(16)
+        conn.execute(
+            "INSERT INTO invitations(id,org_id,email,role,token_hash,invited_by,expires_at) VALUES(?,?,?,?,?,?,?)",
+            (invite_id, org_id, email, body.role, digest(token), context.user_id, now + INVITE_TTL_SECONDS),
+        )
+        audit(conn, org_id, context.user_id, "member.invited", "invitation", invite_id, {"role": body.role})
+    # This development build returns the one-time token instead of sending email.
+    return {"invitationToken": token, "expiresAt": now + INVITE_TTL_SECONDS,
+            "delivery": "development-only; deliver through a reviewed invitation service before production"}
+
+
+@app.get("/v1/organizations/{org_id}/invitations")
+def list_invitations(org_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        rows = conn.execute(
+            "SELECT i.id,i.email,i.role,i.expires_at AS expiresAt,u.email AS invitedBy "
+            "FROM invitations i JOIN users u ON u.id=i.invited_by "
+            "WHERE i.org_id=? AND i.accepted_at IS NULL "
+            "ORDER BY i.expires_at DESC,i.email",
+            (org_id,),
+        ).fetchall()
+    now = utc_now()
+    invitations = [
+        {**dict(row), "status": "pending" if row["expiresAt"] > now else "expired"}
+        for row in rows
+    ]
+    return {"invitations": invitations}
+
+
+@app.delete("/v1/organizations/{org_id}/invitations/{invitation_id}")
+def revoke_invitation(org_id: str, invitation_id: str, request: Request,
+                      x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        invite = conn.execute(
+            "SELECT email,role,accepted_at FROM invitations WHERE id=? AND org_id=?",
+            (invitation_id, org_id),
+        ).fetchone()
+        if not invite:
+            raise HTTPException(status_code=404, detail="Invitation not found")
+        if invite["accepted_at"] is not None:
+            raise HTTPException(status_code=409, detail="Invitation has already been accepted")
+        conn.execute("DELETE FROM invitations WHERE id=? AND org_id=?", (invitation_id, org_id))
+        audit(conn, org_id, context.user_id, "member.invitation_revoked", "invitation", invitation_id,
+              {"role": invite["role"]})
+    return {"ok": True}
+
+
+@app.get("/v1/organizations/{org_id}/members")
+def list_members(org_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        rows = conn.execute(
+            "SELECT u.id,u.email,m.role,m.created_at AS joined_at "
+            "FROM memberships m JOIN users u ON u.id=m.user_id "
+            "WHERE m.org_id=? ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 "
+            "WHEN 'editor' THEN 2 ELSE 3 END,u.email",
+            (org_id,),
+        ).fetchall()
+    return {"members": [dict(row) for row in rows]}
+
+
+@app.put("/v1/organizations/{org_id}/members/{member_id}")
+def update_member_role(org_id: str, member_id: str, body: MemberRoleBody, request: Request,
+                       x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with transaction() as conn:
+        actor_role = membership(conn, org_id, context.user_id)
+        require_role(actor_role, {"owner", "admin"})
+        target = conn.execute(
+            "SELECT role FROM memberships WHERE org_id=? AND user_id=?", (org_id, member_id)
+        ).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Organization member not found")
+        if target["role"] == "owner":
+            raise HTTPException(status_code=409, detail="The owner role requires a separate ownership-transfer process")
+        previous_role = target["role"]
+        if previous_role != body.role:
+            conn.execute("UPDATE memberships SET role=? WHERE org_id=? AND user_id=?",
+                         (body.role, org_id, member_id))
+            audit(conn, org_id, context.user_id, "member.role_changed", "membership", member_id,
+                  {"from": previous_role, "to": body.role})
+    return {"userId": member_id, "role": body.role}
+
+
+@app.delete("/v1/organizations/{org_id}/members/{member_id}")
+def remove_member(org_id: str, member_id: str, request: Request,
+                  x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with transaction() as conn:
+        actor_role = membership(conn, org_id, context.user_id)
+        require_role(actor_role, {"owner", "admin"})
+        target = conn.execute(
+            "SELECT role FROM memberships WHERE org_id=? AND user_id=?", (org_id, member_id)
+        ).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Organization member not found")
+        if target["role"] == "owner":
+            raise HTTPException(status_code=409, detail="The owner cannot be removed from the organization")
+        conn.execute("DELETE FROM memberships WHERE org_id=? AND user_id=?", (org_id, member_id))
+        audit(conn, org_id, context.user_id, "member.removed", "membership", member_id,
+              {"previousRole": target["role"]})
+    return {"ok": True}
+
+
+@app.post("/v1/organizations/{org_id}/ownership-transfers")
+def create_ownership_transfer(org_id: str, body: OwnershipTransferBody, request: Request,
+                              x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    token = secrets.token_urlsafe(40)
+    now = utc_now()
+    with transaction() as conn:
+        actor_role = membership(conn, org_id, context.user_id)
+        require_role(actor_role, {"owner"})
+        target = conn.execute(
+            "SELECT role FROM memberships WHERE org_id=? AND user_id=?",
+            (org_id, body.proposedOwnerId),
+        ).fetchone()
+        if not target or target["role"] != "admin":
+            raise HTTPException(status_code=422, detail="The proposed owner must be an existing organization admin")
+        active = conn.execute(
+            "SELECT id FROM ownership_transfers WHERE org_id=? AND accepted_at IS NULL "
+            "AND revoked_at IS NULL AND expires_at>? LIMIT 1",
+            (org_id, now),
+        ).fetchone()
+        if active:
+            raise HTTPException(status_code=409, detail="An ownership transfer is already awaiting acceptance")
+        transfer_id = secrets.token_hex(16)
+        expires_at = now + OWNERSHIP_TRANSFER_TTL_SECONDS
+        conn.execute(
+            "INSERT INTO ownership_transfers(id,org_id,current_owner_id,proposed_owner_id,token_hash,created_at,expires_at) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (transfer_id, org_id, context.user_id, body.proposedOwnerId, digest(token), now, expires_at),
+        )
+        audit(conn, org_id, context.user_id, "organization.ownership_transfer_proposed",
+              "ownership_transfer", transfer_id, {"proposedOwnerId": body.proposedOwnerId})
+    return {"id": transfer_id, "token": token, "expiresAt": expires_at,
+            "delivery": "development-only; transmit through a reviewed secure channel"}
+
+
+@app.get("/v1/organizations/{org_id}/ownership-transfers/pending")
+def get_pending_ownership_transfer(org_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner"})
+        row = conn.execute(
+            "SELECT t.id,t.created_at,t.expires_at,u.email AS proposedOwner "
+            "FROM ownership_transfers t JOIN users u ON u.id=t.proposed_owner_id "
+            "WHERE t.org_id=? AND t.current_owner_id=? AND t.accepted_at IS NULL "
+            "AND t.revoked_at IS NULL AND t.expires_at>? ORDER BY t.created_at DESC LIMIT 1",
+            (org_id, context.user_id, utc_now()),
+        ).fetchone()
+    return {"transfer": dict(row) if row else None}
+
+
+@app.delete("/v1/organizations/{org_id}/ownership-transfers/pending")
+def revoke_pending_ownership_transfer(org_id: str, request: Request,
+                                     x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner"})
+        rows = conn.execute(
+            "SELECT id FROM ownership_transfers WHERE org_id=? AND current_owner_id=? "
+            "AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>?",
+            (org_id, context.user_id, now),
+        ).fetchall()
+        if not rows:
+            raise HTTPException(status_code=404, detail="No pending ownership transfer")
+        conn.execute(
+            "UPDATE ownership_transfers SET revoked_at=? WHERE org_id=? AND current_owner_id=? "
+            "AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>?",
+            (now, org_id, context.user_id, now),
+        )
+        for row in rows:
+            audit(conn, org_id, context.user_id, "organization.ownership_transfer_revoked",
+                  "ownership_transfer", row["id"])
+    return {"ok": True}
+
+
+@app.post("/v1/organizations/{org_id}/properties", status_code=status.HTTP_201_CREATED)
+def create_property(org_id: str, body: PropertyBody, request: Request,
+                   x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    if body.channel == "web":
+        if not body.origin:
+            raise HTTPException(status_code=422, detail="A web property requires a configured origin")
+        origin = canonical_property_origin(body.origin, allow_loopback_http=body.environment == "development")
+    else:
+        if body.origin is not None:
+            raise HTTPException(status_code=422, detail="Only web properties can have a browser origin")
+        origin = None
+    property_id = secrets.token_urlsafe(24)
+    now = utc_now()
+    try:
+        with transaction() as conn:
+            role = membership(conn, org_id, context.user_id)
+            require_role(role, {"owner", "admin", "editor"})
+            conn.execute("INSERT INTO properties(id,org_id,name,channel,environment,origin,created_at) VALUES(?,?,?,?,?,?,?)",
+                         (property_id, org_id, body.name.strip(), body.channel, body.environment, origin, now))
+            audit(conn, org_id, context.user_id, "property.created", "property", property_id,
+                  {"channel": body.channel, "environment": body.environment, "origin": origin})
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="A property with this name and channel already exists; use a distinct name for each environment")
+    return {"id": property_id, "orgId": org_id, "name": body.name.strip(), "channel": body.channel,
+            "environment": body.environment, "origin": origin}
+
+
+@app.get("/v1/organizations/{org_id}/properties")
+def list_properties(org_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        rows = conn.execute(
+            "SELECT p.id,p.name,p.channel,p.environment,p.origin,p.created_at,(SELECT version FROM policies x WHERE x.property_id=p.id "
+            "AND x.status='published' ORDER BY version DESC LIMIT 1) AS published_version "
+            "FROM properties p WHERE p.org_id=? ORDER BY p.name", (org_id,),
+        ).fetchall()
+    return {"properties": [dict(row) for row in rows]}
+
+
+def canonical_property_origin(value: str, *, allow_loopback_http: bool = False) -> str:
+    page, origin = canonical_scan_url(value)
+    parts = urlsplit(value)
+    if page != f"{origin}/":
+        raise HTTPException(status_code=422, detail="A property origin must contain only scheme, host, and optional port")
+    host = parts.hostname or ""
+    loopback = host.lower() == "localhost"
+    try:
+        ip = ipaddress.ip_address(host)
+        loopback = ip.is_loopback
+    except ValueError:
+        pass
+    scheme = parts.scheme.lower()
+    if scheme != "https" and not (allow_loopback_http and scheme == "http" and loopback):
+        raise HTTPException(status_code=422, detail="Web property origins require HTTPS; HTTP loopback is limited to development")
+    return origin
+
+
+@app.put("/v1/organizations/{org_id}/properties/{property_id}/origin")
+def update_property_origin(org_id: str, property_id: str, body: PropertyOriginBody, request: Request,
+                           x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor"})
+        prop = conn.execute(
+            "SELECT id,channel,environment,origin FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
+        ).fetchone()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        if prop["channel"] != "web":
+            raise HTTPException(status_code=422, detail="Only web properties can have a browser origin")
+        origin = canonical_property_origin(body.origin, allow_loopback_http=prop["environment"] == "development")
+        if prop["origin"] != origin:
+            existing_reports = conn.execute(
+                "SELECT 1 FROM scan_reports WHERE property_id=? LIMIT 1", (property_id,)
+            ).fetchone()
+            if existing_reports:
+                raise HTTPException(status_code=409, detail="Delete this property's inventory reports before changing its origin")
+            conn.execute("UPDATE properties SET origin=? WHERE id=?", (origin, property_id))
+            audit(conn, org_id, context.user_id, "property.origin_updated", "property", property_id,
+                  {"previousOrigin": prop["origin"], "origin": origin})
+    return {"id": property_id, "origin": origin}
+
+
+def canonical_scan_url(value: str) -> Tuple[str, str]:
+    if value.strip() != value or any(ord(char) < 32 for char in value):
+        raise HTTPException(status_code=422, detail="Scan URLs must not contain whitespace controls")
+    try:
+        parts = urlsplit(value)
+        host = parts.hostname
+        _ = parts.port
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Scan report contains an invalid URL")
+    if (parts.scheme.lower() not in {"http", "https"} or not host or parts.username is not None or
+            parts.password is not None or parts.query or parts.fragment or "?" in value or "#" in value):
+        raise HTTPException(status_code=422, detail="Scan URLs must be HTTP(S), omit credentials, query, and fragment")
+    try:
+        normalized_host = ipaddress.ip_address(host)
+        host_text = f"[{normalized_host.compressed}]" if normalized_host.version == 6 else normalized_host.compressed
+    except ValueError:
+        try:
+            host_text = host.encode("idna").decode("ascii").lower()
+        except UnicodeError:
+            raise HTTPException(status_code=422, detail="Scan URL contains an invalid host")
+        if "%" in host_text or not re.fullmatch(
+            r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*\.?",
+            host_text,
+        ):
+            raise HTTPException(status_code=422, detail="Scan URL contains an invalid host")
+    port = parts.port
+    if port == (443 if parts.scheme.lower() == "https" else 80):
+        port = None
+    origin = f"{parts.scheme.lower()}://{host_text}{f':{port}' if port else ''}"
+    return f"{origin}{parts.path or '/'}", origin
+
+
+@app.post("/v1/organizations/{org_id}/properties/{property_id}/scans", status_code=status.HTTP_201_CREATED)
+def import_scan_report(org_id: str, property_id: str, body: ScanReportBody, request: Request,
+                       x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    if body.scannedAt.tzinfo is None or body.scannedAt.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="Scan timestamp must include a timezone")
+    now = utc_now()
+    scanned_at = int(body.scannedAt.timestamp())
+    if scanned_at > now + 300:
+        raise HTTPException(status_code=422, detail="Scan timestamp cannot be in the future")
+    page, page_origin = canonical_scan_url(body.page)
+    report = body.model_dump(mode="json", by_alias=True)
+    report["page"] = page
+    for item in report["resources"]:
+        resource_url, resource_origin = canonical_scan_url(item["url"])
+        item["url"] = resource_url
+        item["origin"] = resource_origin
+        item["firstParty"] = resource_origin == page_origin
+    report_json = json.dumps(report, separators=(",", ":"), ensure_ascii=False)
+    report_id = secrets.token_hex(16)
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor"})
+        prop = conn.execute(
+            "SELECT id,channel,origin FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
+        ).fetchone()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        if prop["channel"] != "web":
+            raise HTTPException(status_code=422, detail="Browser inventory reports can only be attached to web properties")
+        if not prop["origin"]:
+            raise HTTPException(status_code=409, detail="Set this property's web origin before importing an inventory")
+        if page_origin != prop["origin"]:
+            raise HTTPException(status_code=422, detail="The scanned page origin does not match this web property")
+        conn.execute(
+            "INSERT INTO scan_reports(id,property_id,imported_by,scanned_at,imported_at,page_origin,resource_count,cookie_count,report_json) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            (report_id, property_id, context.user_id, scanned_at, now, page_origin,
+             len(report["resources"]), len(report["cookies"]), report_json),
+        )
+        conn.execute(
+            "DELETE FROM scan_reports WHERE property_id=? AND id NOT IN "
+            "(SELECT id FROM scan_reports WHERE property_id=? ORDER BY imported_at DESC,id DESC LIMIT ?)",
+            (property_id, property_id, SCAN_REPORTS_PER_PROPERTY),
+        )
+        audit(conn, org_id, context.user_id, "scan.imported", "scan_report", report_id,
+              {"resourceCount": len(report["resources"]), "cookieCount": len(report["cookies"]),
+               "scannedAt": scanned_at})
+    return {
+        "id": report_id, "propertyId": property_id, "scannedAt": scanned_at,
+        "importedAt": now, "pageOrigin": page_origin,
+        "resourceCount": len(report["resources"]), "cookieCount": len(report["cookies"]),
+    }
+
+
+@app.get("/v1/organizations/{org_id}/properties/{property_id}/scans")
+def list_scan_reports(org_id: str, property_id: str, request: Request,
+                      limit: int = Query(default=20, ge=1, le=20)):
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        rows = conn.execute(
+            "SELECT s.id,s.scanned_at,s.imported_at,s.page_origin,s.resource_count,s.cookie_count,u.email AS imported_by "
+            "FROM scan_reports s JOIN users u ON u.id=s.imported_by WHERE s.property_id=? "
+            "ORDER BY s.imported_at DESC,s.id DESC LIMIT ?", (property_id, limit),
+        ).fetchall()
+    return {"reports": [dict(row) for row in rows], "retainedPerProperty": SCAN_REPORTS_PER_PROPERTY}
+
+
+@app.get("/v1/organizations/{org_id}/properties/{property_id}/scans/{report_id}")
+def get_scan_report(org_id: str, property_id: str, report_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        row = conn.execute(
+            "SELECT s.id,s.scanned_at,s.imported_at,s.page_origin,s.resource_count,s.cookie_count,s.report_json,u.email AS imported_by "
+            "FROM scan_reports s JOIN properties p ON p.id=s.property_id JOIN users u ON u.id=s.imported_by "
+            "WHERE s.id=? AND s.property_id=? AND p.org_id=?", (report_id, property_id, org_id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Scan report not found")
+    result = dict(row)
+    result["report"] = json.loads(result.pop("report_json"))
+    return result
+
+
+@app.delete("/v1/organizations/{org_id}/properties/{property_id}/scans/{report_id}")
+def delete_scan_report(org_id: str, property_id: str, report_id: str, request: Request,
+                       x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor"})
+        prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        deleted = conn.execute(
+            "DELETE FROM scan_reports WHERE id=? AND property_id=?", (report_id, property_id)
+        ).rowcount
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Scan report not found")
+        audit(conn, org_id, context.user_id, "scan.deleted", "scan_report", report_id)
+    return {"deleted": True}
+
+
+@app.post("/v1/organizations/{org_id}/properties/{property_id}/policies", status_code=status.HTTP_201_CREATED)
+def create_policy_draft(org_id: str, property_id: str, body: PolicyBody, request: Request,
+                        x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor"})
+        prop = conn.execute("SELECT id,channel FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        policy = validate_policy(body.policy, property_id, prop["channel"])
+        if body.expectedRevision is not None:
+            raise HTTPException(status_code=422, detail="expectedRevision is only valid when updating a draft")
+        version = conn.execute("SELECT COALESCE(MAX(version),0)+1 AS n FROM policies WHERE property_id=?",
+                               (property_id,)).fetchone()["n"]
+        policy_id = secrets.token_hex(16)
+        policy["policyVersion"] = str(version)
+        conn.execute("INSERT INTO policies(id,property_id,version,revision,last_edited_by,status,body,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                     (policy_id, property_id, version, 1, context.user_id, "draft",
+                      json.dumps(policy, ensure_ascii=False, separators=(",", ":")), context.user_id, now))
+        audit(conn, org_id, context.user_id, "policy.draft_created", "policy", policy_id,
+              {"version": version, "channel": prop["channel"]})
+    return {"id": policy_id, "propertyId": property_id, "version": version, "status": "draft"}
+
+
+@app.get("/v1/organizations/{org_id}/properties/{property_id}/policies")
+def list_property_policies(org_id: str, property_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        rows = conn.execute(
+            "SELECT p.id,p.version,p.revision,p.status,p.created_by,p.created_at,p.published_by,p.published_at,"
+            "u.email AS author,editor.email AS last_editor,publisher.email AS publisher "
+            "FROM policies p JOIN users u ON u.id=p.created_by "
+            "LEFT JOIN users editor ON editor.id=p.last_edited_by "
+            "LEFT JOIN users publisher ON publisher.id=p.published_by "
+            "WHERE p.property_id=? ORDER BY p.version DESC",
+            (property_id,),
+        ).fetchall()
+    return {"policies": [dict(row) for row in rows]}
+
+
+@app.put("/v1/organizations/{org_id}/policies/{policy_id}")
+def update_policy_draft(org_id: str, policy_id: str, body: PolicyBody, request: Request,
+                        x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor"})
+        row = conn.execute(
+            "SELECT p.id,p.property_id,p.version,p.revision,p.status,pr.channel FROM policies p "
+            "JOIN properties pr ON pr.id=p.property_id WHERE p.id=? AND pr.org_id=?",
+            (policy_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        if row["status"] != "draft":
+            raise HTTPException(status_code=409, detail="Published policy versions are immutable")
+        if body.expectedRevision is None:
+            raise HTTPException(status_code=428, detail="expectedRevision is required when updating a draft")
+        if row["revision"] != body.expectedRevision:
+            raise HTTPException(status_code=409, detail="This draft changed since it was opened; reload it before saving")
+        policy = validate_policy(body.policy, row["property_id"], row["channel"])
+        policy["policyVersion"] = str(row["version"])
+        updated = conn.execute(
+            "UPDATE policies SET body=?,revision=revision+1,last_edited_by=? "
+            "WHERE id=? AND revision=? AND status='draft'",
+            (json.dumps(policy, ensure_ascii=False, separators=(",", ":")), context.user_id,
+             policy_id, body.expectedRevision),
+        )
+        if updated.rowcount != 1:
+            raise HTTPException(status_code=409, detail="This draft changed while it was being saved; reload it")
+        audit(conn, org_id, context.user_id, "policy.draft_updated", "policy", policy_id,
+              {"version": row["version"], "revision": row["revision"] + 1, "updatedAt": now})
+    return {"id": policy_id, "version": row["version"], "revision": row["revision"] + 1, "status": "draft"}
+
+
+@app.get("/v1/organizations/{org_id}/policies/{policy_id}")
+def get_policy(org_id: str, policy_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor", "viewer"})
+        row = conn.execute(
+            "SELECT p.id,p.property_id,p.version,p.revision,p.last_edited_by,p.status,p.body,p.created_by,p.created_at,"
+            "p.published_by,p.published_at,u.email AS author,editor.email AS last_editor,publisher.email AS publisher "
+            "FROM policies p JOIN properties pr ON pr.id=p.property_id "
+            "JOIN users u ON u.id=p.created_by "
+            "LEFT JOIN users editor ON editor.id=p.last_edited_by "
+            "LEFT JOIN users publisher ON publisher.id=p.published_by "
+            "WHERE p.id=? AND pr.org_id=?",
+            (policy_id, org_id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return {**dict(row), "policy": json.loads(row["body"])}
+
+
+@app.post("/v1/organizations/{org_id}/policies/{policy_id}/publish")
+def publish_policy(org_id: str, policy_id: str, request: Request,
+                   x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        row = conn.execute(
+            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,o.require_two_person_publish "
+            "FROM policies p JOIN properties pr ON pr.id=p.property_id "
+            "JOIN organizations o ON o.id=pr.org_id WHERE p.id=? AND pr.org_id=?",
+            (policy_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        if row["status"] != "draft":
+            raise HTTPException(status_code=409, detail="Only a draft can be published")
+        if row["require_two_person_publish"] and row["last_edited_by"] == context.user_id:
+            raise HTTPException(status_code=409, detail="A different owner or administrator must publish after the last draft edit")
+        current = conn.execute("SELECT id FROM policies WHERE property_id=? AND status='published'",
+                               (row["property_id"],)).fetchone()
+        if current:
+            conn.execute("UPDATE policies SET status='retired' WHERE id=?", (current["id"],))
+        policy_body = conn.execute("SELECT body FROM policies WHERE id=?", (policy_id,)).fetchone()["body"]
+        policy_body = json.loads(policy_body)
+        policy_body["status"] = "published"
+        conn.execute("UPDATE policies SET status='published',body=?,published_by=?,published_at=? WHERE id=?",
+                     (json.dumps(policy_body, ensure_ascii=False, separators=(",", ":")),
+                      context.user_id, now, policy_id))
+        audit(conn, org_id, context.user_id, "policy.published", "policy", policy_id,
+              {"version": row["version"], "channel": row["channel"], "previousPolicyId": current["id"] if current else None})
+    return {"id": policy_id, "propertyId": row["property_id"], "version": row["version"],
+            "status": "published", "publishedAt": now}
+
+
+@app.get("/v1/organizations/{org_id}/audit")
+def list_audit(org_id: str, request: Request, limit: int = 100):
+    context = current_session(request)
+    with connection() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor", "viewer"})
+        rows = conn.execute(
+            "SELECT id,actor_user_id,action,resource_type,resource_id,occurred_at,details "
+            "FROM audit_events WHERE org_id=? ORDER BY occurred_at DESC LIMIT ?",
+            (org_id, max(1, min(limit, 500))),
+        ).fetchall()
+    return {"events": [
+        {**dict(row), "details": json.loads(row["details"])} for row in rows
+    ]}
+
+
+def audit_csv_cell(value: Any) -> str:
+    """Keep exported cells from being interpreted as spreadsheet formulas."""
+    text = "" if value is None else str(value)
+    if text.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
+@app.get("/v1/organizations/{org_id}/audit/export")
+def export_audit(
+    org_id: str,
+    request: Request,
+    start: Optional[int] = Query(default=None, alias="from", ge=0),
+    end: Optional[int] = Query(default=None, alias="to", ge=0),
+    limit: int = Query(default=10_000, ge=1, le=10_000),
+):
+    context = current_session(request)
+    with connection() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin", "editor", "viewer"})
+    if start is not None and end is not None and start > end:
+        raise HTTPException(status_code=422, detail="The 'from' timestamp must be before or equal to 'to'")
+
+    def csv_rows():
+        yield "\ufeff"
+        buffer = io.StringIO(newline="")
+        writer = csv.writer(buffer, lineterminator="\r\n")
+        writer.writerow(["event_id", "occurred_at_epoch", "actor_user_id", "action",
+                         "resource_type", "resource_id", "details_json"])
+        yield buffer.getvalue()
+        buffer.close()
+
+        clauses = ["org_id=?"]
+        parameters: list[Any] = [org_id]
+        if start is not None:
+            clauses.append("occurred_at>=?")
+            parameters.append(start)
+        if end is not None:
+            clauses.append("occurred_at<=?")
+            parameters.append(end)
+        parameters.append(limit)
+
+        with connection() as conn:
+            cursor = conn.execute(
+                "SELECT id,actor_user_id,action,resource_type,resource_id,occurred_at,details FROM ("
+                "SELECT id,actor_user_id,action,resource_type,resource_id,occurred_at,details "
+                "FROM audit_events WHERE " + " AND ".join(clauses) +
+                " ORDER BY occurred_at DESC,id DESC LIMIT ?) ORDER BY occurred_at ASC,id ASC",
+                parameters,
+            )
+            for row in cursor:
+                buffer = io.StringIO(newline="")
+                writer = csv.writer(buffer, lineterminator="\r\n")
+                details = json.dumps(json.loads(row["details"]), ensure_ascii=False, separators=(",", ":"))
+                writer.writerow([audit_csv_cell(row[key]) for key in
+                                 ("id", "occurred_at", "actor_user_id", "action", "resource_type", "resource_id")] +
+                                [audit_csv_cell(details)])
+                yield buffer.getvalue()
+                buffer.close()
+
+    return StreamingResponse(
+        csv_rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="aman-audit-{org_id}.csv"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.get("/v1/public/properties/{property_id}/policy")
+def get_published_policy(property_id: str, request: Request, if_none_match: Optional[str] = Header(default=None)):
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT p.id,p.version,p.body,p.published_at FROM policies p "
+            "JOIN properties pr ON pr.id=p.property_id WHERE pr.id=? AND p.status='published'",
+            (property_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="No published policy")
+    etag = '"' + digest(row["body"])[:32] + '"'
+    if if_none_match and hmac.compare_digest(if_none_match, etag):
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "public, max-age=30"})
+    return Response(content=row["body"], media_type="application/json",
+                    headers={"ETag": etag, "Cache-Control": "public, max-age=30"})
+
+
+@app.post("/v1/public/properties/{property_id}/consent-events")
+def record_consent_event(property_id: str, body: ConsentEventBody, request: Request):
+    """Record a client-reported decision without visitor or device identifiers."""
+    origin = request.headers.get("origin")
+    enforce_consent_event_rate_limit(request, property_id)
+    now = utc_now()
+    with transaction() as conn:
+        row = conn.execute(
+            "SELECT pr.channel,pr.origin,p.body FROM properties pr JOIN policies p ON p.property_id=pr.id "
+            "WHERE pr.id=? AND p.status='published'",
+            (property_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="No published policy")
+        if row["channel"] == "web":
+            if not origin or origin != row["origin"]:
+                raise HTTPException(status_code=403, detail="Consent event origin does not match this web property")
+        elif origin:
+            raise HTTPException(status_code=403, detail="Native consent events must not send a browser Origin header")
+        policy = json.loads(row["body"])
+        if body.channel != row["channel"]:
+            raise HTTPException(status_code=422, detail="Consent event channel does not match this property")
+        if body.policyVersion != policy["policyVersion"]:
+            raise HTTPException(status_code=409, detail="Consent event policy version is no longer current")
+        if len(body.purposes) > 64:
+            raise HTTPException(status_code=422, detail="Too many purpose decisions")
+        configured = {purpose["id"]: purpose for purpose in policy["purposes"]
+                      if body.channel in purpose["channels"]}
+        if set(body.purposes) != set(configured):
+            raise HTTPException(status_code=422, detail="Consent event purposes do not match the published policy")
+        if any(configured[purpose_id]["required"] and not allowed
+               for purpose_id, allowed in body.purposes.items()):
+            raise HTTPException(status_code=422, detail="Required purposes cannot be refused")
+        optional_values = [body.purposes[purpose_id] for purpose_id, purpose in configured.items()
+                           if not purpose["required"]]
+        if body.action == "accept_all" and not all(optional_values):
+            raise HTTPException(status_code=422, detail="accept_all must enable every optional purpose")
+        if body.action == "reject_all" and any(optional_values):
+            raise HTTPException(status_code=422, detail="reject_all must disable every optional purpose")
+
+        purposes_json = json.dumps(body.purposes, sort_keys=True, separators=(",", ":"))
+        existing = conn.execute("SELECT * FROM consent_events WHERE event_id=?", (body.eventId,)).fetchone()
+        if existing:
+            same_event = (
+                existing["property_id"] == property_id
+                and existing["policy_version"] == body.policyVersion
+                and existing["channel"] == body.channel
+                and existing["action"] == body.action
+                and existing["purposes"] == purposes_json
+            )
+            if not same_event:
+                raise HTTPException(status_code=409, detail="Consent event identifier was already used")
+            return {"recorded": False, "duplicate": True}
+
+        conn.execute(
+            "INSERT INTO consent_events(event_id,property_id,policy_version,channel,action,purposes,recorded_at,expires_at) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (body.eventId, property_id, body.policyVersion, body.channel, body.action, purposes_json,
+             now, now + int(policy["retentionDays"]) * 86_400),
+        )
+        conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (now,))
+    return {"recorded": True, "duplicate": False, "recordedAt": now}
+
+
+@app.get("/v1/organizations/{org_id}/properties/{property_id}/consent-metrics")
+def consent_metrics(org_id: str, property_id: str, request: Request,
+                    days: int = Query(default=30, ge=1, le=180)):
+    """Return organization-scoped aggregate counts, never individual decisions."""
+    context = current_session(request)
+    since = utc_now() - days * 86_400
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        prop = conn.execute(
+            "SELECT id,channel FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
+        ).fetchone()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        now = utc_now()
+        rows = conn.execute(
+            "SELECT action,purposes,policy_version,recorded_at FROM consent_events "
+            "WHERE property_id=? AND recorded_at>=? AND expires_at>? ORDER BY recorded_at DESC",
+            (property_id, since, now),
+        ).fetchall()
+    purpose_counts: Dict[Tuple[str, str], Dict[str, int]] = {}
+    for row in rows:
+        for purpose_id, allowed in json.loads(row["purposes"]).items():
+            key = (row["policy_version"], purpose_id)
+            counts = purpose_counts.setdefault(key, {"allowed": 0, "declined": 0})
+            counts["allowed" if allowed else "declined"] += 1
+    actions = {name: sum(row["action"] == name for row in rows)
+               for name in ("accept_all", "reject_all", "custom")}
+    total = len(rows)
+    return {
+        "propertyId": property_id,
+        "channel": prop["channel"],
+        "periodDays": days,
+        "decisionCount": total,
+        "actions": actions,
+        "purposes": [
+            {"policyVersion": version, "purposeId": purpose_id, **counts}
+            for (version, purpose_id), counts in sorted(purpose_counts.items())
+        ],
+        "firstRecordedAt": rows[-1]["recorded_at"] if rows else None,
+        "lastRecordedAt": rows[0]["recorded_at"] if rows else None,
+    }
+
+
+@app.get("/v1/organizations/{org_id}/properties/{property_id}/consent-events/export")
+def export_consent_events(org_id: str, property_id: str, request: Request,
+                          days: int = Query(default=30, ge=1, le=3650)):
+    """Export retained SDK-reported decisions; this is not proof of visitor identity or display."""
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        prop = conn.execute(
+            "SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
+        ).fetchone()
+    if not prop:
+        raise HTTPException(status_code=404, detail="Property not found")
+    now = utc_now()
+    since = now - days * 86_400
+
+    def csv_rows():
+        yield "\ufeff"
+        buffer = io.StringIO(newline="")
+        writer = csv.writer(buffer, lineterminator="\r\n")
+        writer.writerow(["event_id", "received_at_epoch", "expires_at_epoch", "property_id",
+                         "policy_version", "channel", "action", "purposes_json"])
+        yield buffer.getvalue()
+        buffer.close()
+
+        with connection() as conn:
+            cursor = conn.execute(
+                "SELECT event_id,recorded_at,expires_at,property_id,policy_version,channel,action,purposes "
+                "FROM consent_events WHERE property_id=? AND recorded_at>=? AND expires_at>? "
+                "ORDER BY recorded_at ASC,event_id ASC",
+                (property_id, since, now),
+            )
+            for row in cursor:
+                buffer = io.StringIO(newline="")
+                writer = csv.writer(buffer, lineterminator="\r\n")
+                purposes = json.dumps(json.loads(row["purposes"]), ensure_ascii=False, sort_keys=True,
+                                      separators=(",", ":"))
+                writer.writerow([audit_csv_cell(row[key]) for key in
+                                 ("event_id", "recorded_at", "expires_at", "property_id",
+                                  "policy_version", "channel", "action")] +
+                                [audit_csv_cell(purposes)])
+                yield buffer.getvalue()
+                buffer.close()
+
+    return StreamingResponse(
+        csv_rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="aman-decisions-{property_id}-{days}d.csv"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

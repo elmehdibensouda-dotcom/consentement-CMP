@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8f4">
+  <title>Maquette Aman — données simulées</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+    :root{--ink:#18231f;--muted:#75807b;--line:#e7ebe5;--paper:#fff;--canvas:#f7f8f4;--green:#176447;--mint:#e4f3eb;--lime:#c9f27c;--blue:#eff4f8;--shadow:0 12px 32px #24352b0b}
+    *{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px}button,input{font:inherit}button{cursor:pointer}.app{min-height:100vh;display:grid;grid-template-columns:240px 1fr}.sidebar{background:#fff;border-right:1px solid var(--line);padding:25px 16px;display:flex;flex-direction:column}.brand{display:flex;align-items:center;gap:10px;padding:0 10px 28px;font:800 21px Manrope,sans-serif;letter-spacing:-.8px}.brand-mark{width:31px;height:31px;border-radius:10px;background:var(--green);color:white;display:grid;place-items:center;font-size:17px}.workspace{margin:0 7px 26px;padding:11px;border:1px solid var(--line);border-radius:12px;display:flex;gap:10px;align-items:center}.favicon{width:32px;height:32px;background:#f4e8d9;border-radius:9px;display:grid;place-items:center;color:#8d6032;font-weight:700}.workspace b{font-size:12px;display:block}.workspace small{color:var(--muted);font-size:11px}.nav-label{font-size:10px;letter-spacing:1.2px;color:#9ba49f;padding:8px 11px}.nav{display:grid;gap:4px}.nav button{border:0;background:none;color:#626e67;border-radius:9px;text-align:left;padding:11px 12px;display:flex;align-items:center;gap:11px;font-size:13px}.nav button:hover,.nav button.active{background:#eff5f0;color:var(--green);font-weight:600}.nav .ico{width:16px;text-align:center;font-size:15px}.side-bottom{margin-top:auto}.help{margin:18px 6px;padding:14px;background:#f5f7f2;border-radius:12px}.help b{font-size:12px}.help p{font-size:11px;color:var(--muted);line-height:1.5;margin:7px 0 10px}.help a{color:var(--green);font-size:11px;font-weight:700;text-decoration:none}.profile{border-top:1px solid var(--line);padding:17px 8px 0;display:flex;align-items:center;gap:10px}.avatar{width:33px;height:33px;border-radius:50%;background:#e8e8f5;color:#575683;display:grid;place-items:center;font-weight:700}.profile b{display:block;font-size:12px}.profile small{font-size:11px;color:var(--muted)}main{min-width:0}.topbar{height:70px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 38px;background:#ffffff9e}.crumb{font-size:12px;color:var(--muted)}.crumb strong{color:var(--ink);font-weight:600}.top-actions{display:flex;align-items:center;gap:14px}.icon-btn{width:35px;height:35px;border-radius:10px;background:white;border:1px solid var(--line);color:#65716a}.top-avatar{width:31px;height:31px;border-radius:50%;background:#e8e8f5;color:#575683;display:grid;place-items:center;font-size:12px;font-weight:700}.content{max-width:1240px;margin:auto;padding:37px 42px 60px}.heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:28px}.eyebrow{font-size:11px;color:var(--green);font-weight:700;letter-spacing:1px;text-transform:uppercase}.heading h1{font:800 29px Manrope,sans-serif;letter-spacing:-1px;margin:8px 0}.heading p{color:var(--muted);margin:0;font-size:13px}.btn{border:1px solid var(--line);border-radius:9px;background:white;padding:10px 14px;color:var(--ink);font-weight:600;font-size:12px}.btn.primary{background:var(--green);color:white;border-color:var(--green)}.btn:hover{filter:brightness(.97)}.heading .btn{margin-top:5px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:21px}.stat,.panel{background:white;border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow)}.stat{padding:17px 18px}.stat-top{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}.stat-icon{width:27px;height:27px;border-radius:8px;display:grid;place-items:center;background:#f0f5ed;color:var(--green)}.stat strong{font:700 25px Manrope,sans-serif;display:block;margin:11px 0 3px;letter-spacing:-.6px}.trend{font-size:10px;color:var(--green)}.stat .sub{font-size:10px;color:var(--muted)}.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.85fr);gap:17px}.panel{padding:21px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px}.panel h2{font:700 15px Manrope,sans-serif;margin:0 0 5px}.panel-head p{font-size:11px;color:var(--muted);margin:0}.status{border-radius:99px;background:var(--mint);color:var(--green);font-size:10px;padding:6px 9px;font-weight:700}.tabs{border-bottom:1px solid var(--line);display:flex;gap:20px;margin:0 0 17px}.tab{border:0;background:none;color:#929c96;padding:0 2px 10px;font-size:11px}.tab.active{color:var(--green);border-bottom:2px solid var(--green);font-weight:700}.builder{display:grid;grid-template-columns:1fr 1.1fr;gap:17px;align-items:start}.fields{display:grid;gap:13px}.field label{display:block;font-size:11px;font-weight:600;margin-bottom:7px}.field input,.field select{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px 11px;color:#4a5650;background:#fff;font-size:11px;outline:none}.field input:focus,.field select:focus{border-color:#7caf8f}.colors{display:flex;gap:9px}.color-choice{width:27px;height:27px;border:2px solid white;box-shadow:0 0 0 1px var(--line);border-radius:50%;cursor:pointer}.color-choice.selected{box-shadow:0 0 0 2px var(--green)}.preview-wrap{background:#f3f6f2;padding:10px;border-radius:10px;min-height:257px;display:flex;align-items:flex-end}.site-mock{width:100%;height:238px;background:linear-gradient(145deg,#edf1e7,#d9e5da);border-radius:7px;position:relative;overflow:hidden;padding:15px}.mock-nav{display:flex;justify-content:space-between;color:#40584b;font-size:8px;font-weight:700}.mock-photo{position:absolute;inset:44px 0 0;background:linear-gradient(0deg,#243f3440,transparent 72%),radial-gradient(ellipse at 75% 45%,#e9c792 0 12%,transparent 13%),linear-gradient(140deg,#d7ddc9,#9aaf98 57%,#809681)}.mock-copy{position:absolute;top:75px;left:16px;color:#254132;font:700 20px Manrope,sans-serif;max-width:170px;line-height:1.05}.mock-copy span{font:500 8px 'DM Sans';display:block;margin-top:6px}.cookie-card{position:absolute;bottom:9px;left:9px;right:9px;background:white;border-radius:10px;padding:11px 12px;box-shadow:0 5px 20px #1c37252a}.cookie-card h3{font:700 11px Manrope;margin:0 0 4px}.cookie-card p{font-size:8px;line-height:1.4;color:#748078;margin:0 0 8px}.cookie-buttons{display:flex;gap:5px}.cookie-buttons button{flex:1;border:1px solid #dfe6df;background:white;border-radius:5px;padding:6px 3px;font-size:7px;color:#34463b}.cookie-buttons .accept{background:#176447;color:white;border-color:#176447}.consent-state{min-height:15px;text-align:center;margin-top:5px;color:var(--green);font-size:9px}.footer-actions{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);margin-top:19px;padding-top:14px}.footer-actions small{font-size:10px;color:var(--muted)}.activity{display:grid;gap:0}.activity-row{display:grid;grid-template-columns:29px 1fr auto;gap:10px;padding:13px 0;border-bottom:1px solid #f0f2ee;align-items:center}.activity-row:last-child{border-bottom:0}.act-icon{width:28px;height:28px;border-radius:8px;background:#f2f5f1;display:grid;place-items:center;color:#577060;font-size:12px}.act-copy b{font-size:11px;display:block;font-weight:600}.act-copy small,.act-time{font-size:10px;color:var(--muted)}.act-time{white-space:nowrap}.sources{margin-top:17px}.source-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f0f2ee;font-size:11px}.source-row:last-child{border:0}.tag{font-size:9px;color:#67746c;background:#f4f6f2;border-radius:5px;padding:4px 7px}.notice{margin-top:17px;background:#f1f6ed;border:1px solid #e6eee0;padding:13px 15px;border-radius:10px;font-size:10px;line-height:1.5;color:#50634f}.notice b{color:#274b36}.toast{position:fixed;bottom:22px;right:22px;background:#183c2c;color:white;padding:12px 16px;border-radius:9px;box-shadow:var(--shadow);font-size:12px;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translateY(0)}.page{display:none}.page.current{display:block}.secondary-card{max-width:760px;margin-top:10px}.scan-box{background:#f5f8f3;border:1px dashed #cdd9ce;border-radius:12px;padding:30px;text-align:center}.scan-box h2{font:700 18px Manrope}.scan-box p{color:var(--muted);font-size:12px}.progress{height:7px;background:#e5ebe3;border-radius:9px;margin:20px auto;max-width:400px;overflow:hidden}.progress i{display:block;width:72%;height:100%;background:var(--green);border-radius:9px}.rtl{direction:rtl}.rtl .nav button{text-align:right}.rtl .crumb{direction:rtl}.rtl .heading,.rtl .panel-head{flex-direction:row-reverse}.rtl .cookie-card{text-align:right}
+    @media(max-width:1000px){.app{grid-template-columns:205px 1fr}.content{padding:30px 24px}.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.builder{grid-template-columns:1fr 1fr}}
+    @media(max-width:680px){.app{grid-template-columns:1fr}.sidebar{display:none}.topbar{height:58px;padding:0 17px}.content{padding:26px 16px 45px}.heading{display:block}.heading .btn{margin-top:17px}.heading h1{font-size:25px}.stats{gap:9px}.stat{padding:13px}.stat strong{font-size:22px}.stat-top{font-size:10px}.builder{grid-template-columns:1fr}.preview-wrap{min-height:265px}.site-mock{height:245px}.panel{padding:16px}.act-time{font-size:9px}}
+    .live-dashboard{display:none}.live-mode .live-dashboard{display:block}.live-mode #overview>.stats,.live-mode #overview>.grid,.live-mode #overview>.notice{display:none}.live-mode #publish,.live-mode #language,.live-mode .icon-btn{display:none!important}.live-mode #nav button[data-page]:not([data-page="overview"]){display:none}.live-toolbar{display:flex;gap:10px;align-items:end;margin:0 0 16px}.live-toolbar .field{min-width:min(320px,100%);margin:0}.live-toolbar label{display:block;font-size:11px;font-weight:650;margin-bottom:7px}.live-toolbar select{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}.live-error{display:none;color:#8c312d;background:#fff1ef;border:1px solid #f0cfcb;border-radius:9px;padding:11px;margin:10px 0 16px;font-size:12px}.live-error.show{display:block}.live-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:17px}.live-panel{background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);padding:19px;margin-bottom:16px}.live-panel h2{font:700 15px Manrope,sans-serif;margin:0 0 5px}.live-panel>p{font-size:11px;color:var(--muted);margin:0 0 15px}.live-table{width:100%;border-collapse:collapse;font-size:11px}.live-table th,.live-table td{text-align:left;padding:10px 8px;border-bottom:1px solid #edf0ec;vertical-align:top}.live-table th{font-size:10px;color:var(--muted)}.live-table tr:last-child td{border:0}.live-empty{font-size:12px;color:var(--muted);padding:16px 4px}.live-event{display:grid;grid-template-columns:28px 1fr auto;gap:9px;align-items:center;padding:11px 0;border-bottom:1px solid #f0f2ee}.live-event:last-child{border:0}.live-event b{display:block;font-size:11px}.live-event small,.live-event time{font-size:10px;color:var(--muted)}.live-event time{white-space:nowrap}.live-role{font-size:10px;color:var(--muted);margin-left:5px}@media(max-width:1000px){.live-grid{grid-template-columns:1fr}}@media(max-width:680px){.live-toolbar{align-items:stretch;flex-direction:column}.live-table th:nth-child(1),.live-table td:nth-child(1){display:none}.live-event{grid-template-columns:24px 1fr}.live-event time{grid-column:2}}
+  </style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">a</span> aman</div>
+    <div class="workspace"><div class="favicon">B</div><div><b id="workspaceName">Banque Démo</b><small id="workspaceMeta">banque-demo.example⌄</small></div></div>
+    <div class="nav-label">ESPACE DE TRAVAIL</div>
+    <nav class="nav" id="nav">
+      <button class="active" data-page="overview"><span class="ico">▦</span>Vue d’ensemble</button>
+      <button data-page="banner"><span class="ico">◉</span>Bannière de consentement</button>
+      <button data-page="scanner"><span class="ico">⌕</span>Scanner de cookies</button>
+      <button data-page="proofs"><span class="ico">▤</span>Preuves & historique</button>
+      <button data-page="integrations"><span class="ico">⌘</span>Intégrations</button>
+    </nav>
+    <div class="side-bottom">
+      <div class="nav-label">CONFIGURATION</div>
+      <nav class="nav"><button data-page="settings"><span class="ico">⚙</span>Paramètres du site</button></nav>
+      <div class="help"><b>Besoin d’un coup de main ?</b><p>Notre équipe est là pour vous aider à configurer votre espace.</p><a href="mailto:bonjour@aman.ma">Contacter l’équipe ↗</a></div>
+      <div class="profile"><div class="avatar" id="profileAvatar">YB</div><div><b id="profileName">Yasmine Berrada</b><small id="profileRole">Administratrice · démo</small></div></div>
+    </div>
+  </aside>
+  <main>
+    <header class="topbar"><div class="crumb"><span id="crumbWorkspace">Banque Démo</span> <span> / </span> <strong id="crumbTitle">Vue d’ensemble</strong></div><div class="top-actions"><button class="icon-btn" aria-label="Notifications">♧</button><button class="btn" id="language">عربي</button><div class="top-avatar" id="topAvatar">YB</div></div></header>
+    <div class="content">
+      <section class="page current" id="overview">
+        <div class="heading"><div><div class="eyebrow" id="dashboardDate">LUNDI 5 OCTOBRE 2026</div><h1 id="dashboardGreeting">Bonjour Yasmine 👋</h1><p>Voici ce qui se passe sur votre espace de consentement.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="admin.html">Console entreprise ↗</a><a class="btn" href="demo-site.html" target="_blank" rel="noreferrer">Ouvrir le site démo ↗</a><button class="btn primary" id="publish">Publier les changements</button></div></div>
+        <div role="note" id="mock-warning" style="background:#fff6e6;border:1px solid #eee1bd;border-radius:10px;padding:12px 15px;margin:0 0 16px;color:#705821;font-size:11px;line-height:1.55"><b>Maquette visuelle — données simulées.</b> Les statistiques, scans et activités de cet écran ne proviennent pas de clients. Le parcours connecté de gestion des organisations et des politiques est dans la <a href="admin.html" style="color:#176447;font-weight:700">console entreprise</a>.</div>
+        <section id="liveDashboard" class="live-dashboard" aria-live="polite">
+          <div class="live-toolbar"><div class="field"><label for="liveOrgSelect">Périmètre du tableau de bord</label><select id="liveOrgSelect"><option value="all">Toutes mes organisations</option></select></div><button class="btn" id="refreshLiveDashboard">Actualiser</button><span id="dashboardUpdated" class="sub"></span></div>
+          <div id="liveDashboardError" class="live-error" role="alert"></div>
+          <div class="stats">
+            <div class="stat"><div class="stat-top">Organisations accessibles <span class="stat-icon">▦</span></div><strong id="liveOrgCount">—</strong><span class="sub">selon vos appartenances</span></div>
+            <div class="stat"><div class="stat-top">Propriétés <span class="stat-icon">⌂</span></div><strong id="livePropertyCount">—</strong><span class="sub">Web et applications</span></div>
+            <div class="stat"><div class="stat-top">Propriétés publiées <span class="stat-icon">✓</span></div><strong id="livePublishedCount">—</strong><span class="sub">avec une politique active</span></div>
+            <div class="stat"><div class="stat-top">Brouillons à revoir <span class="stat-icon">✎</span></div><strong id="liveDraftCount">—</strong><span class="sub">versions non publiées</span></div>
+          </div>
+          <div class="live-grid">
+            <section class="live-panel"><h2>Propriétés et politiques</h2><p>Configuration et événements de choix déclarés par les SDK sur les 30 derniers jours.</p><div style="overflow:auto"><table class="live-table"><thead><tr><th>Organisation</th><th>Propriété</th><th>Canal</th><th>Environnement</th><th>Origine Web</th><th>Version publiée</th><th>État des brouillons</th><th>Déclarations SDK · 30 j</th><th>Détail par finalité</th></tr></thead><tbody id="liveProperties"></tbody></table></div></section>
+            <section class="live-panel"><h2>Activité administrative</h2><p>Actions récentes sur vos organisations. Aman ne centralise pas ici les décisions des visiteurs.</p><div id="liveEvents"></div></section>
+          </div>
+          <p class="sub">Les compteurs incluent uniquement les choix explicitement transmis après activation de la collecte par l’intégrateur. Ils sont déclarés par le SDK du client : ils ne prouvent pas l’identité du visiteur, l’affichage de l’interface ni l’application effective du choix. Les événements expirés sont supprimés selon la rétention de la politique publiée.</p>
+        </section>
+        <div class="stats">
+          <div class="stat"><div class="stat-top">Taux d’acceptation <span class="stat-icon">✓</span></div><strong>68,4 %</strong><span class="trend">↗ 4,2 %</span> <span class="sub">vs. période précédente</span></div>
+          <div class="stat"><div class="stat-top">Consentements recueillis <span class="stat-icon">♡</span></div><strong>12 846</strong><span class="trend">↗ 8,7 %</span> <span class="sub">sur les 30 derniers jours</span></div>
+          <div class="stat"><div class="stat-top">Cookies détectés <span class="stat-icon">⌕</span></div><strong>23</strong><span class="sub">3 catégories · dernier scan hier</span></div>
+          <div class="stat"><div class="stat-top">Statut du site <span class="stat-icon">●</span></div><strong style="font-size:19px;margin:15px 0 8px">Configuration active</strong><span class="sub">Dernière publication · 2 oct. 2026</span></div>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <div class="panel-head"><div><h2>Votre bannière de consentement</h2><p>Personnalisez l’expérience affichée sur votre site.</p></div><span class="status">● Publiée</span></div>
+            <div class="tabs"><button class="tab active" data-tab="design">Design</button><button class="tab" data-tab="content">Contenu</button><button class="tab" data-tab="categories">Catégories</button></div>
+            <div class="builder">
+              <div class="fields" id="designFields">
+                <div class="field"><label for="bannerTitle">Titre de la bannière</label><input id="bannerTitle" value="Votre vie privée, notre priorité" maxlength="70"></div>
+                <div class="field"><label for="bannerCopy">Message</label><input id="bannerCopy" value="Nous utilisons des cookies pour améliorer votre expérience."></div>
+                <div class="field"><label>Couleur principale</label><div class="colors"><button class="color-choice selected" style="background:#176447" data-color="#176447" aria-label="Vert forêt"></button><button class="color-choice" style="background:#bd5f3c" data-color="#bd5f3c" aria-label="Terracotta"></button><button class="color-choice" style="background:#315a89" data-color="#315a89" aria-label="Bleu"></button><button class="color-choice" style="background:#342e2b" data-color="#342e2b" aria-label="Charbon"></button></div></div>
+                <div class="field"><label for="locale">Langue par défaut</label><select id="locale"><option>Français</option><option>العربية</option><option>Darija (expérimental)</option></select></div>
+              </div>
+              <div class="preview-wrap"><div class="site-mock"><div class="mock-nav">BANQUE DÉMO <span>PARTICULIERS · ENTREPRISES · À PROPOS</span></div><div class="mock-photo"></div><div class="mock-copy">Vos projets, en confiance.<span>Gérez vos comptes et vos préférences en toute simplicité.</span></div><div class="cookie-card"><h3 id="previewTitle">Votre vie privée, notre priorité</h3><p id="previewCopy">Nous utilisons des cookies pour améliorer votre expérience. Choisissez ceux que vous acceptez.</p><div class="cookie-buttons"><button class="accept" data-choice="accept">Tout accepter</button><button data-choice="refuse">Tout refuser</button><button data-choice="settings">Personnaliser</button></div></div></div><div class="consent-state" id="consentState"></div></div>
+            </div>
+            <div class="footer-actions"><small>Les cookies essentiels restent toujours actifs.</small><button class="btn" id="save">Enregistrer le brouillon</button></div>
+          </div>
+          <div>
+            <div class="panel"><div class="panel-head"><div><h2>Activité récente</h2><p>Les dernières actions sur votre espace.</p></div><button class="btn" data-go="proofs">Tout voir</button></div>
+              <div class="activity">
+                <div class="activity-row"><div class="act-icon">✓</div><div class="act-copy"><b>Nouvelle version publiée</b><small>Bannière · version 1.4</small></div><span class="act-time">Il y a 3 jours</span></div>
+                <div class="activity-row"><div class="act-icon">⌕</div><div class="act-copy"><b>Scan terminé</b><small>23 cookies détectés</small></div><span class="act-time">Hier, 09:42</span></div>
+                <div class="activity-row"><div class="act-icon">＋</div><div class="act-copy"><b>Consentement enregistré</b><small>Visiteur · Casablanca</small></div><span class="act-time">Il y a 12 min</span></div>
+                <div class="activity-row"><div class="act-icon">↻</div><div class="act-copy"><b>Préférences mises à jour</b><small>Google Analytics · mesure d’audience</small></div><span class="act-time">Il y a 28 min</span></div>
+              </div>
+            </div>
+            <div class="panel sources"><div class="panel-head"><div><h2>Vos catégories de cookies</h2><p>23 cookies répartis en 3 catégories.</p></div><button class="btn" data-go="scanner">Gérer</button></div>
+              <div class="source-row"><span>Essentiels</span><span class="tag">Toujours actifs · 5</span></div><div class="source-row"><span>Mesure d’audience</span><span class="tag">8 cookies</span></div><div class="source-row"><span>Marketing</span><span class="tag">10 cookies</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="notice"><b>Repère conformité Maroc</b> — La délibération CNDP D-939-2025 distingue les finalités : elle prévoit une information préalable, une déclaration simplifiée dans son champ et un consentement préalable pour certains usages. La catégorie de chaque traceur doit être validée pour le traitement concerné. <a href="https://www.cndp.ma/wp-content/uploads/2025/12/Deliberation-N%C2%B0-D-939-2025-du-28112025-relative-au-modele-de-declaration-simplifiee-relative-au-traitement-des-donnees-a-caractere-personnel-de-cookies-sur-un-terminal.pdf" target="_blank" rel="noreferrer" style="color:#176447">Lire la délibération ↗</a></div>
+      </section>
+      <section class="page" id="banner"><div class="heading"><div><div class="eyebrow">EXPÉRIENCE DE CONSENTEMENT</div><h1>Bannière de consentement</h1><p>Configurez une bannière claire, à l’image de votre marque.</p></div><button class="btn primary" id="bannerPublish">Publier les changements</button></div><div class="panel secondary-card"><h2>Une expérience simple et transparente</h2><p style="color:var(--muted);line-height:1.7">Choisissez le style, le contenu, les langues et les catégories affichées à vos visiteurs. La prévisualisation sur la page Vue d’ensemble se met à jour en direct.</p><button class="btn" data-go="overview">Ouvrir l’éditeur</button></div></section>
+      <section class="page" id="scanner"><div class="heading"><div><div class="eyebrow">INVENTAIRE DES TRACEURS</div><h1>Scanner de cookies</h1><p>Inventaire ponctuel sur une page ouverte dans ton navigateur.</p></div><a class="btn primary" href="scanner-tool.html">⌕ &nbsp;Ouvrir l’outil local</a></div><div class="panel secondary-card"><div class="scan-box"><div style="font-size:32px">⌕</div><h2>Scan local, sans envoi à Aman</h2><p>Lance le code dans la console du navigateur sur un domaine autorisé. Il relève les scripts, iframes, certaines requêtes et les noms de cookies accessibles.</p><p>Le rapport JSON reste à examiner et classer manuellement. Il n’est pas enregistré dans l’espace d’organisation et ne remplace pas un parcours de scan automatisé multi-page.</p><a class="btn" href="scanner-tool.html">Consulter les étapes et copier le code</a></div></div></section>
+      <section class="page" id="proofs"><div class="heading"><div><div class="eyebrow">TRAÇABILITÉ</div><h1>Preuves & historique</h1><p>Retrouvez les versions publiées et les événements de consentement.</p></div><button class="btn">↓ &nbsp;Exporter le journal</button></div><div class="panel secondary-card"><h2>Journal d’activité</h2><p style="color:var(--muted);font-size:12px">Les événements affichés ici sont des données de démonstration.</p><div class="activity"><div class="activity-row"><div class="act-icon">✓</div><div class="act-copy"><b>Consentement · accepté</b><small>Version 1.4 · anonymisé · Casablanca</small></div><span class="act-time">Aujourd’hui, 11:42</span></div><div class="activity-row"><div class="act-icon">⊘</div><div class="act-copy"><b>Consentement · refusé</b><small>Version 1.4 · anonymisé · Rabat</small></div><span class="act-time">Aujourd’hui, 11:38</span></div><div class="activity-row"><div class="act-icon">↻</div><div class="act-copy"><b>Préférences modifiées</b><small>Marketing désactivé · version 1.4</small></div><span class="act-time">Aujourd’hui, 11:21</span></div></div></div></section>
+      <section class="page" id="integrations"><div class="heading"><div><div class="eyebrow">VOTRE ÉCOSYSTÈME</div><h1>Intégrations</h1><p>Connectez Aman à vos outils de mesure et de gestion des balises.</p></div><button class="btn primary" id="connect">＋ &nbsp;Ajouter une intégration</button></div><div class="panel secondary-card"><div class="source-row"><span><b>Google Tag Manager</b><br><small style="color:var(--muted)">Gestionnaire de balises</small></span><span class="status">À configurer</span></div><div class="source-row"><span><b>Google Analytics 4</b><br><small style="color:var(--muted)">Mesure d’audience</small></span><button class="btn" id="gaConnect">Configurer</button></div><div class="source-row"><span><b>SSO / SAML</b><br><small style="color:var(--muted)">Authentification entreprise</small></span><button class="btn" id="wpConnect">À l’étude</button></div></div></section>
+      <section class="page" id="settings"><div class="heading"><div><div class="eyebrow">ESPACE DE TRAVAIL</div><h1>Paramètres de l’organisation</h1><p>Gérez les informations de votre organisation et ses domaines.</p></div></div><div class="panel secondary-card"><div class="field"><label>Organisation</label><input value="Banque Démo"></div><div class="field" style="margin-top:14px"><label>Domaine</label><input value="https://banque-demo.example"></div><div class="field" style="margin-top:14px"><label>Environnements</label><input value="Production · Préproduction · Développement"></div><div class="footer-actions"><small>Modifications non publiées</small><button class="btn primary" id="settingsSave">Enregistrer</button></div></div></section>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+  const toast=document.getElementById('toast');let toastTimer;function showToast(message){toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2500)}
+  const names={overview:'Vue d’ensemble',banner:'Bannière de consentement',scanner:'Scanner de cookies',proofs:'Preuves & historique',integrations:'Intégrations',settings:'Paramètres du site'};
+  function go(page){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('current',p.id===page));document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));document.getElementById('crumbTitle').textContent=names[page]||names.overview;window.scrollTo(0,0)}
+  document.querySelectorAll('#nav button[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+  document.getElementById('bannerTitle').addEventListener('input',e=>document.getElementById('previewTitle').textContent=e.target.value||'Votre vie privée');document.getElementById('bannerCopy').addEventListener('input',e=>document.getElementById('previewCopy').textContent=e.target.value||'Choisissez les cookies que vous acceptez.');
+  document.querySelectorAll('.color-choice').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.color-choice').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');document.querySelector('.cookie-buttons .accept').style.background=b.dataset.color;document.querySelector('.cookie-buttons .accept').style.borderColor=b.dataset.color;document.querySelector('.brand-mark').style.background=b.dataset.color}));
+  document.querySelectorAll('.cookie-buttons button').forEach(b=>b.addEventListener('click',()=>{const state=document.getElementById('consentState');state.textContent=b.dataset.choice==='accept'?'Préférences enregistrées : tout accepté.':b.dataset.choice==='refuse'?'Préférences enregistrées : cookies non essentiels refusés.':'Panneau de préférences prêt à configurer.'}));
+  function saveAmanConfig(publish){let previous={};try{previous=JSON.parse(localStorage.getItem('aman:demo:config')||'{}')}catch(_){}const selected=document.querySelector('.color-choice.selected');const locale=document.getElementById('locale').value;const config={version:publish?String((Number(previous.version)||1)+1):(previous.version||'1'),locale:locale==='العربية'?'ar':'fr',title:document.getElementById('bannerTitle').value,message:document.getElementById('bannerCopy').value,color:selected?selected.dataset.color:'#176447'};localStorage.setItem('aman:demo:config',JSON.stringify(config));return config}
+  document.getElementById('save').addEventListener('click',()=>{saveAmanConfig(false);showToast('Brouillon enregistré sur cet appareil. Ouvrez le site démo pour le voir.')});document.getElementById('publish').addEventListener('click',()=>{saveAmanConfig(true);showToast('Configuration publiée dans la démo. Rechargez le site de démonstration.')});document.getElementById('bannerPublish').addEventListener('click',()=>{saveAmanConfig(true);showToast('Configuration publiée dans la démo. Rechargez le site de démonstration.')});document.getElementById('settingsSave').addEventListener('click',()=>showToast('Paramètres enregistrés pour cette démo.'));
+  document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(b.dataset.tab!=='design')showToast('Les options « '+b.textContent+' » sont en préparation.')}));
+  document.getElementById('language').addEventListener('click',e=>{const arabic=document.getElementById('app').classList.toggle('rtl');document.documentElement.lang=arabic?'ar':'fr';e.currentTarget.textContent=arabic?'FR':'عربي';showToast(arabic?'معاينة اتجاه العربية':'Aperçu en français')});
+  ['connect','gaConnect','wpConnect'].forEach(id=>document.getElementById(id).addEventListener('click',()=>showToast('La connexion sera disponible dans la version connectée.')));
+</script>
+<script>
+  (function () {
+    const apiBase = 'http://localhost:8001';
+    const labels = {
+      'organization.created': 'Organisation créée',
+      'property.created': 'Propriété créée',
+      'policy.draft_created': 'Brouillon créé',
+      'policy.draft_updated': 'Brouillon modifié',
+      'policy.published': 'Politique publiée',
+      'member.invited': 'Membre invité',
+      'member.joined': 'Membre ajouté',
+      'member.role_changed': 'Rôle modifié',
+      'member.removed': 'Membre retiré'
+    };
+    const $ = (id) => document.getElementById(id);
+    let dashboard = null;
+
+    function element(tag, text, className) {
+      const item = document.createElement(tag);
+      if (text !== undefined && text !== null) item.textContent = String(text);
+      if (className) item.className = className;
+      return item;
+    }
+
+    async function loadConsentMetrics(property, target) {
+      target.replaceChildren(element('div', 'Chargement des agrégats…', 'live-empty'));
+      try {
+        const orgId = encodeURIComponent(property.org_id);
+        const propertyId = encodeURIComponent(property.id);
+        const response = await fetch(`${apiBase}/v1/organizations/${orgId}/properties/${propertyId}/consent-metrics?days=30`, {
+          method: 'GET', credentials: 'include', cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Impossible de charger les agrégats (HTTP ${response.status}).`);
+        const metrics = await response.json();
+        const summary = element('div', `${metrics.decisionCount} déclaration(s) SDK · tout accepter ${metrics.actions.accept_all} · tout refuser ${metrics.actions.reject_all} · choix personnalisés ${metrics.actions.custom}`, 'live-empty');
+        const exportButton = element('button', 'Exporter les événements déclarés · 30 jours', 'btn');
+        exportButton.type = 'button';
+        const exportStatus = element('span', '', 'live-empty');
+        exportStatus.setAttribute('role', 'status');
+        exportButton.addEventListener('click', async () => {
+          exportButton.disabled = true;
+          exportStatus.textContent = 'Préparation de l’export…';
+          try {
+            const exportUrl = `${apiBase}/v1/organizations/${encodeURIComponent(property.org_id)}/properties/${encodeURIComponent(property.id)}/consent-events/export?days=30`;
+            const exportResponse = await fetch(exportUrl, { method: 'GET', credentials: 'include', cache: 'no-store' });
+            if (!exportResponse.ok) throw new Error(`Impossible de préparer l’export (HTTP ${exportResponse.status}).`);
+            const blob = await exportResponse.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = `aman-decisions-${property.id}-30d.csv`;
+            document.body.append(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            exportStatus.textContent = 'Export téléchargé. Événements déclarés par les SDK, sans identité de visiteur.';
+          } catch (error) {
+            exportStatus.textContent = error.message;
+          } finally {
+            exportButton.disabled = false;
+          }
+        });
+        target.replaceChildren(summary, exportButton, exportStatus,
+          element('div', 'L’identifiant d’événement est aléatoire. Cet export ne prouve ni identité du visiteur ni affichage du choix.', 'live-empty'));
+        const purposeEntries = Array.isArray(metrics.purposes) ? metrics.purposes : [];
+        if (!purposeEntries.length) {
+          target.append(element('div', 'Aucune décision reçue sur cette période.', 'live-empty'));
+          return true;
+        }
+        const table = document.createElement('table');
+        table.className = 'live-table';
+        const head = document.createElement('thead');
+        const header = document.createElement('tr');
+        ['Version', 'Finalité', 'Autorisée', 'Refusée'].forEach((label) => header.append(element('th', label)));
+        head.append(header);
+        const body = document.createElement('tbody');
+        purposeEntries.forEach((counts) => {
+          const row = document.createElement('tr');
+          row.append(element('td', `v${counts.policyVersion}`), element('td', counts.purposeId), element('td', counts.allowed), element('td', counts.declined));
+          body.append(row);
+        });
+        table.append(head, body);
+        target.append(table);
+        return true;
+      } catch (error) {
+        target.replaceChildren(element('div', error.message, 'live-empty'));
+        return false;
+      }
+    }
+
+    function renderDashboard() {
+      if (!dashboard) return;
+      const selectedId = $('liveOrgSelect').value;
+      const orgs = selectedId === 'all' ? dashboard.organizations : dashboard.organizations.filter((org) => org.id === selectedId);
+      const orgIds = new Set(orgs.map((org) => org.id));
+      const properties = dashboard.properties.filter((property) => orgIds.has(property.org_id));
+      const events = dashboard.recent_events.filter((event) => orgIds.has(event.org_id));
+      $('liveOrgCount').textContent = orgs.length;
+      $('livePropertyCount').textContent = properties.length;
+      $('livePublishedCount').textContent = properties.filter((property) => property.published_version !== null).length;
+      $('liveDraftCount').textContent = properties.reduce((total, property) => total + property.draft_count, 0);
+
+      const rows = $('liveProperties');
+      rows.replaceChildren();
+      if (!properties.length) {
+        const row = element('tr');
+        const cell = element('td', 'Aucune propriété dans ce périmètre.', 'live-empty');
+        cell.colSpan = 9;
+        row.append(cell);
+        rows.append(row);
+      }
+      properties.forEach((property) => {
+        const row = element('tr');
+        const detailRow = element('tr');
+        const detailCell = document.createElement('td');
+        detailCell.colSpan = 9;
+        detailCell.style.background = '#f8faf6';
+        detailCell.style.padding = '8px 12px';
+        detailRow.append(detailCell);
+        detailRow.hidden = true;
+        const detailButton = element('button', 'Détails', 'btn');
+        detailButton.type = 'button';
+        detailButton.setAttribute('aria-expanded', 'false');
+        let detailsLoaded = false;
+        detailButton.addEventListener('click', async () => {
+          if (!detailRow.hidden) {
+            detailRow.hidden = true;
+            detailButton.textContent = 'Détails';
+            detailButton.setAttribute('aria-expanded', 'false');
+            return;
+          }
+          detailRow.hidden = false;
+          detailButton.textContent = 'Masquer';
+          detailButton.setAttribute('aria-expanded', 'true');
+          if (!detailsLoaded) detailsLoaded = await loadConsentMetrics(property, detailCell);
+        });
+        const detailAction = document.createElement('td');
+        detailAction.append(detailButton);
+        row.append(
+          element('td', property.organization_name),
+          element('td', property.name),
+          element('td', ({ web: 'Web', ios: 'iOS', android: 'Android' })[property.channel] || property.channel),
+          element('td', ({ development: 'Développement', staging: 'Recette / préproduction', production: 'Production' })[property.environment] || property.environment),
+          element('td', property.origin || (property.channel === 'web' ? 'À configurer' : '—')),
+          element('td', property.published_version === null ? 'Aucune' : `v${property.published_version}`),
+          element('td', property.draft_count ? `${property.draft_count} · dernière v${property.draft_version}` : 'Aucun brouillon'),
+          element('td', `${property.consent_decision_count_30d || 0} · accepter ${property.consent_accept_all_count_30d || 0} · refuser ${property.consent_reject_all_count_30d || 0} · choix personnalisés ${property.consent_custom_count_30d || 0}`),
+          detailAction
+        );
+        rows.append(row, detailRow);
+      });
+
+      const eventList = $('liveEvents');
+      eventList.replaceChildren();
+      if (!events.length) eventList.append(element('div', 'Aucune action récente dans ce périmètre.', 'live-empty'));
+      events.forEach((event) => {
+        const row = element('div', null, 'live-event');
+        row.append(element('span', '•', 'act-icon'));
+        const copy = element('div');
+        copy.append(element('b', labels[event.action] || event.action));
+        copy.append(element('small', `${event.organization_name} · ${event.resource_type}`));
+        row.append(copy);
+        const time = element('time', new Date(event.occurred_at * 1000).toLocaleString('fr-MA'));
+        time.dateTime = new Date(event.occurred_at * 1000).toISOString();
+        row.append(time);
+        eventList.append(row);
+      });
+
+      const workspace = selectedId === 'all' ? null : orgs[0];
+      $('workspaceName').textContent = workspace ? workspace.name : 'Toutes mes organisations';
+      $('workspaceMeta').textContent = workspace ? `${workspace.property_count} propriété(s) · ${workspace.role}` : `${orgs.length} organisation(s) accessible(s)`;
+      $('crumbWorkspace').textContent = workspace ? workspace.name : 'Vue multi-organisation';
+    }
+
+    async function loadDashboard() {
+      const error = $('liveDashboardError');
+      error.classList.remove('show');
+      try {
+        const response = await fetch(`${apiBase}/v1/dashboard`, { method: 'GET', credentials: 'include', cache: 'no-store' });
+        if (response.status === 401) return;
+        if (!response.ok) throw new Error(`Impossible de charger le tableau de bord (HTTP ${response.status}).`);
+        dashboard = await response.json();
+        document.body.classList.add('live-mode');
+        $('dashboardDate').textContent = new Intl.DateTimeFormat('fr-MA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()).toLocaleUpperCase('fr-MA');
+        $('mock-warning').innerHTML = '<b>Espace connecté.</b> Les organisations, propriétés, politiques et actions affichées ci-dessous proviennent de votre compte Aman. Les autres vues de démonstration ne représentent pas des données réelles.';
+        const select = $('liveOrgSelect');
+        const priorSelection = select.value || 'all';
+        select.replaceChildren(new Option('Toutes mes organisations', 'all'));
+        dashboard.organizations.forEach((org) => select.add(new Option(`${org.name} · ${org.role}`, org.id)));
+        select.value = dashboard.organizations.some((org) => org.id === priorSelection) ? priorSelection : 'all';
+        try {
+          const userResponse = await fetch(`${apiBase}/v1/auth/me`, { method: 'GET', credentials: 'include', cache: 'no-store' });
+          if (userResponse.ok) {
+            const user = await userResponse.json();
+            $('dashboardGreeting').textContent = `Bonjour ${user.email} 👋`;
+            $('profileName').textContent = user.email;
+            $('profileRole').textContent = 'Compte Aman';
+            const initials = user.email.split('@')[0].split(/[._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('') || 'A';
+            $('profileAvatar').textContent = initials;
+            $('topAvatar').textContent = initials;
+          }
+        } catch (_) { /* The organization dashboard remains useful if profile refresh fails. */ }
+        renderDashboard();
+        $('dashboardUpdated').textContent = `Actualisé à ${new Date().toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit' })}`;
+      } catch (cause) {
+        error.textContent = cause.message || 'Le tableau de bord connecté est momentanément indisponible.';
+        error.classList.add('show');
+      }
+    }
+
+    $('liveOrgSelect').addEventListener('change', renderDashboard);
+    $('refreshLiveDashboard').addEventListener('click', loadDashboard);
+    loadDashboard();
+  })();
+</script>
+</body>
+</html>

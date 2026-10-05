@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f8f4">
+  <title>Aman — inventaire local de page</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18231f;background:#f6f8f4}*{box-sizing:border-box}body{margin:0}.wrap{max-width:920px;margin:0 auto;padding:34px 20px 60px}.brand{font-size:19px;font-weight:800;margin-bottom:28px}.brand span{display:inline-grid;place-items:center;width:29px;height:29px;border-radius:9px;background:#176447;color:white;margin-right:8px}.eyebrow{font-size:10px;color:#176447;letter-spacing:1px;font-weight:750}h1{font-size:30px;letter-spacing:-.8px;margin:8px 0}p{color:#69766e;line-height:1.6}.card{background:white;border:1px solid #e2e9e2;border-radius:14px;padding:22px;margin:16px 0}.steps{display:grid;gap:13px;padding-left:23px;color:#35453b;line-height:1.55}.notice{background:#fff7e8;border:1px solid #efe0bb;color:#6b5929;padding:13px 15px;border-radius:10px;font-size:12px;line-height:1.55}.btn{border:1px solid #dce5dc;border-radius:9px;background:#fff;padding:10px 14px;color:#18231f;font-weight:650;cursor:pointer}.btn.primary{background:#176447;color:#fff;border-color:#176447}.codebar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.status{font-size:12px;color:#176447}textarea{display:block;width:100%;height:250px;resize:vertical;border:1px solid #dfe6df;border-radius:9px;padding:12px;background:#172820;color:#edf5ed;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}small{font-size:11px;color:#758078}a{color:#176447}@media(max-width:600px){.wrap{padding:24px 14px 45px}.card{padding:17px}h1{font-size:25px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="brand"><span>a</span>aman <small>inventaire local</small></div>
+    <div class="eyebrow">OUTIL DE REPÉRAGE · WEB</div>
+    <h1>Inventorier une page autorisée</h1>
+    <p>Ce prototype relève les scripts, iframes, requêtes réseau de type script/fetch/XHR visibles au chargement de la page et les noms de cookies accessibles. Il ne classe pas automatiquement les finalités et n’envoie rien à Aman.</p>
+
+    <section class="card">
+      <h2>Utilisation</h2>
+      <ol class="steps">
+        <li>Ouvre dans le navigateur une page que ton organisation est autorisée à examiner.</li>
+        <li>Ouvre les outils de développement du navigateur, puis l’onglet Console.</li>
+        <li>Copie le code ci-dessous, colle-le dans la console de cette page et exécute-le.</li>
+        <li>Classe manuellement les ressources dans le panneau Aman, regarde le signal de marqueur direct, puis copie ou télécharge le rapport JSON.</li>
+        <li>Pour une démonstration avec des données synthétiques, configure d’abord sur la propriété Web l’origine exacte du site (scheme, hôte et port, sans chemin), puis importe le fichier depuis la console. Le rapport doit correspondre à cette origine ; l’association ne prouve pas le contrôle du domaine.</li>
+        <li>Relance l’inventaire sur les parcours et états qui t’intéressent. Un scan ne couvre que le chargement de la page où il s’exécute.</li>
+      </ol>
+      <div class="notice"><b>Limites :</b> le marqueur Aman est un signal observé dans le DOM, pas une preuve que tous les déclenchements sont bloqués ; un gestionnaire comme GTM peut appliquer un contrôle distinct. Les valeurs de cookies ne sont jamais lues, les cookies HttpOnly ne sont pas visibles, et les résultats restent dans le navigateur jusqu’à une copie ou un téléchargement explicite. Une importation ultérieure conserve le rapport dans la base SQLite locale. Le rapport nécessite une revue humaine ; il ne prouve pas la conformité et ne modifie ni les traceurs ni la configuration du site. N’importe pas d’inventaire réel de banque dans ce prototype.</div>
+    </section>
+
+    <section class="card">
+      <div class="codebar">
+        <button id="copy" class="btn primary" disabled>Charger le code…</button>
+        <span id="status" class="status" role="status"></span>
+      </div>
+      <textarea id="source" aria-label="Code de l’inventaire local" readonly spellcheck="false"></textarea>
+      <p><small>Ce code est servi depuis le projet local. Vérifie-le avec l’équipe sécurité avant de l’utiliser sur un domaine d’entreprise. <a href="admin.html">Retour à la console entreprise</a></small></p>
+    </section>
+  </main>
+  <script>
+    const source = document.getElementById('source');
+    const button = document.getElementById('copy');
+    const status = document.getElementById('status');
+    fetch('aman-scanner.js', {cache: 'no-store'}).then((response) => {
+      if (!response.ok) throw new Error('Le fichier de scan est introuvable.');
+      return response.text();
+    }).then((text) => {
+      source.value = text;
+      button.disabled = false;
+      button.textContent = 'Copier le code de scan';
+    }).catch((error) => { status.textContent = error.message; });
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(source.value);
+        status.textContent = 'Code copié. Colle-le dans la console de la page à inventorier.';
+      } catch (_) {
+        source.focus();
+        source.select();
+        status.textContent = 'Code sélectionné. Copie-le manuellement.';
+      }
+    });
+  </script>
+</body>
+</html>

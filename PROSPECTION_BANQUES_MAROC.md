@@ -1,0 +1,33 @@
+# Comptes de découverte — banques marocaines
+
+**Document interne · 5 octobre 2026 · Hypothèses à qualifier**
+
+Cette liste sert à préparer des entretiens de découverte, pas à affirmer qu’une banque cherche une CMP ou qu’elle achètera Aman. Les signaux ci-dessous viennent des propres publications des établissements. Aucun interlocuteur n’a été contacté et aucune demande de rendez-vous n’a été envoyée.
+
+## Comptes à qualifier en premier
+
+| Ordre de travail | Compte | Signal public vérifiable | Angle de découverte (hypothèse) | Comité à identifier |
+| --- | --- | --- | --- | --- |
+| 1 | **CIH BANK** | Son rapport ESG 2024 décrit la transformation digitale, indique plus de 500 MDH investis sur six ans et le passage au digital de toutes les nouvelles offres. Le rapport cite aussi la protection des données clients et la cybersécurité parmi ses objectifs. [Rapport ESG 2024](https://www.cihbank.ma/sites/default/files/2025-04/Rapport_ESG_CIH_2024.pdf) | Tester un périmètre Web public et non authentifié, puis vérifier si le même besoin s’étend aux parcours de l’app mobile. Aucun signal public ne confirme un projet d’achat de CMP. | Produit / canaux digitaux, architecture ou DSI, sécurité (RSSI), DPO / juridique, achats. |
+| 2 | **BANK OF AFRICA** | Sa stratégie publique met en avant la digitalisation, la donnée, la finance mobile et une approche phygitale. Son offre entreprises recense plusieurs services numériques, dont Business Online, BMCE Direct et EDIFIN. [Axes stratégiques](https://www.bankofafrica.ma/fr/groupe/valeurs-et-perspectives) · [Banque à distance entreprises](https://www.bankofafrica.ma/fr/entreprises/banque-a-distance) | Comprendre si la configuration des préférences et des traceurs est aujourd’hui répartie entre marque, site, application et filiales, ou déjà couverte par des outils internes. | Produits digitaux, DSI / architecture, sécurité, DPO / conformité, achats et responsables d’applications concernées. |
+| 3 | **Attijariwafa bank** | La page du groupe indique 12 millions de clients et une présence dans 26 pays. Le rapport annuel 2024 rapporte que 91,6 % des transactions sont réalisées via la banque digitale et 4 538 millions de connexions à ses plateformes. [Profil du groupe](https://www.attijariwafabank.com/fr/notre-groupe-bancaire) · [Rapport annuel 2024 — digital](https://publications.attijariwafabank.com/rapport_annuel_2024_EN/33-Attijariwafa-bank-2024-Annual-Report.html) | Grand périmètre potentiel, mais cycle fournisseur probablement exigeant. Cartographier d’abord la gouvernance centrale et les politiques groupe/pays. Ne pas supposer qu’un pilote marocain s’étend aux filiales internationales. | Direction digitale / expérience client, DSI et architecture, RSSI, DPO / juridique, achats fournisseurs, équipes des filiales. |
+
+**Séquence de travail proposée :** démarrer la découverte avec CIH BANK pour qualifier le problème et le périmètre Web, examiner ensuite la structure multi-services de BANK OF AFRICA, puis approcher Attijariwafa bank avec un dossier fournisseur et un cas d’usage plus précis. Cet ordre est une hypothèse basée sur les signaux publics et la préparation actuelle d’Aman ; il ne mesure ni l’ouverture commerciale, ni le budget, ni la probabilité d’achat.
+
+## Portes d’entrée publiques et limites
+
+- CIH BANK et BANK OF AFRICA affichent des parcours de contact destinés principalement aux clients. Ne pas les présenter comme canaux achats ou fournisseurs. Chercher une introduction professionnelle vers les équipes produit / digitale ou sécurité, ou demander le bon canal fournisseur lors d’un échange autorisé.
+- Attijariwafa bank publie une plateforme **Attijari Sourcing** permettant aux fournisseurs de se faire connaître. Vérifier les critères d’admission et le parcours applicable aux éditeurs SaaS avant d’y déposer un dossier ; la plateforme ne prouve pas qu’un appel d’offres CMP existe. [Attijari Sourcing](https://attijari-sourcing.attijariwafabank.com/)
+- Ne pas contacter les banques au nom de l’utilisateur sans autorisation explicite. Ne pas soumettre les formulaires publics avant d’avoir un nom de marque et une adresse de réponse validés.
+
+## Qualification à obtenir en entretien
+
+1. Quel outil et quelle équipe gèrent aujourd’hui les cookies, SDK analytics et préférences sur le Web et les apps ?
+2. L’inventaire, l’approbation des finalités et la publication sont-ils centralisés ou répétés par marque / filiale ?
+3. Quels tags / gestionnaires (GTM, SDK maison, analytics, marketing) doivent suivre les décisions, et qui contrôle le retrait ?
+4. Pour le premier périmètre, le groupe accepterait-il une démonstration sur un domaine fictif, puis un pilote sur un domaine public non authentifié ?
+5. Quel mode d’hébergement, quelles preuves de sécurité, quel SSO/MFA et quelles exigences de localisation des données sont éliminatoires ?
+6. Qui approuve : produit, DSI, sécurité, DPO/juridique, achats, et quel est le processus d’homologation ?
+7. Quel budget, quelles étapes et quelle date de décision permettraient une POC payante cadrée ?
+
+**Règle de passage :** ne qualifier un compte comme opportunité que lorsqu’un interlocuteur confirme un problème actuel, un sponsor, un chemin d’achat, des exigences fournisseur, un périmètre et un budget ou une ligne budgétaire. Une publication sur la digitalisation ne constitue pas une validation de la demande pour Aman.

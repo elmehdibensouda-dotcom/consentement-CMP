@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aman.ma/schemas/consent-policy-v1.json",
+  "title": "Aman Consent Policy",
+  "description": "Versioned, channel-neutral consent configuration. Legal classification is set by the controller, not inferred by this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "propertyId", "policyVersion", "status", "purposes", "languages", "retentionDays", "notice"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "propertyId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "policyVersion": {"type": "string", "minLength": 1, "maxLength": 64},
+    "status": {"enum": ["draft", "published", "retired"]},
+    "languages": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["fr", "ar"]}},
+    "defaultLanguage": {"enum": ["fr", "ar"]},
+    "retentionDays": {"type": "integer", "minimum": 1, "maximum": 3650, "description": "Controller-configured retention. Validate per channel, data type, purpose, and applicable law; web cookie decisions in the CNDP D-939-2025 scope have a separate six-month maximum."},
+    "purposes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "description", "required", "consentRequired", "channels"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+          "label": {"type": "object", "required": ["fr", "ar"], "additionalProperties": false, "properties": {"fr": {"type": "string", "minLength": 1, "maxLength": 120}, "ar": {"type": "string", "minLength": 1, "maxLength": 120}}},
+          "description": {"type": "object", "required": ["fr", "ar"], "additionalProperties": false, "properties": {"fr": {"type": "string", "minLength": 1, "maxLength": 600}, "ar": {"type": "string", "minLength": 1, "maxLength": 600}}},
+          "required": {"type": "boolean", "description": "True only for functions classified as strictly necessary by the controller after review."},
+          "consentRequired": {"type": "boolean", "description": "Controller-configured activation rule for this purpose and channel. When true, optional tags stay off until an affirmative visitor choice; when false, the purpose starts active but remains switchable by the visitor. Essential purposes remain always active. This is configuration behavior, not a legal classification by Aman."},
+          "channels": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["web", "ios", "android"]}},
+          "vendors": {"type": "array", "items": {"type": "string", "maxLength": 128}}
+        }
+      }
+    },
+    "notice": {
+      "$ref": "#/$defs/privacyNotice",
+      "description": "Legacy French notice retained for clients that do not read noticeTranslations."
+    },
+    "noticeTranslations": {
+      "type": "object",
+      "description": "Optional localized notice content. New bilingual policies should provide both French and Arabic values.",
+      "additionalProperties": false,
+      "required": ["fr", "ar"],
+      "properties": {
+        "fr": {"$ref": "#/$defs/privacyNotice"},
+        "ar": {"$ref": "#/$defs/privacyNotice"}
+      }
+    }
+  },
+  "$defs": {
+    "privacyNotice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controllerName", "contact", "processingReference", "dataCategories", "recipients", "transfers"],
+      "properties": {
+        "controllerName": {"type": "string", "minLength": 1, "maxLength": 200},
+        "contact": {"type": "string", "minLength": 1, "maxLength": 256},
+        "processingReference": {"type": "string", "minLength": 1, "maxLength": 120},
+        "dataCategories": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 200}},
+        "recipients": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 200}},
+        "transfers": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 200}}
+      }
+    }
+  }
+}

@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 3744)
-Total output lines: 102
-
 # Aman — plateforme de gestion du consentement
 
 Aman est un prototype B2B destiné aux banques et grandes entreprises marocaines. Il réunit une console d’organisation, un format de politique versionné, une bannière web et des SDK natifs en cours de préparation pour iOS / Android. La plateforme vise à aider chaque responsable de traitement à configurer et appliquer ses choix de consentement. Elle ne garantit pas la conformité et ne remplace ni l’analyse juridique ni les formalités du client.
@@ -47,7 +44,50 @@ Pré-requis : Python 3.11+.
 
 La page [commercialisation.html](./commercialisation.html) présente Aman aux prospects banques et grands comptes en français et en arabe standard, avec une mise en page RTL et un discours aligné sur l’état réel du prototype. Faire relire le texte arabe avant toute campagne publique.
 
-L’entrée [index.html]…2244 tokens truncated…cheurs Page View. Configure les balises de façon qu’elles ne partent pas avant l’événement et le consentement applicable. Un `false` ultérieur ne décharge pas un script déjà exécuté : la révocation doit appeler l’API d’arrêt/réinitialisation du fournisseur. Pour les balises Google, configure également les API Consent Mode de GTM ; l’événement Aman seul ne remplace pas les mises à jour de consentement natives de Google.
+L’entrée [index.html](http://localhost:8000/index.html) redirige vers la console connectée [admin.html](http://localhost:8000/admin.html), qui s’ouvre sur une vue d’ensemble multi-organisation avec les comptes réels de la session, puis permet de gérer les organisations, propriétés et leurs environnements (développement, recette, production), politiques, brouillons et actions administratives par organisation. L’ancienne maquette à statistiques simulées est isolée dans [maquette-dashboard.html](./maquette-dashboard.html) et ne sert pas de tableau de bord opérationnel. La console peut aussi afficher les décisions reçues dans les 30 derniers jours, leurs compteurs agrégés par finalité et exporter les événements encore retenus en CSV par propriété lorsqu’un intégrateur a activé leur transmission. Le scanner intégré et les intégrations illustratives du tableau de bord restent des exemples ; un [outil local d’inventaire de page](http://localhost:8000/scanner-tool.html) relève les ressources visibles dans l’onglet où son code est lancé, signale les marqueurs directs observés sur les scripts, permet un classement manuel et exporte un JSON sans envoyer les résultats automatiquement. Ce signal ne prouve pas le contrôle effectif ni les règles appliquées par un gestionnaire comme GTM. Un membre peut ensuite importer explicitement le rapport sur une propriété Web dans la console ; seuls les 20 derniers rapports y sont conservés et ils restent supprimables. L’outil ne parcourt pas plusieurs pages automatiquement. La console `admin.html` est le parcours connecté du prototype. L’environnement est une étiquette de gouvernance par propriété, pas un cloisonnement technique des données ou des déploiements. L’API et son stockage sont locaux ; n’y place aucune donnée réelle de banque ou de client.
+
+## Architecture et intégrations
+
+- [`backend/`](./backend/README.md) : API FastAPI locale, organisations, rôles, propriétés et politiques publiques versionnées. La console permet de définir plusieurs finalités FR/AR et d’associer des fournisseurs indicatifs à chacune ; ces noms sont affichés au visiteur et les tags Web doivent toujours être raccordés explicitement à l’identifiant de finalité.
+- [`schemas/consent-policy.schema.json`](./schemas/consent-policy.schema.json) : contrat de politique commun.
+- [`aman-cmp.js`](./aman-cmp.js) : bannière Web, synchronisation du choix entre onglets et blocage des scripts balisés — y compris ceux ajoutés dynamiquement — jusqu’au choix applicable.
+- [`aman-scanner.js`](./aman-scanner.js) : inventaire local à lancer manuellement dans DevTools sur une page autorisée ; noms de cookies uniquement, signal de marqueur Aman direct (non attestant) et aucun upload.
+- [`mobile/ios/`](./mobile/ios/) : package Swift et [guide d’intégration iOS](./mobile/ios/README.md) ; [`mobile/android/`](./mobile/android/) : projet bibliothèque Gradle configuré pour générer un AAR et app exemple. Aucun binaire de distribution n’est encore produit ou publié ; voir le [guide Android](./mobile/android/README.md).
+- La console génère pour chaque propriété un extrait de démarrage Web, iOS ou Android avec son identifiant réel. Les URL sont des exemples, et les packages mobiles ne sont pas encore publiés.
+- [`PLAN_COMMERCIALISATION.md`](./PLAN_COMMERCIALISATION.md) : segment pilote, découverte client et conditions de préparation commerciale.
+- [`PROSPECTION_BANQUES_MAROC.md`](./PROSPECTION_BANQUES_MAROC.md) : première liste interne de comptes à qualifier, basée sur des signaux publics ; aucun établissement n’a été contacté.
+- [`SEQUENCE_PROSPECTION.md`](./SEQUENCE_PROSPECTION.md) : brouillons d’introduction par compte et suivi de qualification, à personnaliser ; aucun message n’a été envoyé.
+- [`DOSSIER_SECURITE_FOURNISSEUR.md`](./DOSSIER_SECURITE_FOURNISSEUR.md) : état factuel du prototype pour préparer la qualification sécurité d’un prospect ; document interne de travail, pas une attestation fournisseur.
+- [`SUPPORT_DECOUVERTE_PILOTE.md`](./SUPPORT_DECOUVERTE_PILOTE.md) : pitch de découverte, déroulé de démo, questions de qualification et hypothèse de pilote, avec l’état réel du produit.
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) : frontières techniques et séquence de réalisation.
+
+### Intégration Web minimale
+
+Héberger le fichier SDK depuis un domaine approuvé par l’équipe cliente, puis déclarer la propriété publiée et ses scripts balisés. L’exemple ci-dessous montre l’ordre de configuration ; les traceurs doivent être remplacés par ceux inventoriés et approuvés par le client.
+
+```html
+<script src="/assets/aman-cmp.js"
+        data-aman-api-base-url="https://cmp.example.ma"
+        data-aman-property-id="PROPERTY_ID"
+        data-aman-channel="web"
+        data-aman-collect-decision-events="false"
+        data-aman-title="Vos préférences"
+        data-aman-message="Choisissez les usages que vous autorisez."></script>
+<script type="text/plain" data-aman-category="analytics"
+        data-aman-src="/assets/analytics.js"></script>
+```
+
+La politique utilise les codes de langue `fr` et `ar`. Sans `data-aman-locale`, le SDK Web applique `defaultLanguage` de la politique publiée ; une application hôte peut le remplacer explicitement par cet attribut. Le SDK normalise une locale régionale comme `ar-MA` vers l’arabe standard `ar` pour choisir les textes et appliquer le sens RTL ; cela n’ajoute pas de traduction en darija. L’éditeur de politiques recueille séparément les notices française et arabe via `noticeTranslations`, et le SDK choisit celle de la langue affichée. Les clients qui ignorent ce champ peuvent continuer à lire le champ historique `notice`.
+
+La configuration par attributs évite un bloc JavaScript en ligne. Pour une CSP à nonce, l’application hôte ajoute le nonce de la réponse HTTP à l’élément `<script src="…aman-cmp.js">` et l’autorise dans ses directives `script-src` et `style-src`. Aman propage ce nonce à sa feuille de style et aux scripts balisés qu’il crée. Il faut garder la politique CSP du site et ses hôtes de scripts sous le contrôle de l’équipe sécurité du client.
+
+La politique est récupérée avant le rendu de la bannière. Les appels de lecture et d’envoi omettent les identifiants navigateur et refusent les redirections HTTP. Le SDK observe les balises `type="text/plain"` avec `data-aman-src` qui sont ajoutées ou complétées après son initialisation, puis les charge seulement si leur finalité est active. Un choix enregistré dans un autre onglet est réappliqué, et le choix courant est réévalué à son expiration pendant que la page reste ouverte. Si la politique est indisponible et qu’aucune version valide n’est en cache, le SDK garde les traceurs balisés désactivés, affiche un message accessible en français ou en arabe et émet `aman:initialization-error` avec l’identifiant de propriété (sans détail technique). Le choix est d’abord conservé dans `localStorage`; si l’écriture échoue, le SDK tente `sessionStorage` puis garde le choix en mémoire pour l’onglet courant. Dans ces deux derniers cas, il affiche que le choix ne sera pas conservé durablement et `aman:consent-saved` indique `storedDurably: false`. Il faudra le redemander après la fermeture de l’onglet si aucun stockage persistant n’a fonctionné. Pour une finalité où le client ne configure pas de choix préalable, le SDK la démarre active par défaut tout en laissant le visiteur la désactiver ; le refus est mémorisé selon les possibilités de stockage décrites ci-dessus. Un script déjà exécuté n’est pas déchargé automatiquement : la révocation doit aussi être raccordée au mécanisme d’arrêt propre de chaque fournisseur. Le site [demo-site.html](http://localhost:8000/demo-site.html) montre ce parcours avec des scripts locaux sans tiers.
+
+### Google Tag Manager
+
+À l’initialisation puis après chaque mise à jour du choix, le SDK ajoute à `window.dataLayer` un événement `aman_consent_update` avec la propriété, la version de politique, le canal, l’indicateur `hasUserChoice` et l’état booléen effectif de chaque finalité sous `aman.purposes`. Dans GTM, crée un déclencheur **Événement personnalisé** nommé `aman_consent_update`, puis une variable de couche de données pour `aman.purposes.analytics` (et une par finalité utile). Filtre chaque balise sur l’événement et la valeur `true` de la finalité concernée. Google décrit le contrat `dataLayer.push({event: ...})` et ce type de déclencheur dans sa [documentation de la couche de données](https://developers.google.com/tag-platform/tag-manager/datalayer) et son [aide sur les déclencheurs personnalisés](https://support.google.com/tagmanager/answer/7679219?hl=fr).
+
+Ce pont ne crée ni ne publie le conteneur GTM et n’intercepte pas ses déclencheurs Page View. Configure les balises de façon qu’elles ne partent pas avant l’événement et le consentement applicable. Un `false` ultérieur ne décharge pas un script déjà exécuté : la révocation doit appeler l’API d’arrêt/réinitialisation du fournisseur. Pour les balises Google, configure également les API Consent Mode de GTM ; l’événement Aman seul ne remplace pas les mises à jour de consentement natives de Google.
 
 Le centre de préférences Web est utilisable au clavier : `Tab` reste dans le dialogue, `Échap` le ferme et le focus retourne à son point d’ouverture. L’intégrateur reste responsable de vérifier l’accessibilité du site hôte et de ses contenus.
 

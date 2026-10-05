@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f7f4">
+  <title>Banque Démo — Aman Consent</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f4f7f4;color:#1b2c24;font-family:Arial,Helvetica,sans-serif}.top{height:68px;background:#fff;border-bottom:1px solid #e1e8e1;display:flex;justify-content:space-between;align-items:center;padding:0 max(22px,calc((100vw - 1100px)/2));font-size:13px}.logo{font-weight:800;letter-spacing:.08em;color:#174a36}.top a{color:#506258;text-decoration:none;margin-left:18px}.hero{max-width:1100px;margin:70px auto 0;padding:45px 28px;border-radius:24px;background:linear-gradient(120deg,#183f31,#316849);color:#fff;min-height:300px;display:flex;justify-content:space-between;align-items:center;overflow:hidden}.hero small{letter-spacing:.16em;color:#c5dfce;font-size:11px}.hero h1{font-size:clamp(34px,6vw,59px);line-height:1.02;letter-spacing:-.04em;max-width:600px;margin:18px 0}.hero p{color:#deebe1;font-size:15px;line-height:1.6;max-width:510px}.hero-icon{font-size:130px;opacity:.18;margin-right:55px}.body{max-width:1100px;margin:26px auto;display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.card{background:white;border:1px solid #e1e8e1;border-radius:14px;padding:23px}.card h2{font-size:16px;margin:0 0 9px}.card p{font-size:13px;line-height:1.6;color:#68766d;margin:0}.account{display:flex;align-items:center;gap:15px;margin-top:20px;padding:15px;background:#f6f8f5;border-radius:11px}.account .symbol{width:42px;height:42px;border-radius:12px;background:#e2efe5;display:grid;place-items:center;color:#176447;font-size:20px}.account b{font-size:13px;display:block}.account small{color:#748078}.tag-panel{max-width:1100px;margin:0 auto 20px;padding:14px 18px;background:#fff8e8;border:1px solid #f3e5bf;border-radius:10px;color:#715a27;font-size:11px;line-height:1.5}.demo-note{max-width:1100px;margin:0 auto 60px;color:#7a867d;font-size:11px}.tag-results{display:grid;gap:7px;margin-top:15px}.result{display:flex;align-items:center;gap:8px;font-size:11px;color:#68766d}.dot{width:8px;height:8px;border-radius:50%;background:#d5ddd5}.dot.on{background:#34906a}@media(max-width:700px){.hero{margin:28px 12px 0;padding:30px 24px;min-height:260px}.hero-icon{display:none}.body{grid-template-columns:1fr;margin:14px 12px}.tag-panel,.demo-note{margin-left:12px;margin-right:12px}.top{padding:0 16px}.top a:nth-child(2){display:none}}
+  </style>
+</head>
+<body>
+  <header class="top"><span class="logo">BANQUE DÉMO</span><nav><a href="#">Particuliers</a><a href="#">Entreprises</a><a href="#">Espace client ↗</a></nav></header>
+  <section class="hero"><div><small>VOTRE BANQUE, À VOTRE RYTHME</small><h1>Vos projets, en confiance.</h1><p>Une expérience bancaire pensée pour vous. Consultez votre espace et gérez vos préférences à tout moment.</p></div><div class="hero-icon" aria-hidden="true">◈</div></section>
+  <main class="body">
+    <section class="card"><h2>Bienvenue chez Banque Démo</h2><p>Cette page d’exemple sert à vérifier l’installation du widget Aman. Elle ne collecte aucune information bancaire et ne propose aucun service financier.</p><div class="account"><div class="symbol">⌂</div><div><b>Votre espace client</b><small>Exemple d’espace en ligne</small></div></div></section>
+    <section class="card"><h2>Traceurs de démonstration</h2><p>Les scripts ci-dessous sont des fichiers locaux qui affichent seulement leur état. Aucun fournisseur tiers n’est appelé.</p><div class="tag-results"><div class="result"><span class="dot" id="analytics-dot"></span><span id="analytics-state">Mesure d’audience : en attente du choix</span></div><div class="result"><span class="dot" id="marketing-dot"></span><span id="marketing-state">Publicité personnalisée : en attente du choix</span></div></div></section>
+  </main>
+  <div class="tag-panel"><b>Démo technique uniquement.</b> Les catégories et leur réglage « consentement requis » sont des exemples. Une revue juridique et une validation par le client sont nécessaires avant tout déploiement réel.</div>
+  <p class="demo-note">Mode démo local : utilise la <a href="index.html">console web</a>. Mode politique publiée : configure une propriété web dans la <a href="admin.html">console entreprise</a>, puis ouvre cette page avec <code>?property=ID_PROPRIÉTÉ</code>. Les choix de démonstration restent sur cet appareil.</p>
+  <div id="aman-demo-status" class="aman-demo-status" aria-live="polite"></div>
+  <script>
+    window.AmanConsentConfig = { version: '1', locale: 'fr', channel: 'web', title: 'Votre vie privée, notre priorité', message: 'Nous utilisons des cookies pour améliorer votre expérience. Choisissez ceux que vous acceptez.', color: '#176447', propertyId: new URLSearchParams(window.location.search).get('property') || '', apiBaseUrl: 'http://localhost:8001' };
+  </script>
+  <script src="aman-cmp.js"></script>
+  <script type="text/plain" data-aman-category="analytics" data-aman-src="demo-tags/analytics.js"></script>
+  <script type="text/plain" data-aman-category="marketing" data-aman-src="demo-tags/marketing.js"></script>
+</body>
+</html>

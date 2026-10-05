@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f8f4">
+  <title>Aman Control — Console entreprise</title>
+  <style>
+    :root{--ink:#18231f;--muted:#75807b;--line:#e5eae4;--paper:#fff;--canvas:#f6f8f4;--green:#176447;--pale:#e9f3eb;--red:#a53c38;--amber:#795e17}*{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.shell{min-height:100vh;display:grid;grid-template-columns:228px 1fr}.side{background:#fff;border-right:1px solid var(--line);padding:22px 15px;display:flex;flex-direction:column}.brand{font-size:21px;font-weight:800;letter-spacing:-.7px;padding:0 8px 24px}.brand i{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--green);color:#fff;font-style:normal;margin-right:8px}.nav{display:grid;gap:4px}.nav button{border:0;border-radius:9px;background:transparent;text-align:left;padding:11px;color:#58655e;font-size:13px}.nav button.active,.nav button:hover{background:var(--pale);color:var(--green);font-weight:650}.side-note{margin-top:auto;color:var(--muted);font-size:11px;line-height:1.55;padding:12px 7px}.main{min-width:0}.bar{height:64px;background:#ffffffb8;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px}.bar small{color:var(--muted)}.bar button{border:1px solid var(--line);background:#fff;padding:8px 11px;border-radius:8px;font-size:12px}.content{max-width:1140px;margin:auto;padding:32px 30px 60px}.page{display:none}.page.show{display:block}.heading{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:23px}.eyebrow{font-size:10px;color:var(--green);letter-spacing:1.1px;font-weight:750;text-transform:uppercase}.heading h1{font-size:26px;letter-spacing:-.6px;margin:6px 0}.heading p{font-size:12px;color:var(--muted);margin:0}.card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:20px;margin-bottom:15px;box-shadow:0 10px 26px #19302109}.card h2{font-size:14px;margin:0 0 7px}.card p.help{font-size:11px;color:var(--muted);line-height:1.5;margin:0 0 15px}.row{display:flex;gap:10px;align-items:center}.wrap{flex-wrap:wrap}.field{display:grid;gap:6px;margin:12px 0}.field label{font-size:11px;font-weight:650}.field input,.field select,.field textarea{width:100%;padding:10px 11px;border:1px solid #dce3dc;border-radius:8px;background:#fff;color:#26362d;font-size:12px}.field textarea{min-height:72px;resize:vertical}.field small{font-size:10px;line-height:1.45;color:var(--muted)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:0 14px}.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 12px;font-size:11px;font-weight:650;color:var(--ink)}.btn.primary{background:var(--green);border-color:var(--green);color:#fff}.btn.danger{color:var(--red)}.btn:disabled{opacity:.55;cursor:not-allowed}.status{padding:6px 9px;border-radius:999px;font-size:10px;background:var(--pale);color:var(--green);font-weight:700}.status.draft{background:#f4f0e2;color:var(--amber)}.notice{border-radius:9px;padding:12px 14px;background:#f1f5ed;border:1px solid #e2ebdd;color:#53644e;font-size:10px;line-height:1.55;margin:14px 0}.notice.warning{background:#fff6e6;border-color:#eee1bd;color:#705821}.error{display:none;color:var(--red);font-size:11px;background:#fff1ef;border:1px solid #f0cfcb;border-radius:8px;padding:10px;margin:10px 0}.error.show{display:block}.success{color:var(--green);font-size:11px;margin:8px 0}.orgbar{display:flex;gap:10px;align-items:end}.orgbar .field{min-width:240px;margin:0}.table{width:100%;border-collapse:collapse;font-size:11px}.table th,.table td{text-align:left;padding:11px 8px;border-bottom:1px solid #edf0ec;vertical-align:top}.table th{font-size:10px;color:var(--muted);font-weight:650}.table tr:last-child td{border-bottom:0}.table select{max-width:320px;width:100%;padding:7px;border:1px solid var(--line);border-radius:7px;background:#fff}.split{display:grid;grid-template-columns:1fr 1fr;gap:15px}.choice{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:12px 0;border-bottom:1px solid #edf0ec}.choice b{font-size:11px}.choice small{grid-column:1;font-size:10px;color:var(--muted);line-height:1.4}.choice input{grid-column:2;grid-row:1/3;align-self:center;width:17px;height:17px;accent-color:var(--green)}.login-wrap{max-width:430px;margin:9vh auto}.login-wrap .brand{text-align:center}.inline-token{font:11px ui-monospace,monospace;overflow-wrap:anywhere;background:#f5f6f3;border-radius:7px;padding:10px;display:block;margin-top:8px}.invite-panel{display:none}.invite-panel.show{display:block}.empty{font-size:11px;color:var(--muted);padding:15px 2px}.hidden{display:none!important}.api-state{font-size:10px;color:var(--muted)}@media(max-width:760px){.shell{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line);padding:12px;display:block}.brand{padding:0 5px 10px}.nav{display:flex;overflow:auto}.nav button{white-space:nowrap;padding:9px}.side-note{display:none}.bar{padding:0 16px;height:55px}.content{padding:22px 14px}.form-grid,.split{grid-template-columns:1fr}.orgbar{align-items:stretch;flex-direction:column}.orgbar .field{min-width:0}.heading{display:block}.heading .row{margin-top:13px}}
+  </style>
+  <style>
+    .integration-snippet{margin-top:12px;background:#f7f9f5;border:1px solid #e2e9df;border-radius:9px;padding:12px}.integration-snippet pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#172820;color:#eaf3e9;border-radius:8px;padding:13px;font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:420px;overflow:auto}.integration-snippet p{font-size:10px;color:#64756c;line-height:1.5}.integration-snippet .copy-state{font-size:10px;color:#176447;margin-left:8px}.purpose-heading{justify-content:space-between}.purpose-heading h2{margin:12px 0}.purpose-editor-card{background:#fafcf9;border:1px solid #e2e9df;border-radius:10px;padding:14px;margin:12px 0}.purpose-editor-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.purpose-editor-card h3{font-size:12px;margin:0}.purpose-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:0 14px}.purpose-editor-card .field{margin:8px 0}.purpose-editor-card textarea{min-height:58px}.purpose-flags{display:flex;gap:18px;flex-wrap:wrap}.purpose-flags label{font-size:11px;display:flex;align-items:center;gap:7px}.purpose-flags input{accent-color:var(--green)}@media(max-width:760px){.purpose-editor-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <section id="loginView" class="login-wrap">
+    <div class="brand"><i>a</i>aman <small style="font-size:11px;color:#75807b;font-weight:500">control</small></div>
+    <div class="card"><h2>Connexion à la console</h2><p class="help">Accès réservé aux membres invités de l’organisation.</p>
+      <div id="loginError" class="error" role="alert"></div>
+      <form id="loginForm"><div class="field"><label for="email">Adresse e-mail</label><input id="email" type="email" autocomplete="username" required></div><div class="field"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required></div><button class="btn primary" type="submit" style="width:100%;margin-top:7px">Se connecter</button></form>
+      <button class="btn" id="showInvite" style="width:100%;margin-top:10px">Accepter une invitation</button>
+      <div id="invitePanel" class="invite-panel"><div class="field"><label for="inviteToken">Jeton d’invitation</label><input id="inviteToken" autocomplete="off"></div><button class="btn" id="previewInvite" type="button">Vérifier l’invitation</button><p id="inviteSummary" class="help" aria-live="polite"></p><div class="field"><label for="invitePassword">Mot de passe Aman existant, ou nouveau mot de passe (12 caractères minimum)</label><input id="invitePassword" type="password" minlength="12" autocomplete="current-password"></div><button class="btn primary" id="acceptInvite">Accepter l’invitation</button><button class="btn" id="cancelInvite">Retour</button><div id="inviteError" class="error"></div></div>
+      <p class="help" style="margin-top:16px">Aucun compte public : le premier administrateur est créé par commande locale.</p>
+    </div>
+  </section>
+  <div id="appView" class="shell hidden">
+    <aside class="side"><div class="brand"><i>a</i>aman</div><nav class="nav" id="nav">
+      <button class="active" data-page="overview">Vue d’ensemble</button><button data-page="organizations">Organisations</button><button data-page="properties">Propriétés</button><button data-page="policies">Politiques</button><button data-page="audit">Journal d’audit</button>
+    </nav><div class="side-note">Console de développement. N’ajoute pas de données clients ou bancaires.<br><br><a href="demo-site.html" style="color:#176447">Ouvrir le site de démonstration ↗</a></div></aside>
+    <main class="main"><header class="bar"><small id="who">Session active</small><div class="row"><span id="apiState" class="api-state">API locale · :8001</span><button id="logout">Se déconnecter</button></div></header>
+      <div class="content">
+        <section id="overview" class="page show">
+          <div class="heading"><div><div class="eyebrow">VUE MULTI-ORGANISATION</div><h1>Vue d’ensemble</h1><p>Configuration et activité des organisations auxquelles ton compte a accès.</p></div><button class="btn" id="dashboardRefresh">Actualiser</button></div>
+          <div id="dashboardError" class="error"></div>
+          <div class="card"><div id="dashboardSummary" class="empty">Chargement des données de l’espace…</div></div>
+          <div class="card"><h2>Organisations accessibles</h2><p class="help">Les comptes affichés proviennent de ta session et respectent tes appartenances.</p><div id="dashboardOrganizations" class="empty">Chargement…</div></div>
+          <div class="card"><h2>Propriétés et décisions reçues</h2><p class="help">Les décisions sont déclarées par les SDK connectés et ne prouvent pas seules l’identité du visiteur ni l’affichage de l’interface.</p><div id="dashboardProperties" class="empty">Chargement…</div></div>
+          <div class="card"><h2>Activité administrative récente</h2><div id="dashboardActivity" class="empty">Chargement…</div></div>
+        </section>
+        <section id="organizations" class="page"><div class="heading"><div><div class="eyebrow">ESPACE DE TRAVAIL</div><h1>Organisations</h1><p>Les organisations et rôles auxquels ton compte a accès.</p></div></div>
+          <div id="orgError" class="error"></div><div class="card"><div class="orgbar"><div class="field" style="flex:1"><label for="orgSelect">Organisation active</label><select id="orgSelect"><option value="">Choisir une organisation</option></select></div><button id="refresh" class="btn">Actualiser</button></div><div id="orgSummary" class="empty">Aucune organisation sélectionnée.</div></div>
+          <div class="card"><h2>Créer une organisation</h2><p class="help">La publication à deux personnes est activée par défaut pour séparer la rédaction et l’approbation.</p><form id="orgForm" class="row wrap"><input id="orgName" placeholder="Nom de l’organisation" required minlength="2" maxlength="160" style="flex:1;min-width:220px;padding:10px;border:1px solid #dce3dc;border-radius:8px"><button class="btn primary">Créer</button></form></div>
+          <div class="card"><h2>Inviter un membre</h2><p class="help">Aman crée un lien à usage unique à transmettre par un canal approuvé. Le jeton du lien reste dans le fragment navigateur. Le bouton « Préparer un e-mail » ouvre un brouillon dans ta messagerie ; Aman n’envoie pas de courriel automatiquement.</p><form id="inviteForm" class="form-grid"><div class="field"><label for="memberEmail">E-mail professionnel</label><input id="memberEmail" type="email" required></div><div class="field"><label for="memberRole">Rôle</label><select id="memberRole"><option value="admin">Administrateur</option><option value="editor">Éditeur</option><option value="viewer">Lecteur</option></select></div><div><button class="btn primary">Créer une invitation</button></div></form><div id="inviteResult"></div><div id="memberError" class="error"></div></div>
+          <div class="card" id="invitationPanel"><div class="row wrap" style="justify-content:space-between"><h2>Invitations en attente</h2><button id="refreshInvitations" class="btn">Actualiser</button></div><div id="invitationList" class="empty">Choisis une organisation.</div></div>
+          <div class="card"><div class="row wrap" style="justify-content:space-between"><h2>Membres de l’organisation</h2><button id="refreshMembers" class="btn">Actualiser</button></div><div id="memberList" class="empty">Choisis une organisation.</div></div>
+          <div class="card hidden" id="ownershipTransferPanel"><h2>Transférer la propriété de l’organisation</h2><p class="help">Choisis un administrateur actuel. Le transfert ne prendra effet qu’après son acceptation depuis son propre compte Aman. Le jeton expire sous 24 heures.</p><div class="field"><label for="ownershipTarget">Nouvel owner</label><select id="ownershipTarget"><option value="">Choisir un administrateur</option></select></div><button class="btn primary" id="createOwnershipTransfer">Proposer le transfert</button><div id="ownershipTransferResult"></div><div id="pendingOwnershipTransfer" class="empty"></div><div id="ownershipTransferError" class="error"></div></div>
+          <div class="card hidden" id="acceptOwnershipTransferPanel"><h2>Accepter un transfert de propriété</h2><p class="help">Connecte-toi avec le compte administrateur destinataire, puis saisis le jeton transmis par le propriétaire actuel.</p><div class="field"><label for="ownershipTransferToken">Jeton de transfert</label><input id="ownershipTransferToken" autocomplete="off"></div><button class="btn primary" id="acceptOwnershipTransfer">Accepter le transfert</button><div id="acceptOwnershipTransferResult" class="success"></div><div id="acceptOwnershipTransferError" class="error"></div></div>
+        </section>
+        <section id="properties" class="page"><div class="heading"><div><div class="eyebrow">CANAUX CONNECTÉS</div><h1>Propriétés</h1><p>Chaque site ou application possède une politique publiée distincte.</p></div></div><div id="propertyError" class="error"></div><div class="card"><h2>Créer une propriété</h2><form id="propertyForm" class="form-grid"><div class="field"><label for="propertyName">Nom du site ou de l’application</label><input id="propertyName" required minlength="2" maxlength="180" placeholder="Site public, application iOS…"></div><div class="field"><label for="propertyChannel">Canal</label><select id="propertyChannel"><option value="web">Web</option><option value="ios">Application iOS</option><option value="android">Application Android</option></select></div><div class="field"><label for="propertyEnvironment">Environnement</label><select id="propertyEnvironment"><option value="development">Développement</option><option value="staging">Recette / préproduction</option><option value="production">Production</option></select><small>Crée une propriété par environnement et utilise un nom distinct pour chaque copie d’un même site ou app.</small></div><div class="field" id="propertyOriginField"><label for="propertyOrigin">Origine du site</label><input id="propertyOrigin" type="url" placeholder="https://www.exemple.ma" autocomplete="url"><small>Origine exacte (HTTPS, hôte et port éventuel), sans chemin. HTTP seulement pour localhost en développement. Elle autorise les deux routes publiques du SDK Web, sans cookies ; elle ne prouve pas le contrôle du domaine.</small></div><div><button class="btn primary">Créer la propriété</button></div></form></div><div class="card"><h2>Propriétés de l’organisation</h2><p class="help">Affiche un exemple de démarrage avec l’identifiant réel. Remplace les URL d’exemple par celles du service et des SDK hébergés par le client.</p><div id="propertyList" class="empty">Choisis d’abord une organisation.</div></div></section>
+        <section id="policies" class="page"><div class="heading"><div><div class="eyebrow">GOUVERNANCE DU CONSENTEMENT</div><h1>Politiques</h1><p>Prépare une version, fais-la relire, puis publie-la avec une seconde personne.</p></div></div><div id="policyError" class="error"></div>
+          <div class="card" id="policyEditor"><div class="form-grid"><div class="field"><label for="policyProperty">Propriété</label><select id="policyProperty"><option value="">Choisir une propriété</option></select></div><div class="field"><label for="retention">Durée de conservation du choix (jours)</label><input id="retention" type="number" min="1" max="3650" value="180"><small>À faire valider par le client. Pour les cookies entrant dans le champ CNDP D-939-2025, tenir compte de la limite de six mois ; ce réglage n’est pas une conclusion juridique.</small></div><div class="field"><label for="defaultLanguage">Langue par défaut des préférences</label><select id="defaultLanguage"><option value="fr">Français</option><option value="ar">العربية — arabe standard</option></select><small>Cette langue est reprise par les SDK Web, iOS et Android, sauf préférence explicitement définie par l’application hôte.</small></div></div>
+            <h3>Informations du traitement · Français</h3><div class="split"><div class="field"><label for="controller">Responsable de traitement</label><input id="controller" placeholder="Nom déclaré par le client" required></div><div class="field"><label for="contact">Contact pour exercer les droits</label><input id="contact" placeholder="Adresse ou service de contact" required></div><div class="field"><label for="reference">Référence / récépissé CNDP</label><input id="reference" placeholder="Référence fournie par le client" required></div><div class="field"><label for="dataCategories">Catégories de données (une par ligne)</label><textarea id="dataCategories" placeholder="Données / identifiants traités par ces technologies" required></textarea></div><div class="field"><label for="recipients">Destinataires des données (un par ligne)</label><textarea id="recipients" placeholder="Indiquer les destinataires ou confirmer qu’il n’y en a pas" required></textarea></div><div class="field"><label for="transfers">Transferts à l’étranger (un par ligne)</label><textarea id="transfers" placeholder="Pays / destinataire / référence, ou confirmer qu’il n’y en a pas" required></textarea></div></div>
+            <h3 lang="ar" dir="rtl">معلومات المعالجة · العربية</h3><div class="split" lang="ar" dir="rtl"><div class="field"><label for="controllerAr">المسؤول عن المعالجة</label><input id="controllerAr" dir="rtl" placeholder="الاسم المصرح به من طرف العميل" required></div><div class="field"><label for="contactAr">جهة الاتصال لممارسة الحقوق</label><input id="contactAr" dir="rtl" placeholder="عنوان أو مصلحة الاتصال" required></div><div class="field"><label for="referenceAr">مرجع CNDP أو وصل الإيداع</label><input id="referenceAr" dir="rtl" placeholder="المرجع المقدم من طرف العميل" required></div><div class="field"><label for="dataCategoriesAr">فئات البيانات (عنصر واحد في كل سطر)</label><textarea id="dataCategoriesAr" dir="rtl" required></textarea></div><div class="field"><label for="recipientsAr">الجهات المستفيدة (عنصر واحد في كل سطر)</label><textarea id="recipientsAr" dir="rtl" required></textarea></div><div class="field"><label for="transfersAr">التحويلات إلى الخارج (عنصر واحد في كل سطر)</label><textarea id="transfersAr" dir="rtl" required></textarea></div></div><p class="help">Les deux langues sont requises pour les politiques bilingues. Fais confirmer les traductions par le client ; « Aucun » ne doit être utilisé qu’après confirmation.</p>
+            <div class="row wrap purpose-heading"><h2>Finalités à présenter</h2><button id="addPurpose" type="button" class="btn">Ajouter une finalité</button></div><p class="help">Ajoute les usages définis par le client. Le SDK applique les choix par identifiant de finalité ; la liste des fournisseurs est une information de politique et ne bloque pas seule un SDK. Les libellés, descriptions et réglages doivent être validés par les équipes responsables.</p><div id="purposeEditor"></div>
+            <div class="notice warning">Cette console ne détermine pas si un traitement est licite. Fais valider les finalités, catégories, textes, conservation et formalités par les équipes juridique / DPO du client. Le D-939-2025 vise un périmètre cookies précis et ne remplace pas l’analyse des apps mobiles.</div>
+            <div class="row wrap"><button id="createDraft" class="btn primary">Créer un brouillon</button><button id="cancelDraftEdit" class="btn hidden">Annuler la modification</button></div>
+          </div>
+          <div class="card"><div class="row wrap" style="justify-content:space-between"><h2>Versions</h2><button id="refreshPolicies" class="btn">Actualiser</button></div><p class="help">Consulte le contenu et les métadonnées de chaque version. Cet historique Aman ne prouve pas à lui seul l’affichage de l’interface au visiteur ni l’application réelle du choix.</p><div id="policyList" class="empty" style="overflow:auto">Choisis une propriété.</div></div>
+          <div class="card hidden" id="policyDetails" aria-live="polite"></div>
+        </section>
+        <section id="audit" class="page"><div class="heading"><div><div class="eyebrow">TRAÇABILITÉ ADMINISTRATIVE</div><h1>Journal d’audit</h1><p>Actions d’administration Aman enregistrées par organisation.</p></div><button class="btn" id="refreshAudit">Actualiser</button></div><div id="auditError" class="error"></div><div class="card"><div class="row wrap" style="align-items:end"><div class="field"><label for="auditFrom">Du</label><input id="auditFrom" type="date"></div><div class="field"><label for="auditTo">Au</label><input id="auditTo" type="date"></div><button class="btn primary" id="exportAudit">Exporter en CSV</button></div><p class="help">Export UTF-8, chronologique, limité aux 10 000 événements les plus récents dans la période sélectionnée.</p><div id="auditList" class="empty">Choisis une organisation.</div></div></section>
+      </div>
+    </main>
+  </div>
+  <script>
+    const API='http://localhost:8001';
+    const state={csrf:'',user:null,orgs:[],org:null,members:[],properties:[],property:null,editingPolicyId:null,editingPolicy:null,editingPolicyRevision:null};
+    const $=id=>document.getElementById(id);
+    function cookie(name){const found=document.cookie.split('; ').find(x=>x.startsWith(name+'='));return found?decodeURIComponent(found.slice(name.length+1)):''}
+    async function api(path,{method='GET',body,publicCall=false,omitCredentials=false}={}){const headers={'Content-Type':'application/json'};if(!publicCall&&method!=='GET')headers['X-Aman-CSRF']=state.csrf||cookie('aman_csrf');const response=await fetch(API+path,{method,headers,credentials:omitCredentials?'omit':'include',body:body?JSON.stringify(body):undefined});let data={};try{data=await response.json()}catch(_){}if(!response.ok){const failure=new Error(data.detail||('Erreur API '+response.status));failure.status=response.status;throw failure}return data}
+    function error(id,message){const element=$(id);element.textContent=message;element.classList.add('show')}
+    function clearError(id){const element=$(id);element.textContent='';element.classList.remove('show')}
+    function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el}
+    async function previewInvitation(token){
+      const summary=$('inviteSummary');summary.textContent='Vérification de l’invitation…';
+      try{
+        const invite=await api('/v1/auth/invitations/preview',{method:'POST',publicCall:true,omitCredentials:true,body:{token}});
+        const roles={admin:'administrateur',editor:'éditeur',viewer:'lecteur'};
+        summary.textContent=`Organisation : ${invite.organizationName} · Rôle : ${roles[invite.role]||invite.role} · E-mail : ${invite.inviteeEmailMasked} · Expire le ${new Date(invite.expiresAt*1000).toLocaleString()}`;
+      }catch(err){summary.textContent=err.message}
+    }
+    function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('show',p.id===id));document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));if(id==='overview'&&state.user)loadDashboard().catch(err=>error('dashboardError',err.message))}
+    function dashboardTable(target,headers,rows,emptyMessage){
+      target.replaceChildren();
+      if(!rows.length){target.textContent=emptyMessage;return}
+      const table=node('table');table.className='table';
+      const head=node('tr');headers.forEach(label=>head.append(node('th',label)));table.append(head);
+      rows.forEach(row=>table.append(row));target.append(table);
+    }
+    async function loadDashboard(){
+      clearError('dashboardError');
+      const data=await api('/v1/dashboard');
+      const summary=data.summary||{};
+      const metrics=[['Organisations',summary.organization_count||0],['Propriétés',summary.property_count||0],['Avec politique publiée',summary.published_property_count||0],['Brouillons',summary.draft_count||0]];
+      const metricGrid=node('div');metricGrid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px';
+      metrics.forEach(([label,value])=>{const metric=node('div');metric.style.cssText='border:1px solid var(--line);border-radius:9px;padding:14px';const title=node('small',label);title.style.color='var(--muted)';const count=node('strong',String(value));count.style.cssText='display:block;font-size:24px;margin-top:6px';metric.append(title,count);metricGrid.append(metric)});
+      $('dashboardSummary').replaceChildren(metricGrid);
+      dashboardTable($('dashboardOrganizations'),['Organisation','Rôle','Propriétés','Publiées','Brouillons','Action'],(data.organizations||[]).map(org=>{
+        const roleLabel=({owner:'Propriétaire',admin:'Administrateur',editor:'Éditeur',viewer:'Lecteur'})[org.role]||org.role;
+        const row=node('tr');row.append(node('td',org.name),node('td',roleLabel),node('td',String(org.property_count)),node('td',String(org.published_property_count)),node('td',String(org.draft_count)));
+        const cell=node('td');const button=node('button','Gérer','btn');button.type='button';button.addEventListener('click',()=>openDashboardOrganization(org.id));cell.append(button);row.append(cell);return row;
+      }),'Aucune organisation accessible. Crée une organisation depuis la section Organisations.');
+      dashboardTable($('dashboardProperties'),['Organisation','Propriété','Canal','Environnement','Version publiée','Brouillons','Décisions · 30 j'],(data.properties||[]).map(property=>{
+        const channelLabel=({web:'Web',ios:'iOS',android:'Android'})[property.channel]||property.channel;
+        const environmentLabel=({development:'Développement',staging:'Recette',production:'Production'})[property.environment]||property.environment;
+        const row=node('tr');row.append(node('td',property.organization_name),node('td',property.name),node('td',channelLabel),node('td',environmentLabel),node('td',property.published_version===null?'—':`v${property.published_version}`),node('td',String(property.draft_count)),node('td',String(property.consent_decision_count_30d)));return row;
+      }),'Aucune propriété configurée.');
+      dashboardTable($('dashboardActivity'),['Organisation','Action','Ressource','Quand'],(data.recent_events||[]).map(event=>{
+        const row=node('tr');row.append(node('td',event.organization_name),node('td',event.action),node('td',`${event.resource_type} · ${event.resource_id}`),node('td',new Date(event.occurred_at*1000).toLocaleString()));return row;
+      }),'Aucune activité administrative à afficher.');
+    }
+    async function openDashboardOrganization(orgId){
+      state.org=state.orgs.find(org=>org.id===orgId)||null;
+      renderOrganizations();$('orgSelect').value=orgId;showPage('organizations');
+      try{await loadProperties();await loadMembers();await loadAudit()}catch(err){error('orgError',err.message)}
+    }
+    document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.page)));
+    function canEditPolicies(){return !!state.org&&['owner','admin','editor'].includes(state.org.role)}
+    function canPublishPolicies(){return !!state.org&&['owner','admin'].includes(state.org.role)}
+    function renderOrganizations(){const select=$('orgSelect');select.replaceChildren(new Option('Choisir une organisation',''));state.orgs.forEach(o=>select.add(new Option(o.name+' · '+o.role,o.id)));if(state.org)select.value=state.org.id;$('orgSummary').textContent=state.org?`${state.org.name} · rôle ${state.org.role} · publication à deux personnes ${state.org.requireTwoPersonPublish?'activée':'désactivée'}`:'Aucune organisation sélectionnée.';$('propertyForm').querySelector('button[type="submit"],button:not([type])').disabled=!canEditPolicies();$('inviteForm').querySelector('button[type="submit"],button:not([type])').disabled=!canPublishPolicies();$('invitationPanel').classList.toggle('hidden',!canPublishPolicies());$('ownershipTransferPanel').classList.toggle('hidden',state.org?.role!=='owner');$('acceptOwnershipTransferPanel').classList.toggle('hidden',state.org?.role!=='admin');$('createDraft').disabled=!canEditPolicies();$('policyEditor').classList.toggle('hidden',!canEditPolicies())}
+    async function loadOrganizations(){state.orgs=await api('/v1/organizations').then(x=>x.organizations);state.org=state.orgs.find(x=>x.id===state.org?.id)||state.orgs[0]||null;renderOrganizations();if(state.org){await loadProperties();await loadMembers()}else{state.properties=[];state.property=null;renderProperties();$('memberList').textContent='Choisis une organisation.'}}
+    async function loadProperties(){if(!state.org)return;const data=await api('/v1/organizations/'+encodeURIComponent(state.org.id)+'/properties');state.properties=data.properties;state.property=state.properties.find(p=>p.id===state.property?.id)||state.properties[0]||null;renderProperties();await loadPolicies()}
+    function integrationSnippet(property){
+      const propertyId=JSON.stringify(property.id);
+      if(property.channel==='web')return `<script src="https://cmp.example.ma/aman-cmp.js"\n  data-aman-api-base-url="https://cmp.example.ma"\n  data-aman-property-id=${propertyId}\n  data-aman-channel="web"\n  data-aman-collect-decision-events="false"><\/script>\n<!-- Remplacer les deux URL par les hôtes HTTPS approuvés du service et du SDK. Ajouter le nonce CSP de la réponse à l’élément script lorsque le site utilise des nonces. -->`;
+      if(property.channel==='ios')return `import AmanConsent\n\n@MainActor\nfunc loadAmanConsentManager() async throws -> AmanConsentManager {\n    let client = AmanConsentAPIClient()\n    let apiBaseURL = URL(string: "https://cmp.example.ma")! // Remplacer par l’URL HTTPS réelle\n    let policy = try await client.fetchPolicy(\n        baseURL: apiBaseURL,\n        propertyId: ${propertyId},\n        channel: "ios"\n    )\n    let manager = AmanConsentManager(policy: policy)\n    manager.onEffectivePurposeStatesChanged = { states in\n        applyAnalyticsChoice(states["analytics"] == true)\n        // Raccorder chaque autre finalité à son propre SDK.\n    }\n    applyAnalyticsChoice(manager.isAllowed("analytics")) // Appliquer aussi un choix déjà enregistré.\n    return manager\n}\n\n// Implémenter applyAnalyticsChoice(_:) ; la vue hôte affiche le manager retourné avec AmanConsentSheet(manager: ...).`;
+      return `// Exemple à placer dans une Activity ; adapter les finalités aux SDK intégrés.\nval apiBaseUrl = "https://cmp.example.ma" // Remplacer par l’URL HTTPS réelle\nval client = AmanConsentAPIClient(applicationContext)\nclient.fetchPublishedPolicy(apiBaseUrl, ${propertyId}, channel = "android") { result ->\n    result.onSuccess { policy ->\n        val manager = AmanConsentManager(applicationContext, policy)\n        manager.addEffectivePurposeStatesChangedListener { states ->\n            runOnUiThread {\n                if (states["analytics"] == true) startAnalyticsIfNeeded()\n                else stopAnalyticsIfSupported()\n                // Raccorder chaque autre finalité à son propre SDK.\n            }\n        }\n        if (manager.isAllowed("analytics")) startAnalyticsIfNeeded()\n        else stopAnalyticsIfSupported() // Appliquer aussi un choix déjà enregistré.\n        if (manager.decision == null) manager.showConsentDialog(this)\n    }\n}`;
+    }
+    function renderScanDetails(report, target){
+      target.replaceChildren();
+      target.append(node('p',`Page : ${report.report.page} · Scan : ${new Date(report.scanned_at*1000).toLocaleString()} · Importé par ${report.imported_by}`,'help'));
+      const exportButton=node('button','Télécharger ce rapport JSON','btn');exportButton.type='button';
+      exportButton.addEventListener('click',()=>{const blob=new Blob([JSON.stringify(report.report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`aman-inventaire-${report.id}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
+      target.append(exportButton);
+      const resources=report.report.resources||[];
+      const cookies=report.report.cookies||[];
+      target.append(node('p','Le signal indique seulement si un marqueur direct apparaît dans le DOM du scan. Son absence ne signifie pas qu’un tag manager n’applique aucun contrôle.','help'));
+      const renderTable=(title,headers,rows)=>{
+        const section=node('section');section.append(node('h3',title));
+        if(!rows.length){section.append(node('p','Aucun élément relevé.','help'));target.append(section);return}
+        const table=node('table');table.className='table';const head=node('tr');headers.forEach(label=>head.append(node('th',label)));table.append(head);
+        rows.forEach(values=>{const row=node('tr');values.forEach(value=>row.append(node('td',String(value??''))));table.append(row)});
+        section.append(table);target.append(section);
+      };
+      renderTable(`Ressources (${resources.length})`,['Type','Adresse','Signal Aman direct','Détail','Classement'],resources.map(item=>[
+        item.kind,item.url,item.amanControl==='marker_present'?'Marqueur repéré':item.amanControl==='marker_missing'?'Aucun marqueur repéré':'Non évalué',item.detail||'—',item.classification
+      ]));
+      renderTable(`Cookies accessibles (${cookies.length})`,['Nom','Classement'],cookies.map(item=>[item.name,item.classification]));
+    }
+    async function loadScanReports(property,target){
+      target.replaceChildren(node('p','Chargement des inventaires…','help'));
+      try{
+        const path=`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/scans`;
+        const data=await api(path);
+        target.replaceChildren();
+        target.append(node('p',`URL à vérifier manuellement : chaque rapport doit correspondre à cette propriété. ${data.retainedPerProperty} rapports récents maximum sont conservés.`,'help'));
+        if(!data.reports.length){target.append(node('p','Aucun rapport importé pour cette propriété.','empty'));return}
+        data.reports.forEach(report=>{
+          const row=node('div',undefined,'row wrap');row.style.cssText='justify-content:space-between;border-top:1px solid #edf0ec;padding:10px 0';
+          const summary=node('span',`${report.page_origin} · ${new Date(report.scanned_at*1000).toLocaleString()} · ${report.resource_count} ressources · ${report.cookie_count} cookies · par ${report.imported_by}`,'help');
+          const actions=node('div',undefined,'row wrap');
+          const view=node('button','Détails','btn');view.type='button';
+          const remove=node('button','Supprimer','btn danger');remove.type='button';remove.disabled=!canEditPolicies();
+          const details=node('div');details.className='scan-details';details.hidden=true;
+          view.addEventListener('click',async()=>{if(details.hidden){try{const record=await api(`${path}/${encodeURIComponent(report.id)}`);renderScanDetails(record,details);details.hidden=false;view.textContent='Masquer'}catch(err){const message=node('p',err.message,'error');message.classList.add('show');details.replaceChildren(message);details.hidden=false}}else{details.hidden=true;view.textContent='Détails'}});
+          remove.addEventListener('click',async()=>{if(!window.confirm('Supprimer définitivement cet inventaire de la console locale ?'))return;try{await api(`${path}/${encodeURIComponent(report.id)}`,{method:'DELETE',body:{}});await loadScanReports(property,target);await loadAudit()}catch(err){const message=node('p',err.message,'error');message.classList.add('show');target.prepend(message)}});
+          actions.append(view,remove);row.append(summary,actions);target.append(row,details);
+        });
+      }catch(err){const message=node('p',err.message,'error');message.classList.add('show');target.replaceChildren(message)}
+    }
+    async function importScanFile(property,file,statusNode,target){
+      if(!file)return;
+      statusNode.textContent='';
+      if(file.size>1_048_576){statusNode.textContent='Le fichier dépasse la limite de 1 Mio.';return}
+      try{
+        const report=JSON.parse(await file.text());
+        if(report.schema!=='aman-local-inventory-v1')throw new Error('Format de rapport Aman inconnu.');
+        const path=`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/scans`;
+        const saved=await api(path,{method:'POST',body:report});
+        statusNode.textContent=`Inventaire importé : ${saved.resourceCount} ressources, ${saved.cookieCount} cookies.`;
+        await loadScanReports(property,target);await loadAudit();
+      }catch(err){statusNode.textContent=err instanceof SyntaxError?'Le fichier JSON est invalide.':err.message}
+    }
+    async function savePropertyOrigin(property,input,statusNode){
+      statusNode.textContent='';
+      try{
+        await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/origin`,{method:'PUT',body:{origin:input.value}});
+        await loadProperties();await loadAudit();
+      }catch(err){statusNode.textContent=err.message}
+    }
+    function renderProperties(){
+      const target=$('propertyList');target.replaceChildren();
+      const select=$('policyProperty');select.replaceChildren(new Option('Choisir une propriété',''));
+      state.properties.forEach(property=>select.add(new Option(property.name+' · '+property.channel,property.id)));
+      if(state.property)select.value=state.property.id;updateRetentionMax();if(!state.editingPolicy)renderPurposeEditor(defaultPurposeDrafts());
+      if(!state.properties.length){target.textContent='Aucune propriété pour cette organisation.';return}
+      const table=node('table');table.className='table';const head=node('tr');
+      ['Nom','Canal','Environnement','Version publiée','ID propriété','Origine Web','Intégration','Inventaires'].forEach(label=>head.append(node('th',label)));table.append(head);
+      state.properties.forEach(property=>{
+        const row=node('tr');row.append(node('td',property.name),node('td',property.channel),node('td',({development:'Développement',staging:'Recette / préproduction',production:'Production'})[property.environment]||property.environment),node('td',property.published_version??'—'),node('td',property.id));
+        const originCell=node('td');originCell.append(node('span',property.origin|| (property.channel==='web'?'À configurer':'—')));
+        let originRow=null;
+        if(property.channel==='web'){
+          const originButton=node('button',property.origin?'Modifier':'Configurer','btn');originButton.type='button';originButton.disabled=!canEditPolicies();originButton.style.marginTop='6px';
+          originRow=node('tr');const originDetails=node('td');originDetails.colSpan=8;originRow.hidden=true;
+          const originPanel=node('div',undefined,'integration-snippet');const originHelp=node('p','Origine exacte du site (HTTPS, hôte et port éventuel), sans chemin, paramètres ni fragment. Cette origine autorise les routes publiques de politique et de remontée des choix du SDK Web, sans cookies. Une fois des inventaires importés, supprime-les avant de modifier cette origine.');
+          const originTools=node('div',undefined,'row wrap');const originInput=node('input');originInput.type='url';originInput.required=true;originInput.maxLength=512;originInput.placeholder='https://www.exemple.ma';originInput.value=property.origin||'';originInput.setAttribute('aria-label','Origine Web exacte');
+          const originSave=node('button','Enregistrer l’origine','btn primary');originSave.type='button';originSave.disabled=!canEditPolicies();const originStatus=node('span','');originStatus.className='copy-state';
+          originSave.addEventListener('click',()=>{if(!originInput.reportValidity())return;savePropertyOrigin(property,originInput,originStatus)});
+          originTools.append(originInput,originSave,originStatus);originPanel.append(originHelp,originTools);originDetails.append(originPanel);originRow.append(originDetails);
+          originButton.addEventListener('click',()=>{originRow.hidden=!originRow.hidden;originButton.setAttribute('aria-expanded',String(!originRow.hidden));originButton.textContent=originRow.hidden?(property.origin?'Modifier':'Configurer'):'Masquer'});
+          originCell.append(originButton);
+        }
+        row.append(originCell);
+        const integrationCell=node('td');const detailsButton=node('button','Extrait','btn');detailsButton.type='button';detailsButton.setAttribute('aria-expanded','false');
+        const integrationRow=node('tr');const integrationCellDetails=node('td');integrationCellDetails.colSpan=8;integrationRow.hidden=true;
+        const panel=node('div',undefined,'integration-snippet');
+        const intro=node('p','Exemple de démarrage. Remplace cmp.example.ma par l’URL HTTPS de ton service et du SDK. Ces extraits ne publient pas le package mobile.');
+        const pre=node('pre',integrationSnippet(property));const tools=node('div');const copy=node('button','Copier le code','btn');copy.type='button';const copyState=node('span','');copyState.className='copy-state';
+        copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(pre.textContent);copyState.textContent='Copié.'}catch(_){const range=document.createRange();range.selectNodeContents(pre);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);copyState.textContent='Texte sélectionné : copie-le manuellement.'}});
+        tools.append(copy,copyState);panel.append(intro,pre,tools);integrationCellDetails.append(panel);integrationRow.append(integrationCellDetails);
+        detailsButton.addEventListener('click',()=>{integrationRow.hidden=!integrationRow.hidden;detailsButton.setAttribute('aria-expanded',String(!integrationRow.hidden));detailsButton.textContent=integrationRow.hidden?'Extrait':'Masquer'});
+        integrationCell.append(detailsButton);row.append(integrationCell);
+        const scanCell=node('td');const scanEnabled=property.channel==='web'&&!!property.origin;const scanButton=node('button',property.channel!=='web'?'Web seulement':scanEnabled?'Inventaires':'Origine requise','btn');scanButton.type='button';scanButton.disabled=!scanEnabled;scanButton.setAttribute('aria-expanded','false');
+        const scanRow=node('tr');const scanCellDetails=node('td');scanCellDetails.colSpan=8;scanRow.hidden=true;
+        const scanPanel=node('div',undefined,'integration-snippet');const scanIntro=node('p','Importe le JSON produit par l’outil local. L’API compare l’origine déclarée du rapport à celle de cette propriété ; cette association ne prouve pas le contrôle du domaine. Les données restent dans le stockage local de démonstration.');
+        const uploadTools=node('div',undefined,'row wrap');const upload=node('button','Importer un rapport JSON','btn primary');upload.type='button';upload.disabled=!canEditPolicies()||!scanEnabled;
+        const file=node('input');file.type='file';file.accept='application/json,.json';file.hidden=true;const uploadStatus=node('span','');uploadStatus.className='copy-state';
+        const reports=node('div');reports.className='scan-report-list';upload.addEventListener('click',()=>file.click());file.addEventListener('change',()=>{importScanFile(property,file.files?.[0],uploadStatus,reports);file.value=''});
+        uploadTools.append(upload,file,uploadStatus);scanPanel.append(scanIntro,uploadTools,reports);scanCellDetails.append(scanPanel);scanRow.append(scanCellDetails);
+        scanButton.addEventListener('click',async()=>{scanRow.hidden=!scanRow.hidden;scanButton.setAttribute('aria-expanded',String(!scanRow.hidden));scanButton.textContent=scanRow.hidden?'Inventaires':'Masquer';if(!scanRow.hidden)await loadScanReports(property,reports)});
+        scanCell.append(scanButton);row.append(scanCell);table.append(row);if(originRow)table.append(originRow);table.append(integrationRow,scanRow);
+      });
+      target.append(table);
+    }    async function loadMembers(){const target=$('memberList');if(!state.org){target.textContent='Choisis une organisation.';state.members=[];await loadInvitations();return}const data=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/members`);state.members=data.members;renderOwnershipTargets();target.replaceChildren();if(!data.members.length)target.textContent='Aucun membre.';else{const table=node('table');table.className='table';const head=node('tr');['E-mail','Rôle','Depuis','Actions'].forEach(x=>head.append(node('th',x)));table.append(head);data.members.forEach(member=>{const row=node('tr');row.append(node('td',member.email));const roleCell=node('td');if(canPublishPolicies()&&member.role!=='owner'){const select=node('select');[['admin','Administrateur'],['editor','Éditeur'],['viewer','Lecteur']].forEach(([value,label])=>select.add(new Option(label,value)));select.value=member.role;select.addEventListener('change',()=>changeMemberRole(member.id,select.value));roleCell.append(select)}else roleCell.textContent=member.role==='owner'?'Propriétaire':member.role==='admin'?'Administrateur':member.role==='editor'?'Éditeur':'Lecteur';row.append(roleCell,node('td',new Date(member.joined_at*1000).toLocaleDateString()));const actions=node('td');if(canPublishPolicies()&&member.role!=='owner'){const remove=node('button','Retirer','btn danger');remove.addEventListener('click',()=>removeMember(member));actions.append(remove)}row.append(actions);table.append(row)});target.append(table)}await loadInvitations();await loadPendingOwnershipTransfer()}
+    function renderOwnershipTargets(){const select=$('ownershipTarget');if(!select)return;const previous=select.value;select.replaceChildren(new Option('Choisir un administrateur',''));state.members.filter(member=>member.role==='admin').forEach(member=>select.add(new Option(member.email,member.id)));if(state.members.some(member=>member.id===previous&&member.role==='admin'))select.value=previous}
+    async function loadPendingOwnershipTransfer(){const target=$('pendingOwnershipTransfer');if(!state.org||state.org.role!=='owner'){target.textContent='';return}const data=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/ownership-transfers/pending`);target.replaceChildren();if(!data.transfer){target.textContent='Aucun transfert en attente.';return}const transfer=data.transfer;target.append(node('p',`Proposé à ${transfer.proposedOwner} · expire le ${new Date(transfer.expires_at*1000).toLocaleString()}`,'help'));const cancel=node('button','Annuler le transfert','btn danger');cancel.addEventListener('click',cancelOwnershipTransfer);target.append(cancel)}
+    async function createOwnershipTransfer(){clearError('ownershipTransferError');$('ownershipTransferResult').replaceChildren();if(!state.org){error('ownershipTransferError','Choisis une organisation.');return}const proposedOwnerId=$('ownershipTarget').value;if(!proposedOwnerId){error('ownershipTransferError','Choisis un administrateur existant.');return}const target=state.members.find(member=>member.id===proposedOwnerId);if(!window.confirm(`Proposer la propriété de ${state.org.name} à ${target?.email} ? Le rôle ne changera qu’après son acceptation.`))return;try{const result=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/ownership-transfers`,{method:'POST',body:{proposedOwnerId}});$('ownershipTransferResult').append(node('p','Transmets ce jeton au destinataire par un canal sécurisé. Il ne sera plus affiché après actualisation.','success'),node('code',result.token,'inline-token'));await loadPendingOwnershipTransfer();await loadAudit()}catch(err){error('ownershipTransferError',err.message)}}
+    async function cancelOwnershipTransfer(){if(!window.confirm('Annuler le transfert en attente ? Le jeton transmis ne pourra plus être utilisé.'))return;clearError('ownershipTransferError');try{await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/ownership-transfers/pending`,{method:'DELETE',body:{}});$('ownershipTransferResult').replaceChildren();await loadPendingOwnershipTransfer();await loadAudit()}catch(err){error('ownershipTransferError',err.message)}}
+    async function acceptOwnershipTransfer(){clearError('acceptOwnershipTransferError');$('acceptOwnershipTransferResult').textContent='';const token=$('ownershipTransferToken').value.trim();if(!token){error('acceptOwnershipTransferError','Saisis le jeton reçu du propriétaire actuel.');return}if(!window.confirm('Accepter le transfert de propriété ? Ton rôle deviendra owner et celui du propriétaire actuel deviendra admin.'))return;try{await api('/v1/auth/ownership-transfers/accept',{method:'POST',body:{token}});$('ownershipTransferToken').value='';await loadOrganizations();if(state.org)$('orgSummary').textContent+= ' · transfert accepté';await loadAudit()}catch(err){error('acceptOwnershipTransferError',err.message)}}
+    async function loadInvitations(){const target=$('invitationList');if(!canPublishPolicies()){target.textContent='';return}if(!state.org){target.textContent='Choisis une organisation.';return}const data=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/invitations`);target.replaceChildren();if(!data.invitations.length){target.textContent='Aucune invitation à afficher.';return}const table=node('table');table.className='table';const head=node('tr');['E-mail','Rôle','Expiration','Invitée par','État','Action'].forEach(x=>head.append(node('th',x)));table.append(head);data.invitations.forEach(invite=>{const row=node('tr');row.append(node('td',invite.email),node('td',invite.role==='admin'?'Administrateur':invite.role==='editor'?'Éditeur':'Lecteur'),node('td',new Date(invite.expiresAt*1000).toLocaleString()),node('td',invite.invitedBy),node('td',invite.status==='pending'?'En attente':'Expirée'));const action=node('td');const revoke=node('button',invite.status==='pending'?'Révoquer':'Supprimer','btn danger');revoke.disabled=invite.status!=='pending';revoke.addEventListener('click',()=>revokeInvitation(invite));action.append(revoke);row.append(action);table.append(row)});target.append(table)}
+    async function revokeInvitation(invite){if(!window.confirm(`Révoquer l’invitation destinée à ${invite.email} ? Son jeton ne pourra plus être accepté.`))return;clearError('memberError');try{await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/invitations/${encodeURIComponent(invite.id)}`,{method:'DELETE',body:{}});await loadInvitations();await loadAudit()}catch(err){error('memberError',err.message)}}
+    async function changeMemberRole(memberId,role){clearError('memberError');try{await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/members/${encodeURIComponent(memberId)}`,{method:'PUT',body:{role}});await loadOrganizations();await loadAudit()}catch(err){error('memberError',err.message);await loadMembers()}}
+    async function removeMember(member){if(!window.confirm(`Retirer l’accès de ${member.email} à cette organisation ?`))return;clearError('memberError');try{await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/members/${encodeURIComponent(member.id)}`,{method:'DELETE',body:{}});await loadOrganizations();await loadAudit()}catch(err){error('memberError',err.message)}}
+    function updateRetentionMax(){const property=chosenProperty();const maximum=property&&property.channel==='web'?180:3650;$('retention').max=String(maximum);if(Number($('retention').value)>maximum)$('retention').value=String(maximum)}
+    function chosenProperty(){return state.properties.find(p=>p.id===$('policyProperty').value)||null}
+    function lines(value){return value.split('\n').map(x=>x.trim()).filter(Boolean)}
+    function validatePolicyNotice(){
+      for(const [suffix,language] of [['','français'],['Ar','arabe']]){
+        const textFields=[
+          [`controller${suffix}`,'Responsable de traitement',200],
+          [`contact${suffix}`,'Contact pour exercer les droits',256],
+          [`reference${suffix}`,'Référence CNDP déclarée par le client',120]
+        ];
+        for(const [id,label,maxLength] of textFields){
+          const value=$(id).value.trim();
+          if(!value)throw new Error(`${label} (${language}) : renseigne la valeur déclarée par le client.`);
+          if(value.length>maxLength)throw new Error(`${label} (${language}) : ${maxLength} caractères maximum.`);
+        }
+        const listFields=[
+          [`dataCategories${suffix}`,'Catégories de données'],
+          [`recipients${suffix}`,'Destinataires (ou « Aucun » si confirmé)'],
+          [`transfers${suffix}`,'Transferts (ou « Aucun » si confirmé)']
+        ];
+        for(const [id,label] of listFields){
+          const values=lines($(id).value);
+          if(!values.length)throw new Error(`${label} (${language}) : ajoute au moins une ligne. Si aucun élément n’existe, indique « Aucun » après confirmation du client.`);
+          if(values.some(value=>value.length>200))throw new Error(`${label} (${language}) : chaque ligne est limitée à 200 caractères.`);
+        }
+      }
+    }
+    function defaultPurposeDrafts(){return[
+      {id:'essential',label:{fr:'Fonctionnement essentiel',ar:'الوظائف الأساسية'},description:{fr:'Fonctions nécessaires au service.',ar:'الوظائف الضرورية للخدمة.'},required:true,consentRequired:false,vendors:[]},
+      {id:'analytics',label:{fr:'Mesure d’audience',ar:'قياس الجمهور'},description:{fr:'Mesure de fréquentation configurée par le client.',ar:'قياس الزيارات وفق إعدادات العميل.'},required:false,consentRequired:true,vendors:[]},
+      {id:'marketing',label:{fr:'Publicité personnalisée',ar:'الإعلانات المخصصة'},description:{fr:'Technologies de personnalisation publicitaire.',ar:'تقنيات تخصيص الإعلانات.'},required:false,consentRequired:true,vendors:[]}
+    ]}
+    function readPurposeDrafts(){return Array.from($('purposeEditor').querySelectorAll('.purpose-editor-card')).map(card=>({
+      id:card.querySelector('.purpose-id').value,
+      label:{fr:card.querySelector('.purpose-label-fr').value,ar:card.querySelector('.purpose-label-ar').value},
+      description:{fr:card.querySelector('.purpose-description-fr').value,ar:card.querySelector('.purpose-description-ar').value},
+      required:card.querySelector('.purpose-required').checked,
+      consentRequired:card.querySelector('.purpose-consent-required').checked,
+      vendors:lines(card.querySelector('.purpose-vendors').value)
+    }))}
+    function renderPurposeEditor(purposes=defaultPurposeDrafts()){
+      const target=$('purposeEditor');target.replaceChildren();
+      purposes.forEach((purpose,index)=>{
+        const card=node('div',undefined,'purpose-editor-card');const heading=node('div',undefined,'purpose-editor-head');heading.append(node('h3',`Finalité ${index+1}`));
+        const remove=node('button','Supprimer','btn danger');remove.type='button';remove.disabled=purposes.length<=1;remove.addEventListener('click',()=>renderPurposeEditor(readPurposeDrafts().filter((_,i)=>i!==index)));heading.append(remove);card.append(heading);
+        const grid=node('div',undefined,'purpose-editor-grid');
+        const addField=(labelText,value,className,multiline=false,maxLength)=>{const wrap=node('div',undefined,'field');const id=`purpose-${index}-${className}`;const label=node('label',labelText);label.htmlFor=id;const input=node(multiline?'textarea':'input');input.id=id;input.className=className;input.value=value||'';input.required=className!=='purpose-vendors';if(maxLength)input.maxLength=maxLength;if(multiline)input.rows=2;else input.type='text';wrap.append(label,input);grid.append(wrap);return input};
+        const idInput=addField('Identifiant stable (ex. analytics)',purpose.id,'purpose-id',false,64);idInput.minLength=2;idInput.pattern='[a-z][a-z0-9_-]{1,63}';
+        addField('Libellé français',purpose.label?.fr,'purpose-label-fr',false,120);
+        addField('Libellé arabe',purpose.label?.ar,'purpose-label-ar',false,120);
+        addField('Description française',purpose.description?.fr,'purpose-description-fr',true,600);
+        addField('Description arabe',purpose.description?.ar,'purpose-description-ar',true,600);
+        addField('Fournisseurs (un par ligne)',(purpose.vendors||[]).join('\n'),'purpose-vendors',true,0);
+        card.append(grid);
+        const flags=node('div',undefined,'purpose-flags');
+        const requiredLabel=node('label');const requiredInput=node('input');requiredInput.type='checkbox';requiredInput.className='purpose-required';requiredInput.checked=purpose.required===true;requiredLabel.append(requiredInput,document.createTextNode(' Toujours actif (classé nécessaire par le client)'));
+        const consentLabel=node('label');const consentInput=node('input');consentInput.type='checkbox';consentInput.className='purpose-consent-required';consentInput.checked=purpose.required===true?false:purpose.consentRequired!==false;consentInput.disabled=requiredInput.checked;consentLabel.append(consentInput,document.createTextNode(' Arrêté jusqu’à un choix positif'));
+        requiredInput.addEventListener('change',()=>{consentInput.disabled=requiredInput.checked;if(requiredInput.checked)consentInput.checked=false});flags.append(requiredLabel,consentLabel);card.append(flags);target.append(card);
+      });
+    }
+    function policyStatusLabel(status){return({draft:'Brouillon',published:'Publiée',retired:'Retirée'})[status]||status}
+    async function viewPolicy(policyId){
+      clearError('policyError');
+      try{
+        const entry=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/policies/${encodeURIComponent(policyId)}`);
+        const policy=entry.policy||{};const target=$('policyDetails');target.replaceChildren();
+        const heading=node('div',undefined,'row wrap');heading.style.justifyContent='space-between';
+        heading.append(node('h2',`Version ${entry.version} · ${policyStatusLabel(entry.status)}`));
+        const close=node('button','Fermer','btn');close.type='button';close.addEventListener('click',()=>target.classList.add('hidden'));heading.append(close);target.append(heading);
+        const addLine=(label,value)=>{const row=node('p');row.append(node('strong',`${label} : `),document.createTextNode(value===undefined||value===null||value===''?'—':String(value)));target.append(row)};
+        addLine('Révision',entry.revision);
+        addLine('Créée par',`${entry.author||'—'} · ${new Date(entry.created_at*1000).toLocaleString()}`);
+        addLine('Dernier éditeur',entry.last_editor);addLine('Publiée par',entry.publisher);
+        addLine('Publiée le',entry.published_at?new Date(entry.published_at*1000).toLocaleString():'—');
+        addLine('Durée configurée (jours)',policy.retentionDays);
+        const purposes=node('div');purposes.append(node('h3','Finalités de cette version'));
+        (policy.purposes||[]).forEach(purpose=>{
+          const item=node('div',undefined,'choice');
+          item.append(node('b',`${purpose.label?.fr||purpose.id} · ${purpose.label?.ar||''}`));
+          item.append(node('small',`${purpose.id} · ${purpose.required?'Toujours actif selon la configuration':purpose.consentRequired?'Inactif jusqu’au choix':'Actif par défaut, révocable'} · ${(purpose.channels||[]).join(', ')}`));
+          const vendors=purpose.vendors?.length?` | Fournisseurs indicatifs : ${purpose.vendors.join(', ')}`:'';
+          item.append(node('small',`FR : ${purpose.description?.fr||''} | AR : ${purpose.description?.ar||''}${vendors}`));
+          purposes.append(item);
+        });
+        target.append(purposes);
+        const legacyNotice=policy.notice||{};const translations=policy.noticeTranslations||{};const noticeFr=translations.fr||legacyNotice;const noticeAr=translations.ar||{};target.append(node('h3','Notice en français'));
+        addLine('Responsable de traitement',noticeFr.controllerName);addLine('Contact',noticeFr.contact);
+        addLine('Référence',noticeFr.processingReference);addLine('Catégories de données',(noticeFr.dataCategories||[]).join(' · '));
+        addLine('Destinataires',(noticeFr.recipients||[]).join(' · '));addLine('Transferts',(noticeFr.transfers||[]).join(' · '));
+        target.append(node('h3','Notice en arabe'));
+        addLine('مسؤول المعالجة',noticeAr.controllerName);addLine('جهة الاتصال',noticeAr.contact);
+        addLine('المرجع',noticeAr.processingReference);addLine('فئات البيانات',(noticeAr.dataCategories||[]).join(' · '));
+        addLine('الجهات المستفيدة',(noticeAr.recipients||[]).join(' · '));addLine('التحويلات',(noticeAr.transfers||[]).join(' · '));
+        target.classList.remove('hidden');target.scrollIntoView({behavior:'smooth',block:'start'});
+      }catch(err){error('policyError',err.message)}
+    }
+    async function loadPolicies(){
+      const property=chosenProperty();state.property=property;$('policyDetails').classList.add('hidden');
+      if(!property){$('policyList').textContent='Choisis une propriété.';return}
+      const data=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/policies`);
+      const target=$('policyList');target.replaceChildren();
+      if(!data.policies.length){target.textContent='Aucune version. Crée le premier brouillon ci-dessus.';return}
+      const table=node('table');table.className='table';const head=node('tr');
+      ['Version','État','Créée par','Dernier éditeur','Créée le','Publiée par','Publiée le','Action'].forEach(x=>head.append(node('th',x)));table.append(head);
+      data.policies.forEach(p=>{
+        const row=node('tr');
+        row.append(node('td',`v${p.version} · r${p.revision}`),node('td',policyStatusLabel(p.status)),node('td',p.author),node('td',p.last_editor),
+          node('td',new Date(p.created_at*1000).toLocaleString()),node('td',p.publisher||'—'),node('td',p.published_at?new Date(p.published_at*1000).toLocaleString():'—'));
+        const actionCell=node('td');const view=node('button','Consulter','btn');view.addEventListener('click',()=>viewPolicy(p.id));actionCell.append(view);
+        if(p.status==='draft'&&canEditPolicies()){
+          const edit=node('button','Modifier','btn');edit.style.marginLeft='6px';edit.addEventListener('click',()=>beginDraftEdit(p.id));actionCell.append(edit);
+        }
+        if(p.status==='draft'&&canPublishPolicies()){
+          const button=node('button','Publier','btn primary');button.style.marginLeft='6px';
+          button.addEventListener('click',async()=>{try{clearError('policyError');await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/policies/${encodeURIComponent(p.id)}/publish`,{method:'POST',body:{}});await loadProperties();await loadAudit()}catch(e){error('policyError',e.message)}});
+          actionCell.append(button);
+        }
+        row.append(actionCell);table.append(row);
+      });
+      target.append(table);
+    }
+    function resetDraftEdit(){$('defaultLanguage').value='fr';state.editingPolicyId=null;state.editingPolicy=null;state.editingPolicyRevision=null;for(const suffix of ['','Ar'])for(const field of ['controller','contact','reference','dataCategories','recipients','transfers'])$(`${field}${suffix}`).value='';$('createDraft').textContent='Créer un brouillon';$('cancelDraftEdit').classList.add('hidden');renderPurposeEditor(defaultPurposeDrafts());$('policyDetails').classList.add('hidden')}
+    async function beginDraftEdit(policyId){
+      clearError('policyError');
+      try{
+        const entry=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/policies/${encodeURIComponent(policyId)}`);
+        if(entry.status!=='draft')throw new Error('Seuls les brouillons peuvent être modifiés.');
+        const policy=entry.policy;const legacy=policy.notice||{};const translations=policy.noticeTranslations||{};const fr=translations.fr||legacy;const ar=translations.ar||{};
+        $('policyProperty').value=entry.property_id;updateRetentionMax();$('retention').value=String(policy.retentionDays);$('defaultLanguage').value=policy.defaultLanguage||'fr';
+        for(const [suffix,notice] of [['',fr],['Ar',ar]]){
+          $(`controller${suffix}`).value=notice.controllerName||'';$(`contact${suffix}`).value=notice.contact||'';$(`reference${suffix}`).value=notice.processingReference||'';
+          $(`dataCategories${suffix}`).value=(notice.dataCategories||[]).join('\n');$(`recipients${suffix}`).value=(notice.recipients||[]).join('\n');$(`transfers${suffix}`).value=(notice.transfers||[]).join('\n');
+        }
+        state.editingPolicyId=policyId;state.editingPolicy=policy;state.editingPolicyRevision=entry.revision;renderPurposeEditor(policy.purposes||[]);$('policyDetails').classList.add('hidden');$('createDraft').textContent='Enregistrer le brouillon';$('cancelDraftEdit').classList.remove('hidden');showPage('policies');
+      }catch(err){error('policyError',err.message)}
+    }
+    async function loadAudit(){if(!state.org)return;const data=await api('/v1/organizations/'+encodeURIComponent(state.org.id)+'/audit?limit=100');const target=$('auditList');target.replaceChildren();if(!data.events.length){target.textContent='Aucun événement.';return}const table=node('table');table.className='table';const head=node('tr');['Action','Type','Ressource','Horodatage','Détails'].forEach(x=>head.append(node('th',x)));table.append(head);data.events.forEach(e=>{const row=node('tr');row.append(node('td',e.action),node('td',e.resource_type),node('td',e.resource_id),node('td',new Date(e.occurred_at*1000).toLocaleString()),node('td',JSON.stringify(e.details)));table.append(row)});target.append(table)}
+    async function exportAudit(){clearError('auditError');if(!state.org){error('auditError','Choisis une organisation.');return}const from=$('auditFrom').value;const to=$('auditTo').value;if(from&&to&&from>to){error('auditError','La date de début doit précéder ou égaler la date de fin.');return}const params=new URLSearchParams({limit:'10000'});if(from)params.set('from',String(Math.floor(new Date(from+'T00:00:00').getTime()/1000)));if(to)params.set('to',String(Math.floor(new Date(to+'T23:59:59').getTime()/1000)));try{const response=await fetch(API+'/v1/organizations/'+encodeURIComponent(state.org.id)+'/audit/export?'+params.toString(),{credentials:'include'});if(!response.ok){let details={};try{details=await response.json()}catch(_){}throw new Error(details.detail||('Erreur API '+response.status))}const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='aman-audit-'+state.org.id+'.csv';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(err){error('auditError',err.message)}}
+    async function enterApp(){state.user=await api('/v1/auth/me');$('who').textContent=state.user.email;$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');await loadOrganizations();showPage('overview')}
+    $('loginForm').addEventListener('submit',async event=>{event.preventDefault();clearError('loginError');try{const result=await api('/v1/auth/login',{method:'POST',publicCall:true,body:{email:$('email').value,password:$('password').value}});state.csrf=result.csrfToken;await enterApp()}catch(e){error('loginError',e.message)}});
+    $('logout').addEventListener('click',async()=>{try{await api('/v1/auth/logout',{method:'POST',body:{}})}catch(_){}state.user=null;state.csrf='';$('appView').classList.add('hidden');$('loginView').classList.remove('hidden')});
+    $('orgSelect').addEventListener('change',async e=>{resetDraftEdit();state.org=state.orgs.find(x=>x.id===e.target.value)||null;renderOrganizations();try{await loadProperties();await loadMembers();await loadAudit()}catch(err){error('orgError',err.message)}});
+    $('orgForm').addEventListener('submit',async e=>{e.preventDefault();clearError('orgError');try{const org=await api('/v1/organizations',{method:'POST',body:{name:$('orgName').value,requireTwoPersonPublish:true}});$('orgName').value='';await loadOrganizations();state.org=state.orgs.find(x=>x.id===org.id)||state.org;renderOrganizations();await loadProperties();await loadMembers()}catch(err){error('orgError',err.message)}});
+    function updatePropertyOriginField(){const isWeb=$('propertyChannel').value==='web';$('propertyOriginField').hidden=!isWeb;$('propertyOrigin').required=isWeb;$('propertyOrigin').disabled=!isWeb;if(!isWeb)$('propertyOrigin').value=''}
+    $('propertyChannel').addEventListener('change',updatePropertyOriginField);updatePropertyOriginField();
+    $('propertyForm').addEventListener('submit',async e=>{e.preventDefault();clearError('propertyError');if(!state.org){error('propertyError','Choisis ou crée une organisation.');return}try{const channel=$('propertyChannel').value;const body={name:$('propertyName').value,channel,environment:$('propertyEnvironment').value,origin:channel==='web'?$('propertyOrigin').value:undefined};await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/properties`,{method:'POST',body});$('propertyName').value='';$('propertyOrigin').value='';await loadProperties();await loadAudit()}catch(err){error('propertyError',err.message)}});
+    $('policyProperty').addEventListener('change',()=>{resetDraftEdit();updateRetentionMax();renderPurposeEditor(defaultPurposeDrafts());loadPolicies().catch(e=>error('policyError',e.message))});
+    $('addPurpose').addEventListener('click',()=>{const purposes=readPurposeDrafts();let suffix=1;while(purposes.some(purpose=>purpose.id.trim()===`custom_${suffix}`))suffix++;purposes.push({id:`custom_${suffix}`,label:{fr:'',ar:''},description:{fr:'',ar:''},required:false,consentRequired:true,vendors:[]});renderPurposeEditor(purposes)});
+    function collectPurposeDefinitions(property){
+      const rows=readPurposeDrafts();if(!rows.length)throw new Error('Ajoute au moins une finalité.');
+      const ids=new Set();
+      return rows.map((item,index)=>{
+        const id=item.id.trim();
+        if(!/^[a-z][a-z0-9_-]{1,63}$/.test(id))throw new Error(`Finalité ${index+1} : identifiant requis, 2 à 64 caractères minuscules, chiffres, tirets ou soulignés.`);
+        if(ids.has(id))throw new Error(`L’identifiant « ${id} » est utilisé plusieurs fois.`);ids.add(id);
+        const label={fr:item.label.fr.trim(),ar:item.label.ar.trim()};
+        const description={fr:item.description.fr.trim(),ar:item.description.ar.trim()};
+        if(!label.fr||!label.ar||!description.fr||!description.ar)throw new Error(`Finalité ${index+1} : renseigne les libellés et descriptions français et arabes.`);
+        const vendors=item.vendors.map(vendor=>vendor.trim()).filter(Boolean);
+        if(vendors.some(vendor=>vendor.length>128))throw new Error(`Finalité ${index+1} : chaque fournisseur doit faire 128 caractères maximum.`);
+        return{id,label,description,required:item.required,consentRequired:item.required?false:item.consentRequired,channels:[property.channel],...(vendors.length?{vendors}:{})};
+      });
+    }
+    function noticeFromForm(suffix){return{controllerName:$(`controller${suffix}`).value.trim(),contact:$(`contact${suffix}`).value.trim(),processingReference:$(`reference${suffix}`).value.trim(),dataCategories:lines($(`dataCategories${suffix}`).value),recipients:lines($(`recipients${suffix}`).value),transfers:lines($(`transfers${suffix}`).value)}}
+    function buildDraftPolicy(property){const base=state.editingPolicy||{};const noticeFr=noticeFromForm('');const noticeAr=noticeFromForm('Ar');return{schemaVersion:base.schemaVersion||1,propertyId:property.id,policyVersion:base.policyVersion||'draft',status:'draft',languages:base.languages||['fr','ar'],defaultLanguage:$('defaultLanguage').value,retentionDays:Number($('retention').value),purposes:collectPurposeDefinitions(property),notice:noticeFr,noticeTranslations:{fr:noticeFr,ar:noticeAr}}}
+    async function saveDraft(){clearError('policyError');const property=chosenProperty();if(!state.org||!property){error('policyError','Choisis une organisation et une propriété.');return}const retention=Number($('retention').value);const retentionMax=Number($('retention').max);if(!Number.isInteger(retention)||retention<1||retention>retentionMax){error('policyError',`La durée doit être comprise entre 1 et ${retentionMax} jours pour cette propriété.`);return}try{validatePolicyNotice();const policy=buildDraftPolicy(property);const editing=state.editingPolicyId;const path=editing?`/v1/organizations/${encodeURIComponent(state.org.id)}/policies/${encodeURIComponent(editing)}`:`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/policies`;const body=editing?{policy,expectedRevision:state.editingPolicyRevision}:{policy};await api(path,{method:editing?'PUT':'POST',body});resetDraftEdit();await loadPolicies();await loadAudit();showPage('policies')}catch(err){error('policyError',err.status===409?'Une autre personne a modifié ou approuvé ce brouillon. Tes valeurs restent dans le formulaire, mais ne sont pas enregistrées. Recharge la dernière version avant de les réappliquer.':err.message)}}
+    $('createDraft').addEventListener('click',saveDraft);$('cancelDraftEdit').addEventListener('click',()=>{resetDraftEdit();clearError('policyError')});
+    $('inviteForm').addEventListener('submit',async e=>{
+      e.preventDefault();clearError('memberError');$('inviteResult').replaceChildren();
+      if(!state.org){error('memberError','Choisis une organisation.');return}
+      try{
+        const inviteEmail=$('memberEmail').value.trim();const inviteRole=$('memberRole').value;const inviteRoleLabel=$('memberRole').selectedOptions[0]?.textContent||inviteRole;
+        const result=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/invitations`,{method:'POST',body:{email:inviteEmail,role:inviteRole}});
+        const invitationUrl=new URL('admin.html',window.location.href);invitationUrl.hash=new URLSearchParams({invite:result.invitationToken}).toString();
+        const copyButton=node('button','Copier le lien d’invitation','btn');copyButton.type='button';
+        copyButton.addEventListener('click',async()=>{
+          try{await navigator.clipboard.writeText(invitationUrl.href);copyButton.textContent='Lien copié';}
+          catch(_){window.prompt('Copie ce lien et transmets-le au destinataire par un canal approuvé.',invitationUrl.href)}
+        });
+        const expiry=new Date(result.expiresAt*1000).toLocaleString();
+        const emailLink=node('a','Préparer un e-mail','btn');emailLink.href=`mailto:${encodeURIComponent(inviteEmail)}?${new URLSearchParams({subject:`Invitation Aman · ${state.org.name}`,body:`Bonjour,\n\nVous êtes invité(e) à rejoindre l’organisation « ${state.org.name} » avec le rôle « ${inviteRoleLabel} ».\n\nOuvrez ce lien pour examiner et accepter l’invitation :\n${invitationUrl.href}\n\nLe lien expire le ${expiry}.\n\nAman`})}`;
+        $('inviteResult').append(node('div',`Transmets ce lien au destinataire par un canal approuvé. Il expire le ${expiry}.`,'success'),copyButton,emailLink,node('code',result.invitationToken,'inline-token'));
+        $('memberEmail').value='';await loadMembers();await loadAudit();
+      }catch(err){error('memberError',err.message)}
+    });
+    $('createOwnershipTransfer').addEventListener('click',createOwnershipTransfer);$('acceptOwnershipTransfer').addEventListener('click',acceptOwnershipTransfer);
+    $('showInvite').addEventListener('click',()=>{$('invitePanel').classList.add('show');$('showInvite').classList.add('hidden')});$('cancelInvite').addEventListener('click',()=>{$('invitePanel').classList.remove('show');$('showInvite').classList.remove('hidden');$('inviteToken').value='';$('invitePassword').value='';$('inviteSummary').textContent=''});$('previewInvite').addEventListener('click',()=>previewInvitation($('inviteToken').value.trim()));
+    $('acceptInvite').addEventListener('click',async()=>{clearError('inviteError');try{const result=await api('/v1/auth/invitations/accept',{method:'POST',publicCall:true,omitCredentials:true,body:{token:$('inviteToken').value,password:$('invitePassword').value}});$('inviteToken').value='';$('invitePassword').value='';$('inviteError').classList.remove('show');$('inviteError').textContent=result.accountCreated?'Compte créé. Tu peux maintenant te connecter.':'Invitation acceptée. Connecte-toi avec ton compte Aman existant.';$('inviteError').classList.add('show');$('inviteError').style.color='var(--green)'}catch(e){error('inviteError',e.message)}});
+    $('dashboardRefresh').addEventListener('click',()=>loadDashboard().catch(e=>error('dashboardError',e.message)));$('refresh').addEventListener('click',()=>loadOrganizations().catch(e=>error('orgError',e.message)));$('refreshMembers').addEventListener('click',()=>loadMembers().catch(e=>error('memberError',e.message)));$('refreshInvitations').addEventListener('click',()=>loadInvitations().catch(e=>error('memberError',e.message)));$('refreshPolicies').addEventListener('click',()=>loadPolicies().catch(e=>error('policyError',e.message)));$('refreshAudit').addEventListener('click',()=>loadAudit().catch(e=>error('auditError',e.message)));$('exportAudit').addEventListener('click',exportAudit);
+    const invitationFromLink=new URLSearchParams(location.hash.slice(1)).get('invite');
+    if(invitationFromLink){$('inviteToken').value=invitationFromLink;$('invitePanel').classList.add('show');$('showInvite').classList.add('hidden');history.replaceState(null,document.title,location.pathname+location.search);previewInvitation(invitationFromLink);}
+    (async()=>{if(invitationFromLink)return;state.csrf=cookie('aman_csrf');try{await enterApp()}catch(_){$('loginView').classList.remove('hidden');$('appView').classList.add('hidden')}})();
+  </script>
+</body>
+</html>

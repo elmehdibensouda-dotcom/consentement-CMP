@@ -1,0 +1,147 @@
+# Aman Consent — SDK iOS
+
+Le package Swift expose un client de politique, un gestionnaire de choix local et une feuille SwiftUI FR/AR. Il cible iOS 16+ et Swift 5.9+. Il s’agit d’une source de démarrage : aucun binaire signé ou publié n’est fourni.
+
+## Ajouter le package
+
+Dans Xcode, utiliser **File → Add Package Dependencies…** puis indiquer l’URL du dépôt ou le chemin local du dossier `mobile/ios`. Sélectionner le produit `AmanConsent` dans la cible de l’application. Le manifeste inclut `PrivacyInfo.xcprivacy` comme ressource du package ; l’équipe intégratrice doit examiner les exigences de manifeste Apple pour l’application complète et tous ses SDK.
+
+## Charger une politique et afficher les choix
+
+Le client récupère la politique publiée de la propriété et conserve la dernière version valide sur l’appareil pour les démarrages hors ligne. Sa session réseau par défaut est éphémère, sans cookie ni identifiants de connexion partagés avec l’application hôte, et refuse les redirections pour le chargement comme pour l’envoi. Le gestionnaire conserve le choix dans `UserDefaults`. Il ne l’envoie pas automatiquement à Aman ; le client peut appeler explicitement l’API d’envoi après validation de son modèle de collecte.
+
+Avant de mettre une politique en cache ou de l’appliquer, le client rejette les versions de schéma inconnues, les langues ou finalités non prises en charge, les règles de finalité contradictoires et les durées hors limites du schéma. Si `defaultLanguage` est absent, la première langue déclarée dans la politique est utilisée.
+
+```swift
+import AmanConsent
+import SwiftUI
+
+@MainActor
+struct ConsentSetupView: View {
+    @State private var manager: AmanConsentManager?
+    @State private var showingPreferences = false
+    @State private var errorMessage: String?
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        VStack {
+            if let errorMessage {
+                Text(errorMessage)
+            } else if let manager {
+                Button("Gérer mes préférences") {
+                    showingPreferences = true
+                }
+                .sheet(isPresented: $showingPreferences) {
+                    AmanConsentSheet(manager: manager)
+                }
+            } else {
+                ProgressView("Chargement des préférences…")
+            }
+        }
+        .task { await loadConsentPolicy() }
+        .onChange(of: scenePhase) { phase in
+            guard phase == .active, let manager else { return }
+            manager.refreshExpiredDecision()
+            applyAnalyticsChoice(manager.isAllowed("analytics"))
+        }
+    }
+
+    private func loadConsentPolicy() async {
+        do {
+            let client = AmanConsentAPIClient()
+            let apiBaseURL = URL(string: "https://cmp.example.ma")!
+            let policy = try await client.fetchPolicy(
+                baseURL: apiBaseURL,
+                propertyId: "PROPERTY_ID",
+                channel: "ios"
+            )
+            let consentManager = AmanConsentManager(policy: policy)
+            consentManager.onEffectivePurposeStatesChanged = { states in
+                applyAnalyticsChoice(states["analytics"] == true)
+                // Ne pas traiter ce callback d’état comme un nouvel événement de décision.
+            }
+            manager = consentManager
+            if consentManager.decision == nil {
+                showingPreferences = true
+            }
+            applyAnalyticsChoice(consentManager.isAllowed("analytics"))
+        } catch {
+            errorMessage = "Impossible de charger la politique de préférences."
+            // Keep optional SDKs disabled until a valid policy is available.
+        }
+    }
+
+    private func applyAnalyticsChoice(_ allowed: Bool) {
+        if allowed {
+            startAnalyticsIfNeeded()
+        } else {
+            stopAnalyticsIfSupported()
+        }
+    }
+
+    private func startAnalyticsIfNeeded() { /* Connecter le SDK réel du client ici. */ }
+    private func stopAnalyticsIfSupported() { /* Utiliser l’API d’arrêt du fournisseur si disponible. */ }
+}
+```
+
+Le code d’exemple laisse volontairement l’API du fournisseur en fonctions de remplacement. Le client doit raccorder chaque finalité à son propre SDK et empêcher son initialisation avant le choix applicable. Aman ne peut pas désinitialiser une bibliothèque native déjà lancée.
+
+Sans paramètre `language`, `AmanConsentSheet` reprend `defaultLanguage` de la politique publiée (`fr` ou `ar`). L’application hôte peut fournir explicitement une langue pour adapter l’écran à sa propre préférence de langue.
+
+Les champs de notice traduits se trouvent dans `noticeTranslations.fr` et `noticeTranslations.ar`. La feuille choisit le bloc correspondant à la langue affichée ; elle accepte aussi l’ancien champ `notice` comme solution de repli. Le client doit fournir et faire relire les contenus pour chaque langue proposée.
+
+`onEffectivePurposeStatesChanged` signale l’état effectif après un choix enregistré et après `updatePolicy(_:)`. Quand une nouvelle politique invalide un ancien choix, le callback transmet les valeurs de départ de la nouvelle version afin que l’application puisse arrêter ou démarrer ses SDK en conséquence. Il ne représente pas un nouveau choix du visiteur et ne doit pas être envoyé comme événement de consentement. L’application doit aussi appliquer une première fois `isAllowed(_:)` après avoir créé le gestionnaire.
+
+### Remontée facultative des décisions
+
+Après validation de l’information visiteur et du traitement par le client, l’application peut transmettre chaque décision explicite depuis `onConsentChanged`. L’API réutilise l’identifiant d’événement aléatoire stocké avec la décision afin de rendre les répétitions idempotentes. Le gestionnaire reste local-first ; une erreur réseau ne modifie pas le choix local.
+
+```swift
+consentManager.onConsentChanged = { decision in
+    applyAnalyticsChoice(decision.purposes["analytics"] == true)
+    Task {
+        do {
+            try await client.recordDecision(decision, baseURL: apiBaseURL)
+        } catch {
+            // Journaliser un statut technique sans consigner le détail des choix.
+        }
+    }
+}
+```
+
+Ne branche pas cet appel avant d’avoir approuvé la collecte et ajouté l’information correspondante dans la notice du client. L’API stocke les booléens par finalité et l’heure de réception ; elle ne vérifie ni identité, ni affichage de l’écran, ni authenticité du binaire. Les événements ne forment donc pas seuls une preuve juridique.
+
+Le manifeste fourni déclare cette capacité conditionnelle comme interaction produit non liée à une identité et utilisée pour des agrégats analytiques, conformément aux catégories techniques Apple. La déclaration de l’application doit refléter son intégration réelle : le client doit confirmer cette classification, notamment si son serveur peut rapprocher l’événement d’un compte ou d’une autre donnée.
+
+## Choix et cycle de vie
+
+- `AmanConsentManager.isAllowed(_:)` respecte le choix enregistré, sinon applique le réglage de départ de la politique : une finalité avec `consentRequired` activé reste inactive jusqu’à un choix positif ; si ce réglage est désactivé, elle démarre active mais reste désactivable par le visiteur.
+- `acceptAll()`, `rejectOptional()` et `saveChoices(_:)` enregistrent localement une décision typée et appellent `onConsentChanged` ainsi que `onEffectivePurposeStatesChanged`. L’envoi central requiert un appel séparé à `AmanConsentAPIClient.recordDecision`.
+- `updatePolicy(_:)` applique la nouvelle politique et notifie `onEffectivePurposeStatesChanged` ; une nouvelle version invalide le choix précédent de cette propriété et l’application doit synchroniser ses SDK tiers avec les nouveaux états. Les choix restent isolés par `propertyId`.
+- Le gestionnaire programme une notification d’état quand un choix expire pendant que le processus est actif. L’application hôte doit aussi appeler `refreshExpiredDecision()` au retour au premier plan, puis relier `onEffectivePurposeStatesChanged` à l’arrêt / redémarrage effectif des SDK tiers. L’expiration efface le choix local et n’appelle pas `onConsentChanged` : elle ne doit pas être transmise comme un nouveau choix visiteur.
+- Après avoir récupéré une nouvelle version, appeler explicitement `updatePolicy(_:)` sur le gestionnaire existant pour appliquer cette synchronisation :
+
+  ```swift
+  let refreshedPolicy = try await client.fetchPolicy(
+      baseURL: apiBaseURL,
+      propertyId: propertyId,
+      channel: "ios"
+  )
+  consentManager.updatePolicy(refreshedPolicy)
+  ```
+
+- `AmanConsentSheet` affiche les finalités de canal `ios`, les informations disponibles dans l’avis et les actions accepter, refuser ou personnaliser. Son contenu défile pour garder les actions accessibles lorsque la politique comporte de nombreuses finalités ou une notice détaillée.
+- Si la politique ne peut pas être chargée et qu’aucune version en cache n’est disponible, l’application doit garder les SDK optionnels arrêtés et prévoir un parcours de reprise adapté.
+
+## Points à valider dans l’application hôte
+
+- Les URL de service distantes doivent utiliser HTTPS. HTTP est accepté seulement pour les hôtes loopback de développement.
+- Raccorder le choix de retrait à la capacité d’arrêt de chaque fournisseur ; un SDK tiers peut ne pas offrir de désinitialisation.
+- L’interface intégrée ici ne remplace pas une demande système Apple. Évaluer séparément les règles App Tracking Transparency selon les usages de l’application.
+- Vérifier les textes FR/AR avec des traducteurs et utilisateurs, le RTL, VoiceOver, Dynamic Type, le mode hors ligne et les versions iOS prises en charge.
+- Examiner le Privacy Manifest de la bibliothèque avec celui de l’app, ses autres SDK, les exigences de déclaration Apple, le modèle de données et la politique de confidentialité du client.
+- Ne pas activer une intégration de production avant revue sécurité et juridique, accord d’hébergement/transfert, contrat et publication signée du package.
+
+## État de distribution
+
+Ce dépôt ne produit pas encore de release distribuable. Il reste à compiler dans Xcode, intégrer à une application d’exemple, faire les revues de code et sécurité, établir la signature et la provenance des builds, publier dans le dépôt d’artefacts choisi par le client et maintenir une matrice de compatibilité. La remontée centralisée est une option appelée par l’application et reste soumise au cadrage du client.
