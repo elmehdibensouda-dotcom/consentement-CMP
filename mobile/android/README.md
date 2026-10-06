@@ -4,7 +4,7 @@ This Gradle project contains the `aman-consent` Android library module and a sma
 
 ## Build locally
 
-Requirements: JDK 17, Android SDK platform 37, and Gradle 9.6. This repository does not include the Gradle wrapper JAR or launcher scripts, so use an installed Gradle or configure Android Studio with those tools.
+Requirements: JDK 17, Android SDK platform 36, and Gradle 9.6. This repository does not include the Gradle wrapper JAR or launcher scripts, so use an installed Gradle or configure Android Studio with those tools.
 
 ```sh
 gradle :aman-consent:assembleRelease
