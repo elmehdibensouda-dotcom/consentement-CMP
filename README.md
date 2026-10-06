@@ -6,6 +6,18 @@ ALAMANE est un prototype B2B destiné aux banques et grandes entreprises marocai
 
 Pré-requis : Python 3.11+.
 
+Sur macOS, lance le parcours de démonstration complet avec une seule commande :
+
+```sh
+bash scripts/start-demo.sh
+```
+
+Le script utilise une base SQLite locale distincte dans `.local/`, crée le premier compte si nécessaire en demandant l’adresse et un mot de passe saisi sans affichage, prépare l’organisation et la propriété fictives, démarre l’API et le site, puis ouvre la console. Les deux serveurs restent dans le terminal jusqu’à `Ctrl+C`. Si plusieurs comptes sont présents, le script demande lequel détiendra l’organisation fictive. Aucune donnée réelle de banque ou de visiteur ne doit être saisie.
+
+### Démarrage manuel
+
+Pour lancer chaque composant séparément :
+
 1. Installer l’environnement et les dépendances depuis la racine :
 
    ```sh
