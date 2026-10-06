@@ -36,6 +36,7 @@ from .database import (
     Connection,
     DatabaseError,
     IntegrityError,
+    close_database_pool,
     connect_database,
     database_connection,
     database_transaction,
@@ -521,15 +522,18 @@ def validate_policy(body: Dict[str, Any], property_id: str, channel: str) -> dic
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ensure_scrypt_available()
-    with connection() as conn:
-        conn.require_current_schema()
-    sweeper = asyncio.create_task(purge_expired_consent_events())
     try:
-        yield
+        with connection() as conn:
+            conn.require_current_schema()
+        sweeper = asyncio.create_task(purge_expired_consent_events())
+        try:
+            yield
+        finally:
+            sweeper.cancel()
+            with suppress(asyncio.CancelledError):
+                await sweeper
     finally:
-        sweeper.cancel()
-        with suppress(asyncio.CancelledError):
-            await sweeper
+        close_database_pool()
 
 
 async def purge_expired_consent_events() -> None:
@@ -1368,6 +1372,7 @@ def create_policy_draft(org_id: str, property_id: str, body: PolicyBody, request
         prop = conn.execute("SELECT id,channel FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
+        conn.lock_property(property_id)
         policy = validate_policy(body.policy, property_id, prop["channel"])
         if body.expectedRevision is not None:
             raise HTTPException(status_code=422, detail="expectedRevision is only valid when updating a draft")
@@ -1412,6 +1417,14 @@ def update_policy_draft(org_id: str, policy_id: str, body: PolicyBody, request: 
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor"})
+        row = conn.execute(
+            "SELECT p.id,p.property_id,p.version,p.revision,p.status,pr.channel FROM policies p "
+            "JOIN properties pr ON pr.id=p.property_id WHERE p.id=? AND pr.org_id=?",
+            (policy_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        conn.lock_property(row["property_id"])
         row = conn.execute(
             "SELECT p.id,p.property_id,p.version,p.revision,p.status,pr.channel FROM policies p "
             "JOIN properties pr ON pr.id=p.property_id WHERE p.id=? AND pr.org_id=?",
@@ -1470,6 +1483,15 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
+        row = conn.execute(
+            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,o.require_two_person_publish "
+            "FROM policies p JOIN properties pr ON pr.id=p.property_id "
+            "JOIN organizations o ON o.id=pr.org_id WHERE p.id=? AND pr.org_id=?",
+            (policy_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        conn.lock_property(row["property_id"])
         row = conn.execute(
             "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,o.require_two_person_publish "
             "FROM policies p JOIN properties pr ON pr.id=p.property_id "

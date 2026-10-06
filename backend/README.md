@@ -19,6 +19,8 @@ Les changements de schéma SQLite sont versionnés dans `backend/aman_api/migrat
 
 Le stockage de développement est SQLite dans `~/.alamane/aman-dev.sqlite3` par défaut ; une nouvelle base est créée avec le mode `0600` et son répertoire dédié en `0700`. Le chemin peut être remplacé par `AMAN_DATABASE_PATH`, à condition de choisir un répertoire privé. Les permissions des bases existantes ne sont pas modifiées automatiquement : vérifiez-les et protégez également les fichiers WAL/SHM déjà présents. La doc interactive est à <http://127.0.0.1:8001/docs>.
 
+Pour une préproduction isolée, `AMAN_DATABASE_URL` sélectionne l’adaptateur PostgreSQL et un pool borné par `AMAN_DB_POOL_MAX_SIZE` (1 à 50, 10 par défaut et par processus API). Fournir l’URL depuis le gestionnaire de secrets de l’environnement, jamais depuis le dépôt. Toute connexion distante exige `sslmode=verify-full`; les hôtes loopback sont acceptés pour un PostgreSQL local. `python backend/migrate_db.py` crée et versionne le schéma PostgreSQL avec des horodatages 64 bits. L’outil et l’API utilisent encore la même URL de connexion ; il faut séparer les rôles opérateur et applicatif avant un pilote avec données client. Cette voie n’a pas encore été éprouvée contre le service géré d’un acheteur; elle ne lève pas le refus du mode `production`.
+
 La démo web utilise `http://localhost:8000`; l’API autorise cette origine pour les appels avec cookies. `admin.html` lit l’URL API depuis `<meta name="aman-api-base-url" content="https://api.exemple.ma">`; en l’absence de ce réglage, elle utilise le port 8001 en local et la même origine en hébergement distant. `AMAN_CORS_ORIGINS` doit contenir les origines exactes des consoles qui utilisent les cookies. Chaque origine de propriété Web est vérifiée à l’exécution et autorise seulement les routes publiques de lecture de politique et d’envoi d’événement de consentement, sans cookies. Une origine saisie dans Aman est une association de configuration, pas une preuve de contrôle du domaine. Le compte initial est créé par commande locale, pas par une route d’inscription publique.
 
 ## Fonctionnalités du socle
@@ -95,7 +97,7 @@ La console `admin.html` utilise ces routes et permet de créer des organisations
 
 ## Limites connues à traiter avant une POC acheteur
 
-- SQLite local uniquement, migrations versionnées mais sans chiffrement de base ni modèle de haute disponibilité.
+- SQLite local ou adaptateur PostgreSQL de préproduction, migrations versionnées mais sans chiffrement de base configuré par Aman ni modèle de haute disponibilité.
 - Pas de limitation de débit partagée ou opérée en production, MFA, SSO, récupération de compte, alertes, service d’e-mail, supervision ni procédure d’incident.
 - Pas de rotation centralisée de secrets ni d’intégration à un coffre de secrets.
 - La console entreprise, le SDK web et les clients SDK natifs savent lire la politique publique. Android a un module Gradle et une application exemple ; iOS a un package Swift ; React Native a un package TypeScript source. Aucun binaire ou package mobile n’a encore été publié, et les intégrations restent à compiler et valider sur les versions clientes visées.

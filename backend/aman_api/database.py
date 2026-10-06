@@ -6,6 +6,7 @@ import logging
 import os
 import sqlite3
 import stat
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator, Protocol, Sequence
@@ -28,6 +29,8 @@ class Connection(Protocol):
     def commit(self) -> None: ...
     def rollback(self) -> None: ...
     def close(self) -> None: ...
+    def begin_write_transaction(self) -> None: ...
+    def lock_property(self, property_id: str) -> None: ...
     def initialize_schema(self) -> int: ...
     def require_current_schema(self) -> None: ...
 
@@ -60,6 +63,13 @@ class SQLiteConnection:
 
     def close(self) -> None:
         self.native.close()
+
+    def begin_write_transaction(self) -> None:
+        self.execute("BEGIN IMMEDIATE")
+
+    def lock_property(self, property_id: str) -> None:
+        # BEGIN IMMEDIATE already serializes SQLite writers.
+        return None
 
     def initialize_schema(self) -> int:
         try:
@@ -98,9 +108,19 @@ def connect_sqlite(database_path: Path, logger: logging.Logger) -> SQLiteConnect
     return SQLiteConnection(native)
 
 
+def connect_database(database_path: Path, logger: logging.Logger) -> Connection:
+    """Open the configured database through the selected persistence adapter."""
+    database_url = os.environ.get("AMAN_DATABASE_URL")
+    if database_url:
+        from .postgres import connect_postgres
+
+        return connect_postgres(database_url)
+    return connect_sqlite(database_path, logger)
+
+
 @contextmanager
-def sqlite_connection(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
-    conn = connect_sqlite(database_path, logger)
+def database_connection(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
+    conn = connect_database(database_path, logger)
     try:
         yield conn
     finally:
@@ -108,10 +128,10 @@ def sqlite_connection(database_path: Path, logger: logging.Logger) -> Generator[
 
 
 @contextmanager
-def sqlite_transaction(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
-    conn = connect_sqlite(database_path, logger)
+def database_transaction(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
+    conn = connect_database(database_path, logger)
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        conn.begin_write_transaction()
         yield conn
         conn.commit()
     except Exception:
@@ -121,21 +141,12 @@ def sqlite_transaction(database_path: Path, logger: logging.Logger) -> Generator
         conn.close()
 
 
-def connect_database(database_path: Path, logger: logging.Logger) -> Connection:
-    """Open the configured database through the current persistence adapter."""
-    return connect_sqlite(database_path, logger)
+def close_database_pool() -> None:
+    """Close process-wide pools during application shutdown, if configured."""
+    if os.environ.get("AMAN_DATABASE_URL"):
+        from .postgres import close_postgres_pool
 
-
-@contextmanager
-def database_connection(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
-    with sqlite_connection(database_path, logger) as conn:
-        yield conn
-
-
-@contextmanager
-def database_transaction(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
-    with sqlite_transaction(database_path, logger) as conn:
-        yield conn
+        close_postgres_pool()
 
 
 def _migration_checksum(migration) -> str:

@@ -1,0 +1,238 @@
+"""PostgreSQL preproduction adapter with bounded pooling and TLS checks."""
+from __future__ import annotations
+
+import hashlib
+import atexit
+import os
+from pathlib import Path
+from threading import Lock
+from typing import Any, Sequence
+
+from psycopg import Connection as PsycopgConnection
+from psycopg import Error as PsycopgError
+from psycopg import IntegrityError as PsycopgIntegrityError
+from psycopg.conninfo import conninfo_to_dict
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
+
+from .database import Connection, DatabaseError, IntegrityError
+from .postgres_migrations import NAME, VERSION, upgrade
+
+
+_POOL_LOCK = Lock()
+_POOL: ConnectionPool | None = None
+_POOL_CONNINFO: str | None = None
+
+
+def _validate_tls(conninfo: str) -> None:
+    try:
+        options = conninfo_to_dict(conninfo)
+    except Exception:
+        raise RuntimeError("AMAN_DATABASE_URL is not a valid PostgreSQL connection string") from None
+    hosts = (options.get("host") or "localhost").split(",")
+    local_hosts = {"localhost", "127.0.0.1", "::1", ""}
+    is_remote = any(host.strip().strip("[]").lower() not in local_hosts for host in hosts)
+    sslmode = options.get("sslmode", "prefer")
+    if is_remote and sslmode != "verify-full":
+        raise RuntimeError("Remote PostgreSQL requires sslmode=verify-full in AMAN_DATABASE_URL")
+
+
+def _pool_size() -> int:
+    raw_value = os.environ.get("AMAN_DB_POOL_MAX_SIZE", "10")
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError("AMAN_DB_POOL_MAX_SIZE must be an integer between 1 and 50") from error
+    if not 1 <= value <= 50:
+        raise RuntimeError("AMAN_DB_POOL_MAX_SIZE must be an integer between 1 and 50")
+    return value
+
+
+def _get_pool(conninfo: str) -> ConnectionPool:
+    global _POOL, _POOL_CONNINFO
+    with _POOL_LOCK:
+        if _POOL is not None and _POOL_CONNINFO == conninfo and not _POOL.closed:
+            return _POOL
+        if _POOL is not None and not _POOL.closed:
+            _POOL.close()
+        size = _pool_size()
+        pool = ConnectionPool(
+            conninfo=conninfo,
+            min_size=1,
+            max_size=size,
+            timeout=10,
+            kwargs={"autocommit": True, "row_factory": dict_row},
+            open=False,
+            name="aman-api",
+        )
+        try:
+            pool.open(wait=True, timeout=15)
+        except Exception:
+            pool.close()
+            raise DatabaseError("Could not establish the configured PostgreSQL connection") from None
+        _POOL = pool
+        _POOL_CONNINFO = conninfo
+        return pool
+
+
+class PostgreSQLConnection:
+    """Adapt psycopg to the same connection contract as the SQLite adapter."""
+
+    def __init__(self, pool: ConnectionPool, native: PsycopgConnection):
+        self.pool = pool
+        self.native = native
+
+    def execute(self, statement: str, parameters: Sequence[Any] = ()):
+        try:
+            return self.native.execute(_qmark_to_psycopg(statement), parameters)
+        except PsycopgIntegrityError as error:
+            raise IntegrityError(str(error)) from error
+        except PsycopgError as error:
+            raise DatabaseError(str(error)) from error
+
+    def commit(self) -> None:
+        try:
+            self.native.commit()
+        except PsycopgError as error:
+            raise DatabaseError(str(error)) from error
+
+    def rollback(self) -> None:
+        try:
+            self.native.rollback()
+        except PsycopgError as error:
+            raise DatabaseError(str(error)) from error
+
+    def close(self) -> None:
+        self.pool.putconn(self.native)
+
+    def begin_write_transaction(self) -> None:
+        self.execute("BEGIN")
+
+    def lock_property(self, property_id: str) -> None:
+        self.execute("SELECT id FROM properties WHERE id=? FOR UPDATE", (property_id,))
+
+    def initialize_schema(self) -> int:
+        self.begin_write_transaction()
+        try:
+            self.execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                "version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL)"
+            )
+            self.execute("SELECT pg_advisory_xact_lock(741026061)")
+            rows = self.execute("SELECT version,name,checksum FROM schema_migrations ORDER BY version").fetchall()
+            applied = {row["version"]: row for row in rows}
+            if any(version != VERSION for version in applied):
+                raise RuntimeError("Database schema is newer than this Aman API version")
+            checksum = _migration_checksum()
+            previous = applied.get(VERSION)
+            if previous:
+                if previous["name"] != NAME or previous["checksum"] != checksum:
+                    raise RuntimeError(f"Applied PostgreSQL migration {VERSION} was changed")
+                self.commit()
+                return VERSION
+
+            upgrade(self)
+            self.execute(
+                "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES(?,?,?,?)",
+                (VERSION, NAME, checksum, _now()),
+            )
+            self.commit()
+            return VERSION
+        except Exception:
+            self.rollback()
+            raise
+
+    def require_current_schema(self) -> None:
+        try:
+            rows = self.execute("SELECT version,name,checksum FROM schema_migrations ORDER BY version").fetchall()
+        except DatabaseError as error:
+            raise RuntimeError("Aman database schema is not initialized; run `python backend/migrate_db.py` first") from error
+        if len(rows) != 1 or rows[0]["version"] != VERSION:
+            raise RuntimeError("Aman database schema is behind; run `python backend/migrate_db.py` first")
+        row = rows[0]
+        if row["name"] != NAME or row["checksum"] != _migration_checksum():
+            raise RuntimeError(f"Applied PostgreSQL migration {VERSION} does not match this API version")
+
+
+def connect_postgres(conninfo: str) -> Connection:
+    _validate_tls(conninfo)
+    pool = _get_pool(conninfo)
+    try:
+        return PostgreSQLConnection(pool, pool.getconn(timeout=10))
+    except Exception:
+        raise DatabaseError("Could not obtain a PostgreSQL connection from the configured pool") from None
+
+
+def close_postgres_pool() -> None:
+    global _POOL, _POOL_CONNINFO
+    with _POOL_LOCK:
+        if _POOL is not None and not _POOL.closed:
+            _POOL.close()
+        _POOL = None
+        _POOL_CONNINFO = None
+
+
+def _migration_checksum() -> str:
+    from . import postgres_migrations
+    from .migrations import v0001_initial_schema
+
+    digest = hashlib.sha256()
+    digest.update(Path(postgres_migrations.__file__).read_bytes())
+    digest.update(Path(v0001_initial_schema.__file__).read_bytes())
+    return digest.hexdigest()
+
+
+def _now() -> int:
+    import time
+
+    return int(time.time())
+
+
+def _qmark_to_psycopg(statement: str) -> str:
+    """Translate DB-API qmark binds without rewriting quoted text or comments."""
+    output: list[str] = []
+    index = 0
+    quote: str | None = None
+    line_comment = False
+    block_comment = False
+    while index < len(statement):
+        char = statement[index]
+        following = statement[index + 1] if index + 1 < len(statement) else ""
+        if line_comment:
+            output.append(char)
+            if char == "\n":
+                line_comment = False
+        elif block_comment:
+            output.append(char)
+            if char == "*" and following == "/":
+                output.append(following)
+                index += 1
+                block_comment = False
+        elif quote:
+            output.append(char)
+            if char == quote:
+                if following == quote:
+                    output.append(following)
+                    index += 1
+                else:
+                    quote = None
+        elif char == "'" or char == '"':
+            quote = char
+            output.append(char)
+        elif char == "-" and following == "-":
+            output.extend((char, following))
+            index += 1
+            line_comment = True
+        elif char == "/" and following == "*":
+            output.extend((char, following))
+            index += 1
+            block_comment = True
+        elif char == "?":
+            output.append("%s")
+        else:
+            output.append(char)
+        index += 1
+    return "".join(output)
+
+
+atexit.register(close_postgres_pool)

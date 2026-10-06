@@ -17,6 +17,7 @@ Le serveur continuera de refuser `AMAN_ENVIRONMENT=production` jusqu’à ce que
 - Les données sont réparties entre utilisateurs, organisations, appartenances, invitations, transferts de propriété, propriétés, politiques, sessions, événements d’audit, événements de consentement et rapports d’inventaire.
 - Plusieurs invariants restent à traiter avant PostgreSQL : version suivante calculée par `MAX(version)+1`, unicité d’une politique publiée par propriété non garantie par une contrainte dédiée, contrôles multi-organisation au niveau applicatif et limite de débit en mémoire du processus.
 - Le mode production déclenche toujours une erreur explicite au chargement du module. L’API n’est pas déployable en banque dans son état courant.
+- Un adaptateur PostgreSQL de préproduction est maintenant sélectionné par `AMAN_DATABASE_URL`, avec pool borné, exigence `sslmode=verify-full` pour les hôtes distants, migration initiale et index unique de politique publiée. Aucun service PostgreSQL externe n’a encore été configuré ou validé.
 
 ## Tranches de migration
 
@@ -32,9 +33,9 @@ Les migrations SQLite locales ordonnées et reproductibles sont ajoutées avec u
 
 **Critères de sortie :** migration validée d’une base vide et de chaque schéma local supporté vers la dernière version; échec sûr en cas de version inconnue ou migration partielle; restauration documentée et vérifiée.
 
-### 3. Ajouter PostgreSQL pour l’environnement de préproduction
+### 3. Ajouter PostgreSQL pour l’environnement de préproduction — adaptateur initial, validation en cours
 
-Ajouter un pool de connexions borné, TLS vérifié pour les connexions distantes et une configuration injectée depuis un gestionnaire de secrets. Séparer l’identité d’exécution de l’identité de migration. Ne jamais journaliser l’URL de connexion. Garder SQLite comme valeur par défaut en développement.
+Un pool de connexions borné, TLS `verify-full` pour les connexions distantes, migration initiale avec horodatages 64 bits, verrouillage de ligne de propriété et index unique des publications sont ajoutés. `AMAN_DATABASE_URL` doit venir d’un gestionnaire de secrets à déployer ; aucun secret ni fournisseur n’est choisi dans le dépôt. L’outil de migration et l’API partagent encore la même identité. Séparer les identités, vérifier toutes les opérations sur un PostgreSQL réel, définir la stratégie d’allocation concurrente des versions de politiques et poursuivre les garanties des transferts/invitations. Garder SQLite comme valeur par défaut en développement.
 
 Pour PostgreSQL, remplacer le calcul concurrent `MAX(version)+1` par une allocation transactionnelle. Garantir l’unicité d’une politique publiée par propriété en base, et utiliser les niveaux de verrouillage requis pour la publication, le transfert de propriété et l’acceptation d’invitations. Vérifier que les limites de taille, le nettoyage des événements et les exports gardent le même comportement.
 
