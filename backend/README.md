@@ -10,9 +10,12 @@ Depuis la racine du dépôt :
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r backend/requirements.txt
+python backend/migrate_db.py
 python backend/create_admin.py
 uvicorn aman_api.main:app --app-dir backend --host 127.0.0.1 --port 8001 --no-access-log
 ```
+
+Les changements de schéma SQLite sont versionnés dans `backend/aman_api/migrations/`. Exécuter `python backend/migrate_db.py` après chaque mise à jour de l’API et avant de démarrer le serveur. Le démarrage refuse une base non initialisée, en retard ou dont le schéma ne correspond pas au code. Les scripts locaux de création d’admin et de démonstration initialisent aussi les migrations pour faciliter le premier lancement.
 
 Le stockage de développement est SQLite dans `~/.alamane/aman-dev.sqlite3` par défaut ; une nouvelle base est créée avec le mode `0600` et son répertoire dédié en `0700`. Le chemin peut être remplacé par `AMAN_DATABASE_PATH`, à condition de choisir un répertoire privé. Les permissions des bases existantes ne sont pas modifiées automatiquement : vérifiez-les et protégez également les fichiers WAL/SHM déjà présents. La doc interactive est à <http://127.0.0.1:8001/docs>.
 
@@ -92,7 +95,7 @@ La console `admin.html` utilise ces routes et permet de créer des organisations
 
 ## Limites connues à traiter avant une POC acheteur
 
-- SQLite local uniquement, sans migrations, chiffrement de base ou modèle de haute disponibilité.
+- SQLite local uniquement, migrations versionnées mais sans chiffrement de base ni modèle de haute disponibilité.
 - Pas de limitation de débit partagée ou opérée en production, MFA, SSO, récupération de compte, alertes, service d’e-mail, supervision ni procédure d’incident.
 - Pas de rotation centralisée de secrets ni d’intégration à un coffre de secrets.
 - La console entreprise, le SDK web et les clients SDK natifs savent lire la politique publique. Android a un module Gradle et une application exemple ; iOS a un package Swift ; React Native a un package TypeScript source. Aucun binaire ou package mobile n’a encore été publié, et les intégrations restent à compiler et valider sur les versions clientes visées.

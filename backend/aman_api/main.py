@@ -13,7 +13,6 @@ import json
 import os
 import secrets
 import sqlite3
-import stat
 import time
 import csv
 import io
@@ -33,6 +32,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, constr
+
+from .database import (
+    apply_sqlite_migrations,
+    connect_sqlite,
+    require_current_sqlite_schema,
+    sqlite_connection,
+    sqlite_transaction,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -157,184 +164,26 @@ def utc_now() -> int:
 
 
 def db_connect() -> sqlite3.Connection:
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    parent_mode = DATABASE_PATH.parent.stat().st_mode
-    if parent_mode & (stat.S_IWGRP | stat.S_IWOTH) and not parent_mode & stat.S_ISVTX:
-        raise PermissionError("SQLite databases must be stored in a private directory or a sticky shared directory")
-    try:
-        database_fd = os.open(DATABASE_PATH, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
-    except FileExistsError:
-        # Preserve existing databases; permissions on legacy files are reported
-        # to the operator instead of being changed implicitly.
-        existing = DATABASE_PATH.lstat()
-        if not stat.S_ISREG(existing.st_mode):
-            raise PermissionError("The configured SQLite database must be a regular file")
-        if hasattr(os, "getuid") and existing.st_uid != os.getuid():
-            raise PermissionError("The configured SQLite database must be owned by the current user")
-        if existing.st_mode & (stat.S_IRGRP | stat.S_IROTH):
-            LOGGER.warning("An existing SQLite database is group/world-readable; review its mode and WAL/SHM files")
-    else:
-        os.close(database_fd)
-    conn = sqlite3.connect(DATABASE_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return connect_sqlite(DATABASE_PATH, LOGGER)
 
 
 @contextmanager
 def connection() -> Generator[sqlite3.Connection, None, None]:
-    conn = db_connect()
-    try:
+    with sqlite_connection(DATABASE_PATH, LOGGER) as conn:
         yield conn
-    finally:
-        conn.close()
 
 
 @contextmanager
 def transaction() -> Generator[sqlite3.Connection, None, None]:
-    conn = db_connect()
-    try:
-        conn.execute("BEGIN IMMEDIATE")
+    with sqlite_transaction(DATABASE_PATH, LOGGER) as conn:
         yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
 
 
 def init_db() -> None:
     ensure_scrypt_available()
     with connection() as conn:
         conn.execute("PRAGMA journal_mode = WAL")
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-              id TEXT PRIMARY KEY,
-              email TEXT NOT NULL UNIQUE,
-              password_hash TEXT NOT NULL,
-              created_at INTEGER NOT NULL,
-              disabled INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS organizations (
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              require_two_person_publish INTEGER NOT NULL DEFAULT 1,
-              created_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS memberships (
-              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              role TEXT NOT NULL CHECK (role IN ('owner','admin','editor','viewer')),
-              created_at INTEGER NOT NULL,
-              PRIMARY KEY (org_id, user_id)
-            );
-            CREATE TABLE IF NOT EXISTS invitations (
-              id TEXT PRIMARY KEY,
-              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-              email TEXT NOT NULL,
-              role TEXT NOT NULL CHECK (role IN ('admin','editor','viewer')),
-              token_hash TEXT NOT NULL UNIQUE,
-              invited_by TEXT NOT NULL REFERENCES users(id),
-              expires_at INTEGER NOT NULL,
-              accepted_at INTEGER
-            );
-            CREATE TABLE IF NOT EXISTS ownership_transfers (
-              id TEXT PRIMARY KEY,
-              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-              current_owner_id TEXT NOT NULL REFERENCES users(id),
-              proposed_owner_id TEXT NOT NULL REFERENCES users(id),
-              token_hash TEXT NOT NULL UNIQUE,
-              created_at INTEGER NOT NULL,
-              expires_at INTEGER NOT NULL,
-              accepted_at INTEGER,
-              revoked_at INTEGER
-            );
-            CREATE TABLE IF NOT EXISTS properties (
-              id TEXT PRIMARY KEY,
-              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-              name TEXT NOT NULL,
-              channel TEXT NOT NULL CHECK (channel IN ('web','ios','android')),
-              environment TEXT NOT NULL DEFAULT 'development' CHECK (environment IN ('development','staging','production')),
-              origin TEXT,
-              created_at INTEGER NOT NULL,
-              UNIQUE (org_id, name, channel)
-            );
-            CREATE TABLE IF NOT EXISTS policies (
-              id TEXT PRIMARY KEY,
-              property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
-              version INTEGER NOT NULL,
-              revision INTEGER NOT NULL DEFAULT 1,
-              last_edited_by TEXT REFERENCES users(id),
-              status TEXT NOT NULL CHECK (status IN ('draft','published','retired')),
-              body TEXT NOT NULL,
-              created_by TEXT NOT NULL REFERENCES users(id),
-              created_at INTEGER NOT NULL,
-              published_by TEXT REFERENCES users(id),
-              published_at INTEGER,
-              UNIQUE (property_id, version)
-            );
-            CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
-            CREATE INDEX IF NOT EXISTS idx_properties_org ON properties(org_id);
-            CREATE INDEX IF NOT EXISTS idx_policies_property_status ON policies(property_id, status);
-            CREATE TABLE IF NOT EXISTS sessions (
-              token_hash TEXT PRIMARY KEY,
-              csrf_hash TEXT NOT NULL,
-              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              expires_at INTEGER NOT NULL,
-              created_at INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-            CREATE TABLE IF NOT EXISTS audit_events (
-              id TEXT PRIMARY KEY,
-              org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-              actor_user_id TEXT NOT NULL REFERENCES users(id),
-              action TEXT NOT NULL,
-              resource_type TEXT NOT NULL,
-              resource_id TEXT NOT NULL,
-              occurred_at INTEGER NOT NULL,
-              details TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE INDEX IF NOT EXISTS idx_audit_org_time ON audit_events(org_id, occurred_at DESC);
-            CREATE TABLE IF NOT EXISTS consent_events (
-              event_id TEXT PRIMARY KEY,
-              property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
-              policy_version TEXT NOT NULL,
-              channel TEXT NOT NULL CHECK (channel IN ('web','ios','android')),
-              action TEXT NOT NULL CHECK (action IN ('accept_all','reject_all','custom')),
-              purposes TEXT NOT NULL,
-              recorded_at INTEGER NOT NULL,
-              expires_at INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_consent_events_property_time ON consent_events(property_id, recorded_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_consent_events_expiry ON consent_events(expires_at);
-            CREATE TABLE IF NOT EXISTS scan_reports (
-              id TEXT PRIMARY KEY,
-              property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
-              imported_by TEXT NOT NULL REFERENCES users(id),
-              scanned_at INTEGER NOT NULL,
-              imported_at INTEGER NOT NULL,
-              page_origin TEXT NOT NULL,
-              resource_count INTEGER NOT NULL,
-              cookie_count INTEGER NOT NULL,
-              report_json TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_scan_reports_property_time ON scan_reports(property_id, imported_at DESC);
-            """
-        )
-        policy_columns = {row["name"] for row in conn.execute("PRAGMA table_info(policies)").fetchall()}
-        property_columns = {row["name"] for row in conn.execute("PRAGMA table_info(properties)").fetchall()}
-        if "origin" not in property_columns:
-            conn.execute("ALTER TABLE properties ADD COLUMN origin TEXT")
-        if "environment" not in property_columns:
-            conn.execute("ALTER TABLE properties ADD COLUMN environment TEXT NOT NULL DEFAULT 'development' "
-                         "CHECK (environment IN ('development','staging','production'))")
-        if "revision" not in policy_columns:
-            conn.execute("ALTER TABLE policies ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
-        if "last_edited_by" not in policy_columns:
-            conn.execute("ALTER TABLE policies ADD COLUMN last_edited_by TEXT REFERENCES users(id)")
-        conn.execute("UPDATE policies SET last_edited_by=created_by WHERE last_edited_by IS NULL")
+        apply_sqlite_migrations(conn)
         conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
         conn.commit()
 
@@ -672,7 +521,8 @@ def validate_policy(body: Dict[str, Any], property_id: str, channel: str) -> dic
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_db()
+    with connection() as conn:
+        require_current_sqlite_schema(conn)
     sweeper = asyncio.create_task(purge_expired_consent_events())
     try:
         yield
