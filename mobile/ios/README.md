@@ -4,7 +4,7 @@ Le package Swift expose un client de politique, un gestionnaire de choix local e
 
 ## Ajouter le package
 
-Dans Xcode, utiliser **File → Add Package Dependencies…** puis indiquer l’URL du dépôt ou le chemin local du dossier `mobile/ios`. Sélectionner le produit `AmanConsent` dans la cible de l’application. Le manifeste inclut `PrivacyInfo.xcprivacy` comme ressource du package ; l’équipe intégratrice doit examiner les exigences de manifeste Apple pour l’application complète et tous ses SDK.
+Dans Xcode, utiliser **File → Add Package Dependencies…** puis indiquer l’URL Git du dépôt privé ALAMANE (l’accès au dépôt est requis), ou ajouter le chemin local du dossier `mobile/ios` après avoir cloné le dépôt. Sélectionner le produit `AmanConsent` dans la cible de l’application. Le manifeste à la racine expose le package iOS pour l’URL distante ; le manifeste `mobile/ios/Package.swift` reste disponible pour une intégration locale. Les deux incluent `PrivacyInfo.xcprivacy` comme ressource du package. L’équipe intégratrice doit examiner les exigences de manifeste Apple pour l’application complète et tous ses SDK. Pour un pilote, épingler une révision examinée ; une release versionnée et signée reste à établir.
 
 ## Charger une politique et afficher les choix
 

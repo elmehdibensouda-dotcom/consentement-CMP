@@ -86,4 +86,4 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7.0.1
       - name: Compile for the iOS simulator
-        run: swift build --package-path mobile/ios --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios16.0-simulator
+        run: swift build --package-path . --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios16.0-simulator
