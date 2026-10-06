@@ -81,7 +81,7 @@ jobs:
           {
             echo "source_commit=$SOURCE_COMMIT"
             echo "workflow_run=$WORKFLOW_RUN_URL"
-            echo "artifact_type=unsigned preview; not a release"
+            echo "artifact_type=preview; APK uses the Android debug key; not a production release"
           } > "$bundle/BUILD-INFO.txt"
           cd "$bundle"
           sha256sum aman-consent-release.aar sample-debug.apk aman-consent-react-native-0.1.0.tgz > SHA256SUMS
