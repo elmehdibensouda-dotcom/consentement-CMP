@@ -1,4 +1,4 @@
-# Aman — dossier de sécurité fournisseur (document de travail)
+# ALAMANE — dossier de sécurité fournisseur (document de travail)
 
 **État au 5 octobre 2026 · Usage interne pour préparer les échanges de qualification**
 
@@ -6,7 +6,7 @@ Ce document décrit l’état du prototype dans ce dépôt. Ce n’est ni une at
 
 ## Synthèse honnête
 
-Aman démontre localement une console multi-organisation, le contrôle d’accès par rôle, des politiques versionnées, une validation de publication à deux personnes, des SDK de démarrage et un journal d’administration. L’API utilise SQLite et le projet bloque explicitement son démarrage avec `AMAN_ENVIRONMENT=production`. Cette version n’est pas apte à héberger une preuve de concept avec des données ou systèmes réels d’un établissement.
+ALAMANE démontre localement une console multi-organisation, le contrôle d’accès par rôle, des politiques versionnées, une validation de publication à deux personnes, des SDK de démarrage et un journal d’administration. L’API utilise SQLite et le projet bloque explicitement son démarrage avec `AMAN_ENVIRONMENT=production`. Cette version n’est pas apte à héberger une preuve de concept avec des données ou systèmes réels d’un établissement.
 
 | Domaine évalué | État démontré dans le dépôt | Ce qu’un acheteur devra encore obtenir |
 | --- | --- | --- |

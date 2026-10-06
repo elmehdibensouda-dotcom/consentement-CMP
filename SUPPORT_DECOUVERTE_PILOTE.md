@@ -1,4 +1,4 @@
-# Aman — support de découverte et de démonstration
+# ALAMANE — support de découverte et de démonstration
 
 **Version de travail · 5 octobre 2026**  
 **Cible initiale :** banques et grandes entreprises au Maroc  
@@ -6,7 +6,7 @@
 
 ## Présentation en 30 secondes
 
-Aman est un projet de plateforme qui vise à aider les organisations à gouverner les préférences de consentement sur plusieurs sites et applications. Une console centralise les propriétés et les politiques versionnées ; des composants Web et mobiles appliquent les choix configurés par l’organisation. Nous cherchons à valider avec des équipes digitales, juridiques et sécurité les besoins d’intégration, d’approbation et de preuve avant de cadrer un pilote.
+ALAMANE est un projet de plateforme qui vise à aider les organisations à gouverner les préférences de consentement sur plusieurs sites et applications. Une console centralise les propriétés et les politiques versionnées ; des composants Web et mobiles appliquent les choix configurés par l’organisation. Nous cherchons à valider avec des équipes digitales, juridiques et sécurité les besoins d’intégration, d’approbation et de preuve avant de cadrer un pilote.
 
 ## À qui parler
 
@@ -64,12 +64,12 @@ Ne pas démarrer sur une application de production ou avec des données personne
 | Élément | État actuel | Formulation à employer |
 | --- | --- | --- |
 | Console et API | Tranche locale avec organisations, rôles, transfert de propriété accepté par le destinataire, propriétés, politiques, publication à deux personnes, journal d’administration et révocation auditée des invitations | « Nous pouvons démontrer le parcours sur environnement local. » |
-| Tableau de bord | Comptes de configuration réels en session ; agrégats Web disponibles seulement si l’intégrateur active la transmission ; chiffres intégrés de scan simulés ; imports JSON locaux limités aux propriétés Web et aux 20 derniers rapports | « Les comptes viennent de la configuration Aman. La collecte des décisions est facultative. Le rapport d’inventaire est produit localement puis importé à la main ; l’équipe doit vérifier l’hôte et classer les résultats. » |
+| Tableau de bord | Comptes de configuration réels en session ; agrégats Web disponibles seulement si l’intégrateur active la transmission ; chiffres intégrés de scan simulés ; imports JSON locaux limités aux propriétés Web et aux 20 derniers rapports | « Les comptes viennent de la configuration ALAMANE. La collecte des décisions est facultative. Le rapport d’inventaire est produit localement puis importé à la main ; l’équipe doit vérifier l’hôte et classer les résultats. » |
 | SDK Web | Source de démonstration et tags fictifs | « Le flux Web se démontre sur nos pages factices ; l’intégration client reste à valider. » |
 | SDK iOS et Android | Packages source non compilés ni distribués dans un environnement acheteur | « Les bases natives sont en préparation ; elles ne sont pas encore validées pour intégration. » |
 | Événements de choix centralisés | Agrégats et export CSV des événements encore retenus après activation explicite Web ou appel natif ; aucune preuve d’identité, d’affichage ou de consentement juridique | « Nous pouvons montrer des compteurs client-déclarés après activation explicite. Leur modèle de preuve doit être défini avec le client et ses conseils. » |
 | Hébergement et contrôles de production | Non disponibles dans cette tranche ; l’API refuse le mode production | « Aucun déploiement bancaire ou service de production n’est proposé aujourd’hui. » |
-| Conformité | Aucune certification ou garantie portée par Aman | « Aman est un outil de configuration ; le client et ses conseils déterminent les règles applicables. » |
+| Conformité | Aucune certification ou garantie portée par ALAMANE | « ALAMANE est un outil de configuration ; le client et ses conseils déterminent les règles applicables. » |
 
 ## Message d’introduction — brouillon à personnaliser
 
@@ -77,7 +77,7 @@ Ne pas démarrer sur une application de production ou avec des données personne
 
 Bonjour [Prénom],
 
-Je travaille sur Aman, un projet de console destinée à centraliser la configuration et la gouvernance des choix de consentement sur plusieurs propriétés Web et mobiles. Je cherche à comprendre comment les grandes organisations gèrent aujourd’hui l’inventaire des technologies, l’approbation des changements et leur intégration avec les équipes digitales, juridiques et sécurité.
+Je travaille sur ALAMANE, un projet de console destinée à centraliser la configuration et la gouvernance des choix de consentement sur plusieurs propriétés Web et mobiles. Je cherche à comprendre comment les grandes organisations gèrent aujourd’hui l’inventaire des technologies, l’approbation des changements et leur intégration avec les équipes digitales, juridiques et sécurité.
 
 Seriez-vous disponible pour un échange exploratoire de 30 minutes ? Je peux vous montrer un démonstrateur local sur données fictives et recueillir vos critères, sans demander l’accès à vos systèmes ni à des données clients.
 
