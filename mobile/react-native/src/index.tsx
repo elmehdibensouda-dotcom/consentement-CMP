@@ -310,12 +310,20 @@ export class AmanConsentClient {
     const purposes = Object.fromEntries(policy.purposes.filter((purpose) => purpose.channels.includes(this.channel)).map((purpose) => [
       purpose.id, purpose.required || (typeof choices[purpose.id] === 'boolean' ? choices[purpose.id] : !purpose.consentRequired),
     ]));
+    const optionalPurposes = policy.purposes.filter((purpose) =>
+      purpose.channels.includes(this.channel) && !purpose.required);
+    const recordedAction = action === 'accept_all' && optionalPurposes.every((purpose) => purposes[purpose.id])
+      ? 'accept_all'
+      : action === 'reject_all' && optionalPurposes.every((purpose) => !purposes[purpose.id])
+        ? 'reject_all'
+        : 'custom';
     const capturedAt = Date.now();
     const decision: AmanDecision = {
       propertyId: this.propertyId, policyVersion: policy.policyVersion, capturedAt,
       expiresAt: capturedAt + policy.retentionDays * 86400000, channel: this.channel,
-      action, eventId: randomEventId(), purposes,
+      action: recordedAction, eventId: randomEventId(), purposes,
     };
+    validateDecision(decision, policy, this.channel);
     await this.storage.setItem(this.decisionKey, JSON.stringify(decision));
     this.decisionValue = decision;
     this.notify();

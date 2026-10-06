@@ -330,10 +330,20 @@ public final class AmanConsentManager: ObservableObject {
         let choices = Dictionary(uniqueKeysWithValues: activePurposes.map { purpose in
             (purpose.id, purpose.required || (requested[purpose.id] ?? !purpose.consentRequired))
         })
+        let optionalPurposes = activePurposes.filter { !$0.required }
+        let recordedAction: AmanConsentAction
+        switch action {
+        case .acceptAll:
+            recordedAction = optionalPurposes.allSatisfy { choices[$0.id] == true } ? action : .custom
+        case .rejectAll:
+            recordedAction = optionalPurposes.allSatisfy { choices[$0.id] == false } ? action : .custom
+        case .custom:
+            recordedAction = action
+        }
         let capturedAt = now()
         let updated = AmanConsentDecision(
             eventId: UUID().uuidString.lowercased(),
-            action: action,
+            action: recordedAction,
             propertyId: policy.propertyId,
             policyVersion: policy.policyVersion,
             capturedAt: capturedAt,

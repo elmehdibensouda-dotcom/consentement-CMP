@@ -199,6 +199,12 @@ class AmanConsentManager(
         val normalized = activePurposes.associate { purpose ->
             purpose.id to (purpose.required || (requested[purpose.id] ?: !purpose.consentRequired))
         }
+        val optionalPurposes = activePurposes.filterNot { it.required }
+        val recordedAction = when (action) {
+            AmanConsentAction.ACCEPT_ALL -> if (optionalPurposes.all { normalized[it.id] == true }) action else AmanConsentAction.CUSTOM
+            AmanConsentAction.REJECT_ALL -> if (optionalPurposes.none { normalized[it.id] == true }) action else AmanConsentAction.CUSTOM
+            AmanConsentAction.CUSTOM -> action
+        }
         val updated = AmanConsentDecision(
             propertyId = policy.propertyId,
             policyVersion = policy.policyVersion,
@@ -207,7 +213,7 @@ class AmanConsentManager(
             channel = "android",
             purposes = normalized,
             eventId = java.util.UUID.randomUUID().toString(),
-            action = action.wireValue
+            action = recordedAction.wireValue
         )
         decision = updated
         val encoded = JSONObject().apply {
