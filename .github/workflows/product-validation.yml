@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: product-validation-${{ github.ref }}
+  group: product-validation-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
