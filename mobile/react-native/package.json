@@ -1,9 +1,15 @@
 {
   "name": "@aman-consent/react-native",
   "version": "0.1.0",
-  "description": "Source starter SDK for displaying and applying Aman consent policies in React Native apps",
+  "description": "ALAMANE source starter SDK for displaying and applying consent policies in React Native apps",
   "license": "UNLICENSED",
+  "private": true,
+  "files": [
+    "README.md",
+    "src"
+  ],
   "main": "src/index.tsx",
+  "react-native": "src/index.tsx",
   "types": "src/index.tsx",
   "peerDependencies": {
     "react": ">=18",

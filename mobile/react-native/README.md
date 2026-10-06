@@ -1,15 +1,38 @@
-# Aman Consent — React Native SDK starter
+# ALAMANE Consent — React Native SDK starter
 
 Ce package source fournit un panneau natif React Native FR/AR, le chargement d’une politique publiée, la conservation locale d’un choix par propriété dans le stockage privé choisi par l’application, et une méthode d’envoi facultative appelée explicitement. Après le choix, il expose un bouton accessible « Gérer mes préférences » pour rouvrir le panneau; placer le composant dans une zone durable de l’application, comme ses paramètres de confidentialité. Il vise React Native 0.72+ et React 18+. Aucun binaire ni package npm public n’est publié.
 
-## Installation locale
+## Installation locale pour un pilote
 
-Ajouter le dossier `mobile/react-native` comme dépendance locale au projet, puis fournir un adaptateur de stockage. Exemple avec AsyncStorage :
+Ce package n’est pas encore publié sur npm. Pour un pilote, cloner le dépôt à côté de l’application cliente, puis installer le dossier source avec un adaptateur de stockage choisi par l’application :
 
 ```sh
-# Adapter le chemin local vers le checkout Aman dans le projet client.
+# Depuis la racine de l’application React Native ; adapter le chemin au checkout.
 npm install ../alamane-consent/mobile/react-native @react-native-async-storage/async-storage
 ```
+
+Le nom technique importé, `@aman-consent/react-native`, est provisoire et n’est pas publié. Sa disponibilité et ses droits d’usage doivent être vérifiés avant toute publication sur un registre.
+
+Le dossier source se trouve hors de l’arborescence de l’application. Metro doit donc surveiller ce dossier et résoudre `react-native` depuis les dépendances de l’application. Fusionner ces valeurs avec le `metro.config.js` déjà présent, sans remplacer ses réglages propres :
+
+```js
+const path = require('path');
+const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+
+const libraryPath = path.resolve(__dirname, '../alamane-consent/mobile/react-native');
+const appReactNativePath = path.resolve(__dirname, 'node_modules/react-native');
+
+module.exports = mergeConfig(getDefaultConfig(__dirname), {
+  watchFolders: [libraryPath],
+  resolver: {
+    extraNodeModules: {
+      'react-native': appReactNativePath,
+    },
+  },
+});
+```
+
+Si l’application utilise Expo ou une configuration Metro personnalisée, reprendre les mêmes chemins dans son fichier de configuration et vérifier le bundling sur ses versions React Native prises en charge. L’équipe cliente doit conserver une seule copie effective de `react` et `react-native`.
 
 ```tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -50,7 +73,7 @@ Pour signaler un choix au serveur, l’application peut appeler `aman.recordDeci
 
 ## Limites avant pilote
 
-- Package de démarrage à compiler et intégrer dans les versions React Native ciblées; aucune matrice de compatibilité, release signée, SBOM ou validation d’accessibilité n’est fournie.
+- Package source de démarrage, non publié sur npm, à compiler et intégrer dans les versions React Native ciblées; aucune matrice de compatibilité, release signée, SBOM ou validation d’accessibilité n’est fournie.
 - Le stockage est fourni par l’application. Le choix reste local jusqu’à un appel d’envoi explicite; il n’existe pas de synchronisation multi-appareil ni de file de reprise.
 - L’application doit démarrer, arrêter et réconcilier réellement ses SDK tiers. Une bibliothèque native déjà initialisée peut ne pas pouvoir être déchargée.
 - La collecte, les formalités, les durées et le contenu de l’avis restent à valider par le client et ses conseils; le SDK ne garantit pas la conformité.
