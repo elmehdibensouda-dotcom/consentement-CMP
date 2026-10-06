@@ -8,12 +8,74 @@ import sqlite3
 import stat
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
+from typing import Any, Generator, Protocol, Sequence
 
 from .migrations import MIGRATIONS
 
 
-def connect_sqlite(database_path: Path, logger: logging.Logger) -> sqlite3.Connection:
+class DatabaseError(Exception):
+    """Database failure exposed to application code, independent of a driver."""
+
+
+class IntegrityError(DatabaseError):
+    """Constraint violation exposed to application code."""
+
+
+class Connection(Protocol):
+    """Small DB-API surface used by Aman business logic."""
+
+    def execute(self, statement: str, parameters: Sequence[Any] = ()) -> Any: ...
+    def commit(self) -> None: ...
+    def rollback(self) -> None: ...
+    def close(self) -> None: ...
+    def initialize_schema(self) -> int: ...
+    def require_current_schema(self) -> None: ...
+
+
+class SQLiteConnection:
+    """Adapt a SQLite handle to Aman’s driver-independent connection contract."""
+
+    def __init__(self, native: sqlite3.Connection):
+        self.native = native
+
+    def execute(self, statement: str, parameters: Sequence[Any] = ()) -> sqlite3.Cursor:
+        try:
+            return self.native.execute(statement, parameters)
+        except sqlite3.IntegrityError as error:
+            raise IntegrityError(str(error)) from error
+        except sqlite3.Error as error:
+            raise DatabaseError(str(error)) from error
+
+    def commit(self) -> None:
+        try:
+            self.native.commit()
+        except sqlite3.Error as error:
+            raise DatabaseError(str(error)) from error
+
+    def rollback(self) -> None:
+        try:
+            self.native.rollback()
+        except sqlite3.Error as error:
+            raise DatabaseError(str(error)) from error
+
+    def close(self) -> None:
+        self.native.close()
+
+    def initialize_schema(self) -> int:
+        try:
+            self.native.execute("PRAGMA journal_mode = WAL")
+            return apply_sqlite_migrations(self.native)
+        except sqlite3.Error as error:
+            raise DatabaseError(str(error)) from error
+
+    def require_current_schema(self) -> None:
+        try:
+            require_current_sqlite_schema(self.native)
+        except sqlite3.Error as error:
+            raise DatabaseError(str(error)) from error
+
+
+def connect_sqlite(database_path: Path, logger: logging.Logger) -> SQLiteConnection:
     database_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     parent_mode = database_path.parent.stat().st_mode
     if parent_mode & (stat.S_IWGRP | stat.S_IWOTH) and not parent_mode & stat.S_ISVTX:
@@ -30,14 +92,14 @@ def connect_sqlite(database_path: Path, logger: logging.Logger) -> sqlite3.Conne
             logger.warning("An existing SQLite database is group/world-readable; review its mode and WAL/SHM files")
     else:
         os.close(database_fd)
-    conn = sqlite3.connect(database_path, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    native = sqlite3.connect(database_path, timeout=10)
+    native.row_factory = sqlite3.Row
+    native.execute("PRAGMA foreign_keys = ON")
+    return SQLiteConnection(native)
 
 
 @contextmanager
-def sqlite_connection(database_path: Path, logger: logging.Logger) -> Generator[sqlite3.Connection, None, None]:
+def sqlite_connection(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
     conn = connect_sqlite(database_path, logger)
     try:
         yield conn
@@ -46,7 +108,7 @@ def sqlite_connection(database_path: Path, logger: logging.Logger) -> Generator[
 
 
 @contextmanager
-def sqlite_transaction(database_path: Path, logger: logging.Logger) -> Generator[sqlite3.Connection, None, None]:
+def sqlite_transaction(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
     conn = connect_sqlite(database_path, logger)
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -57,6 +119,23 @@ def sqlite_transaction(database_path: Path, logger: logging.Logger) -> Generator
         raise
     finally:
         conn.close()
+
+
+def connect_database(database_path: Path, logger: logging.Logger) -> Connection:
+    """Open the configured database through the current persistence adapter."""
+    return connect_sqlite(database_path, logger)
+
+
+@contextmanager
+def database_connection(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
+    with sqlite_connection(database_path, logger) as conn:
+        yield conn
+
+
+@contextmanager
+def database_transaction(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
+    with sqlite_transaction(database_path, logger) as conn:
+        yield conn
 
 
 def _migration_checksum(migration) -> str:

@@ -12,7 +12,6 @@ import ipaddress
 import json
 import os
 import secrets
-import sqlite3
 import time
 import csv
 import io
@@ -34,11 +33,12 @@ from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, constr
 
 from .database import (
-    apply_sqlite_migrations,
-    connect_sqlite,
-    require_current_sqlite_schema,
-    sqlite_connection,
-    sqlite_transaction,
+    Connection,
+    DatabaseError,
+    IntegrityError,
+    connect_database,
+    database_connection,
+    database_transaction,
 )
 
 
@@ -163,27 +163,26 @@ def utc_now() -> int:
     return int(time.time())
 
 
-def db_connect() -> sqlite3.Connection:
-    return connect_sqlite(DATABASE_PATH, LOGGER)
+def db_connect() -> Connection:
+    return connect_database(DATABASE_PATH, LOGGER)
 
 
 @contextmanager
-def connection() -> Generator[sqlite3.Connection, None, None]:
-    with sqlite_connection(DATABASE_PATH, LOGGER) as conn:
+def connection() -> Generator[Connection, None, None]:
+    with database_connection(DATABASE_PATH, LOGGER) as conn:
         yield conn
 
 
 @contextmanager
-def transaction() -> Generator[sqlite3.Connection, None, None]:
-    with sqlite_transaction(DATABASE_PATH, LOGGER) as conn:
+def transaction() -> Generator[Connection, None, None]:
+    with database_transaction(DATABASE_PATH, LOGGER) as conn:
         yield conn
 
 
 def init_db() -> None:
     ensure_scrypt_available()
     with connection() as conn:
-        conn.execute("PRAGMA journal_mode = WAL")
-        apply_sqlite_migrations(conn)
+        conn.initialize_schema()
         conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
         conn.commit()
 
@@ -342,7 +341,7 @@ def enforce_invitation_rate_limit(request: Request, operation: str, limit: int) 
         bucket.append(now)
 
 
-def audit(conn: sqlite3.Connection, org_id: str, actor: str, action: str,
+def audit(conn: Connection, org_id: str, actor: str, action: str,
           resource_type: str, resource_id: str, details: Optional[dict] = None) -> None:
     conn.execute(
         "INSERT INTO audit_events(id,org_id,actor_user_id,action,resource_type,resource_id,occurred_at,details) "
@@ -484,7 +483,7 @@ def current_session(request: Request) -> SessionContext:
     return SessionContext(user_id=row["user_id"], email=row["email"], session_hash=token_hash)
 
 
-def membership(conn: sqlite3.Connection, org_id: str, user_id: str) -> str:
+def membership(conn: Connection, org_id: str, user_id: str) -> str:
     row = conn.execute("SELECT role FROM memberships WHERE org_id=? AND user_id=?", (org_id, user_id)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -523,7 +522,7 @@ def validate_policy(body: Dict[str, Any], property_id: str, channel: str) -> dic
 async def lifespan(_: FastAPI):
     ensure_scrypt_available()
     with connection() as conn:
-        require_current_sqlite_schema(conn)
+        conn.require_current_schema()
     sweeper = asyncio.create_task(purge_expired_consent_events())
     try:
         yield
@@ -540,7 +539,7 @@ async def purge_expired_consent_events() -> None:
         try:
             with transaction() as conn:
                 conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
-        except sqlite3.Error:
+        except DatabaseError:
             LOGGER.exception("Consent event expiry sweep failed")
 
 
@@ -1150,7 +1149,7 @@ def create_property(org_id: str, body: PropertyBody, request: Request,
                          (property_id, org_id, body.name.strip(), body.channel, body.environment, origin, now))
             audit(conn, org_id, context.user_id, "property.created", "property", property_id,
                   {"channel": body.channel, "environment": body.environment, "origin": origin})
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise HTTPException(status_code=409, detail="A property with this name and channel already exists; use a distinct name for each environment")
     return {"id": property_id, "orgId": org_id, "name": body.name.strip(), "channel": body.channel,
             "environment": body.environment, "origin": origin}

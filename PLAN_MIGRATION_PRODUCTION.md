@@ -9,28 +9,28 @@ Conserver SQLite pour le développement local et retenir PostgreSQL comme cible 
 
 Le serveur continuera de refuser `AMAN_ENVIRONMENT=production` jusqu’à ce que les critères de mise en service ci-dessous soient satisfaits et qu’une revue sécurité distincte ait été effectuée.
 
-## État source vérifié
+## État source vérifié au 6 octobre 2026
 
-- `backend/aman_api/main.py` ouvre actuellement une base SQLite locale, active les clés étrangères, le mode WAL et un `row_factory` SQLite.
-- `init_db()` crée les tables et applique les évolutions du schéma au démarrage à l’aide de `CREATE TABLE IF NOT EXISTS`, `PRAGMA table_info` et `ALTER TABLE`. Il n’existe pas de journal de migrations versionné.
-- Les routes utilisent directement `conn.execute(...)` avec des paramètres `?`. Les transactions d’écriture commencent par `BEGIN IMMEDIATE`, propre à SQLite.
+- `backend/aman_api/main.py` conserve SQLite comme moteur local, mais reçoit maintenant une interface `Connection` et délègue l’ouverture, la fermeture, les transactions et les erreurs d’intégrité au module `backend/aman_api/database.py`.
+- L’adaptateur SQLite garde le mode WAL, les clés étrangères, le mode d’accès aux lignes, les vérifications de permissions et `BEGIN IMMEDIATE`. Le SQL métier reste dans les routes et utilise le marqueur `?` ; l’extraction en dépôts métier et la définition du paramétrage portable ne sont donc pas terminées.
+- Les migrations locales sont ordonnées et vérifiées par empreinte. `v0001` crée le schéma et `v0002` ajoute les colonnes des anciennes bases ; `backend/migrate_db.py` est la commande opérateur. Le démarrage HTTP vérifie le schéma et refuse une base non migrée. La CI actuelle couvre les parcours de régression sur sa base de test, mais n’a pas encore de fixtures dédiées pour chaque version historique de schéma.
 - Les données sont réparties entre utilisateurs, organisations, appartenances, invitations, transferts de propriété, propriétés, politiques, sessions, événements d’audit, événements de consentement et rapports d’inventaire.
-- Plusieurs invariants reposent sur SQLite et le code applicatif : version suivante calculée par `MAX(version)+1`, une seule politique publiée par propriété, contrôle d’accès à chaque route et limite de débit stockée en mémoire du processus.
-- Le mode production déclenche une erreur explicite au chargement du module. L’API n’est pas déployable en banque dans son état courant.
+- Plusieurs invariants restent à traiter avant PostgreSQL : version suivante calculée par `MAX(version)+1`, unicité d’une politique publiée par propriété non garantie par une contrainte dédiée, contrôles multi-organisation au niveau applicatif et limite de débit en mémoire du processus.
+- Le mode production déclenche toujours une erreur explicite au chargement du module. L’API n’est pas déployable en banque dans son état courant.
 
 ## Tranches de migration
 
-### 1. Introduire un contrat de persistance
+### 1. Introduire un contrat de persistance — en cours
 
-Extraire les fonctions d’accès aux données et leurs transactions de `main.py`. Conserver le comportement SQLite actuel derrière ce contrat avant d’ajouter un deuxième moteur. Éliminer les références au type `sqlite3.Connection` des fonctions métier et centraliser la traduction des erreurs d’intégrité.
+Un contrat `Connection` commun, le cycle de vie des transactions et la traduction des erreurs d’intégrité sont en place dans `backend/aman_api/database.py`. Continuer en extrayant les opérations SQL des routes vers des modules de persistance, définir la conversion des paramètres et lignes sans supposer SQLite, puis garder SQLite comme première implémentation.
 
-**Critères de sortie :** aucun SQL métier ni détail de transaction spécifique à SQLite hors de l’adaptateur SQLite; les flux de console et SDK restent identiques.
+**Critères de sortie :** aucun SQL métier ni détail de transaction spécifique à SQLite dans les routes; adaptateurs explicites et erreurs métier centralisées; les flux de console et SDK restent identiques.
 
-### 2. Versionner le schéma
+### 2. Versionner le schéma — première tranche SQLite réalisée
 
-Créer des migrations ordonnées et reproductibles, utilisables depuis une commande opérateur séparée du démarrage HTTP. Représenter explicitement contraintes, clés étrangères, index, valeurs par défaut et évolution des politiques. Prévoir une migration de sauvegarde et une procédure de restauration de la base SQLite locale.
+Les migrations SQLite locales ordonnées et reproductibles sont ajoutées avec une commande opérateur séparée du serveur HTTP. Compléter les fixtures de migration depuis les anciennes versions supportées, formaliser la politique de compatibilité et prévoir une sauvegarde et une procédure de restauration de la base SQLite locale. Les migrations PostgreSQL resteront des migrations dédiées, testées indépendamment.
 
-**Critères de sortie :** migration d’une base vide et d’une base locale existante vers le dernier schéma; échec sûr en cas de version inconnue ou migration partielle.
+**Critères de sortie :** migration validée d’une base vide et de chaque schéma local supporté vers la dernière version; échec sûr en cas de version inconnue ou migration partielle; restauration documentée et vérifiée.
 
 ### 3. Ajouter PostgreSQL pour l’environnement de préproduction
 
