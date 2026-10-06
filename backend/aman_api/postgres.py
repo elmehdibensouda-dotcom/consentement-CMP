@@ -6,6 +6,7 @@ import atexit
 import os
 from pathlib import Path
 from threading import Lock
+from types import ModuleType
 from typing import Any, Sequence
 
 from psycopg import Connection as PsycopgConnection
@@ -17,7 +18,18 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from .database import Connection, DatabaseError, IntegrityError
-from .postgres_migrations import NAME, VERSION, upgrade
+from . import postgres_migrations, postgres_rate_limit_migration
+
+
+POSTGRES_MIGRATIONS = (
+    (postgres_migrations.VERSION, postgres_migrations.NAME, postgres_migrations, postgres_migrations.upgrade),
+    (
+        postgres_rate_limit_migration.VERSION,
+        postgres_rate_limit_migration.NAME,
+        postgres_rate_limit_migration,
+        postgres_rate_limit_migration.upgrade,
+    ),
+)
 
 
 _POOL_LOCK = Lock()
@@ -117,6 +129,15 @@ class PostgreSQLConnection:
     def lock_property(self, property_id: str) -> None:
         self.execute("SELECT id FROM properties WHERE id=? FOR UPDATE", (property_id,))
 
+    def lock_rate_limit_scope(self, scope: str) -> None:
+        self.execute("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", ("aman-rate-limit:" + scope,))
+
+    def lock_rate_limit_bucket(self, scope: str, bucket_hash: str) -> None:
+        self.execute(
+            "SELECT scope FROM rate_limit_buckets WHERE scope=? AND bucket_hash=? FOR UPDATE",
+            (scope, bucket_hash),
+        )
+
     def initialize_schema(self) -> int:
         self.begin_write_transaction()
         try:
@@ -127,23 +148,23 @@ class PostgreSQLConnection:
             self.execute("SELECT pg_advisory_xact_lock(741026061)")
             rows = self.execute("SELECT version,name,checksum FROM schema_migrations ORDER BY version").fetchall()
             applied = {row["version"]: row for row in rows}
-            if any(version != VERSION for version in applied):
+            known_versions = {migration[0] for migration in POSTGRES_MIGRATIONS}
+            if any(version not in known_versions for version in applied):
                 raise RuntimeError("Database schema is newer than this Aman API version")
-            checksum = _migration_checksum()
-            previous = applied.get(VERSION)
-            if previous:
-                if previous["name"] != NAME or previous["checksum"] != checksum:
-                    raise RuntimeError(f"Applied PostgreSQL migration {VERSION} was changed")
-                self.commit()
-                return VERSION
-
-            upgrade(self)
-            self.execute(
-                "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES(?,?,?,?)",
-                (VERSION, NAME, checksum, _now()),
-            )
+            for version, name, module, upgrade in POSTGRES_MIGRATIONS:
+                checksum = _migration_checksum(version, module)
+                previous = applied.get(version)
+                if previous:
+                    if previous["name"] != name or previous["checksum"] != checksum:
+                        raise RuntimeError(f"Applied PostgreSQL migration {version} was changed")
+                    continue
+                upgrade(self)
+                self.execute(
+                    "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES(?,?,?,?)",
+                    (version, name, checksum, _now()),
+                )
             self.commit()
-            return VERSION
+            return POSTGRES_MIGRATIONS[-1][0]
         except Exception:
             self.rollback()
             raise
@@ -153,11 +174,11 @@ class PostgreSQLConnection:
             rows = self.execute("SELECT version,name,checksum FROM schema_migrations ORDER BY version").fetchall()
         except DatabaseError as error:
             raise RuntimeError("Aman database schema is not initialized; run `python backend/migrate_db.py` first") from error
-        if len(rows) != 1 or rows[0]["version"] != VERSION:
+        if [row["version"] for row in rows] != [migration[0] for migration in POSTGRES_MIGRATIONS]:
             raise RuntimeError("Aman database schema is behind; run `python backend/migrate_db.py` first")
-        row = rows[0]
-        if row["name"] != NAME or row["checksum"] != _migration_checksum():
-            raise RuntimeError(f"Applied PostgreSQL migration {VERSION} does not match this API version")
+        for row, (version, name, module, _) in zip(rows, POSTGRES_MIGRATIONS):
+            if row["name"] != name or row["checksum"] != _migration_checksum(version, module):
+                raise RuntimeError(f"Applied PostgreSQL migration {version} does not match this API version")
 
 
 def connect_postgres(conninfo: str) -> Connection:
@@ -219,13 +240,13 @@ def close_postgres_pool() -> None:
         _POOL_CONNINFO = None
 
 
-def _migration_checksum() -> str:
-    from . import postgres_migrations
-    from .migrations import v0001_initial_schema
-
+def _migration_checksum(version: int, migration: ModuleType) -> str:
     digest = hashlib.sha256()
-    digest.update(Path(postgres_migrations.__file__).read_bytes())
-    digest.update(Path(v0001_initial_schema.__file__).read_bytes())
+    digest.update(Path(migration.__file__).read_bytes())
+    if version == postgres_migrations.VERSION:
+        from .migrations import v0001_initial_schema
+
+        digest.update(Path(v0001_initial_schema.__file__).read_bytes())
     return digest.hexdigest()
 
 

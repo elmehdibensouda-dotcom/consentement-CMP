@@ -18,12 +18,10 @@ import io
 import asyncio
 import logging
 import re
-from collections import deque
 from contextlib import asynccontextmanager, contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
-from threading import Lock
-from typing import Any, Deque, Dict, Generator, Literal, Optional, Tuple
+from typing import Any, Dict, Generator, Literal, Optional, Tuple
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request, Response, status
@@ -40,7 +38,12 @@ from .database import (
     connect_database,
     database_connection,
     database_transaction,
+    clear_login_rate_limit,
     migration_database_connection,
+    consume_rate_limits,
+    login_rate_limit_status,
+    prune_rate_limit_buckets,
+    record_login_failure,
 )
 
 
@@ -57,6 +60,7 @@ OWNERSHIP_TRANSFER_TTL_SECONDS = 24 * 60 * 60
 LOGIN_FAILURE_LIMIT = 20
 LOGIN_WINDOW_SECONDS = 10 * 60
 LOGIN_LOCK_SECONDS = 10 * 60
+LOGIN_RATE_MAX_BUCKETS = 20000
 CONSENT_EVENT_WINDOW_SECONDS = 60
 CONSENT_EVENT_CLIENT_LIMIT = 120
 CONSENT_EVENT_PROPERTY_LIMIT = 6000
@@ -70,17 +74,11 @@ API_REQUEST_MAX_BYTES = 1_048_576
 POLICY_MAX_BYTES = 524_288
 CONSENT_EVENT_MAX_BYTES = 16_384
 SCAN_REPORTS_PER_PROPERTY = 20
-_LOGIN_LOCK = Lock()
-_LOGIN_FAILURES: Dict[str, Deque[int]] = {}
+# Kept as empty compatibility hooks for older test harnesses; rate state is DB-backed.
+_LOGIN_FAILURES: Dict[str, list[int]] = {}
 _LOGIN_BLOCKED_UNTIL: Dict[str, int] = {}
-_LOGIN_LAST_CLEANUP = 0
-_CONSENT_RATE_LOCK = Lock()
-_CONSENT_RATE_BUCKETS: Dict[str, Deque[int]] = {}
-_CONSENT_RATE_LAST_CLEANUP = 0
-_INVITATION_RATE_LOCK = Lock()
-_INVITATION_RATE_BUCKETS: Dict[str, Deque[int]] = {}
-_INVITATION_RATE_LAST_CLEANUP = 0
-_CONSENT_RATE_SECRET = secrets.token_bytes(32)
+_CONFIGURED_RATE_LIMIT_HASH_KEY = os.environ.get("AMAN_RATE_LIMIT_HASH_KEY", "").encode("utf-8")
+_RATE_LIMIT_HASH_KEY = _CONFIGURED_RATE_LIMIT_HASH_KEY or secrets.token_bytes(32)
 COOKIE_SECURE = ENVIRONMENT == "production"
 if ENVIRONMENT == "production":
     raise RuntimeError(
@@ -183,11 +181,13 @@ def transaction() -> Generator[Connection, None, None]:
 
 def init_db() -> None:
     ensure_scrypt_available()
+    ensure_rate_limit_hash_key()
     with migration_database_connection(DATABASE_PATH, LOGGER) as conn:
         conn.initialize_schema()
     with connection() as conn:
         conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
         conn.commit()
+    prune_rate_limit_buckets(DATABASE_PATH, LOGGER, utc_now())
 
 
 def digest(value: str) -> str:
@@ -221,127 +221,77 @@ def ensure_scrypt_available() -> None:
 def login_client_key(request: Request) -> str:
     # Trust only the socket peer. Forwarded headers require an explicitly trusted proxy.
     remote_ip = request.client.host if request.client else "unknown"
-    return digest("aman-login-ip:" + remote_ip)
+    return rate_limit_hash("login", remote_ip)
 
 
-def prune_login_state(now: int) -> None:
-    global _LOGIN_LAST_CLEANUP
-    cutoff = now - LOGIN_WINDOW_SECONDS
-    for key, failures in list(_LOGIN_FAILURES.items()):
-        while failures and failures[0] <= cutoff:
-            failures.popleft()
-        if not failures:
-            _LOGIN_FAILURES.pop(key, None)
-    for key, blocked_until in list(_LOGIN_BLOCKED_UNTIL.items()):
-        if blocked_until <= now:
-            _LOGIN_BLOCKED_UNTIL.pop(key, None)
-    _LOGIN_LAST_CLEANUP = now
+def rate_limit_hash(scope: str, value: str) -> str:
+    return hmac.new(_RATE_LIMIT_HASH_KEY, f"{scope}:{value}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def ensure_rate_limit_hash_key() -> None:
+    if os.environ.get("AMAN_DATABASE_URL") and len(_CONFIGURED_RATE_LIMIT_HASH_KEY) < 32:
+        raise RuntimeError("AMAN_RATE_LIMIT_HASH_KEY must contain at least 32 bytes when PostgreSQL is configured")
 
 
 def enforce_login_rate_limit(client_key: str) -> None:
     now = utc_now()
-    with _LOGIN_LOCK:
-        if now - _LOGIN_LAST_CLEANUP >= 60:
-            prune_login_state(now)
-        blocked_until = _LOGIN_BLOCKED_UNTIL.get(client_key, 0)
-        if blocked_until > now:
-            retry_after = blocked_until - now
-            raise HTTPException(
-                status_code=429,
-                detail="Too many sign-in failures from this network. Try again later.",
-                headers={"Retry-After": str(retry_after)},
-            )
+    retry_after = login_rate_limit_status(DATABASE_PATH, LOGGER, client_key, now)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many sign-in failures from this network. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
 
 def note_failed_login(client_key: str) -> int:
-    now = utc_now()
-    with _LOGIN_LOCK:
-        failures = _LOGIN_FAILURES.setdefault(client_key, deque())
-        cutoff = now - LOGIN_WINDOW_SECONDS
-        while failures and failures[0] <= cutoff:
-            failures.popleft()
-        failures.append(now)
-        if len(failures) < LOGIN_FAILURE_LIMIT:
-            return 0
-        blocked_until = now + LOGIN_LOCK_SECONDS
-        _LOGIN_BLOCKED_UNTIL[client_key] = blocked_until
-        _LOGIN_FAILURES.pop(client_key, None)
-        return LOGIN_LOCK_SECONDS
+    return record_login_failure(
+        DATABASE_PATH, LOGGER, client_key, utc_now(), LOGIN_WINDOW_SECONDS, LOGIN_FAILURE_LIMIT, LOGIN_LOCK_SECONDS,
+        LOGIN_RATE_MAX_BUCKETS,
+    )
 
 
 def clear_login_failures(client_key: str) -> None:
-    with _LOGIN_LOCK:
-        _LOGIN_FAILURES.pop(client_key, None)
-        _LOGIN_BLOCKED_UNTIL.pop(client_key, None)
+    clear_login_rate_limit(DATABASE_PATH, LOGGER, client_key)
 
 
 def enforce_consent_event_rate_limit(request: Request, property_id: str) -> None:
-    """Bound local ingestion using short-lived client keys that are never persisted."""
-    global _CONSENT_RATE_LAST_CLEANUP
+    """Atomically bound ingestion by source and property across API replicas."""
     now = utc_now()
     remote_ip = request.client.host if request.client else "unknown"
-    client_key = hmac.new(_CONSENT_RATE_SECRET, remote_ip.encode("utf-8"), hashlib.sha256).hexdigest()
-    bucket_specs: Tuple[Tuple[str, int], ...] = (
-        ("client:" + client_key, CONSENT_EVENT_CLIENT_LIMIT),
-        ("property:" + property_id, CONSENT_EVENT_PROPERTY_LIMIT),
+    limits = (
+        ("consent_client", rate_limit_hash("consent_client", remote_ip), CONSENT_EVENT_CLIENT_LIMIT),
+        ("consent_property", rate_limit_hash("consent_property", property_id), CONSENT_EVENT_PROPERTY_LIMIT),
     )
-    cutoff = now - CONSENT_EVENT_WINDOW_SECONDS
-    with _CONSENT_RATE_LOCK:
-        if now - _CONSENT_RATE_LAST_CLEANUP >= 30:
-            for key, bucket in list(_CONSENT_RATE_BUCKETS.items()):
-                while bucket and bucket[0] <= cutoff:
-                    bucket.popleft()
-                if not bucket:
-                    _CONSENT_RATE_BUCKETS.pop(key, None)
-            _CONSENT_RATE_LAST_CLEANUP = now
-        new_keys = sum(key not in _CONSENT_RATE_BUCKETS for key, _ in bucket_specs)
-        if len(_CONSENT_RATE_BUCKETS) + new_keys > CONSENT_EVENT_MAX_BUCKETS:
-            raise HTTPException(status_code=429, detail="Consent event capacity is temporarily limited",
-                                headers={"Retry-After": str(CONSENT_EVENT_WINDOW_SECONDS)})
-        for key, limit in bucket_specs:
-            bucket = _CONSENT_RATE_BUCKETS.get(key)
-            if bucket and len(bucket) >= limit:
-                retry_after = max(1, bucket[0] + CONSENT_EVENT_WINDOW_SECONDS - now)
-                raise HTTPException(status_code=429, detail="Too many consent events; retry later",
-                                    headers={"Retry-After": str(retry_after)})
-        for key, _ in bucket_specs:
-            _CONSENT_RATE_BUCKETS.setdefault(key, deque()).append(now)
+    retry_after, capacity_limited = consume_rate_limits(
+        DATABASE_PATH, LOGGER, limits, now, CONSENT_EVENT_WINDOW_SECONDS, CONSENT_EVENT_MAX_BUCKETS
+    )
+    if capacity_limited:
+        raise HTTPException(status_code=429, detail="Consent event capacity is temporarily limited",
+                            headers={"Retry-After": str(max(1, retry_after))})
+    if retry_after:
+        raise HTTPException(status_code=429, detail="Too many consent events; retry later",
+                            headers={"Retry-After": str(retry_after)})
 
 
 def enforce_invitation_rate_limit(request: Request, operation: str, limit: int) -> None:
-    """Bound public invitation-token lookups and acceptance attempts per socket peer."""
-    global _INVITATION_RATE_LAST_CLEANUP
+    """Atomically bound public invitation attempts per socket peer across replicas."""
     now = utc_now()
     remote_ip = request.client.host if request.client else "unknown"
-    client_key = hmac.new(_CONSENT_RATE_SECRET, remote_ip.encode("utf-8"), hashlib.sha256).hexdigest()
-    bucket_key = f"{operation}:{client_key}"
-    cutoff = now - INVITATION_RATE_WINDOW_SECONDS
-    with _INVITATION_RATE_LOCK:
-        if now - _INVITATION_RATE_LAST_CLEANUP >= 30:
-            for key, bucket in list(_INVITATION_RATE_BUCKETS.items()):
-                while bucket and bucket[0] <= cutoff:
-                    bucket.popleft()
-                if not bucket:
-                    _INVITATION_RATE_BUCKETS.pop(key, None)
-            _INVITATION_RATE_LAST_CLEANUP = now
-        bucket = _INVITATION_RATE_BUCKETS.get(bucket_key)
-        if bucket and len(bucket) >= limit:
-            retry_after = max(1, bucket[0] + INVITATION_RATE_WINDOW_SECONDS - now)
-            raise HTTPException(
-                status_code=429,
-                detail="Too many invitation attempts from this network. Try again later.",
-                headers={"Retry-After": str(retry_after)},
-            )
-        if bucket is None:
-            if len(_INVITATION_RATE_BUCKETS) >= INVITATION_RATE_MAX_BUCKETS:
-                raise HTTPException(
-                    status_code=429,
-                    detail="Invitation service is temporarily busy. Try again later.",
-                    headers={"Retry-After": str(INVITATION_RATE_WINDOW_SECONDS)},
-                )
-            bucket = deque()
-            _INVITATION_RATE_BUCKETS[bucket_key] = bucket
-        bucket.append(now)
+    scope = "invitation_" + operation
+    limits = ((scope, rate_limit_hash(scope, remote_ip), limit),)
+    retry_after, capacity_limited = consume_rate_limits(
+        DATABASE_PATH, LOGGER, limits, now, INVITATION_RATE_WINDOW_SECONDS, INVITATION_RATE_MAX_BUCKETS
+    )
+    if capacity_limited:
+        raise HTTPException(status_code=429, detail="Invitation service is temporarily busy. Try again later.",
+                            headers={"Retry-After": str(max(1, retry_after))})
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many invitation attempts from this network. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
 
 def audit(conn: Connection, org_id: str, actor: str, action: str,
@@ -524,6 +474,7 @@ def validate_policy(body: Dict[str, Any], property_id: str, channel: str) -> dic
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ensure_scrypt_available()
+    ensure_rate_limit_hash_key()
     try:
         with connection() as conn:
             conn.require_current_schema()
@@ -545,6 +496,7 @@ async def purge_expired_consent_events() -> None:
         try:
             with transaction() as conn:
                 conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
+            prune_rate_limit_buckets(DATABASE_PATH, LOGGER, utc_now())
         except DatabaseError:
             LOGGER.exception("Consent event expiry sweep failed")
 

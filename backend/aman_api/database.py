@@ -30,6 +30,8 @@ class Connection(Protocol):
     def close(self) -> None: ...
     def begin_write_transaction(self) -> None: ...
     def lock_property(self, property_id: str) -> None: ...
+    def lock_rate_limit_scope(self, scope: str) -> None: ...
+    def lock_rate_limit_bucket(self, scope: str, bucket_hash: str) -> None: ...
     def initialize_schema(self) -> int: ...
     def require_current_schema(self) -> None: ...
 
@@ -67,6 +69,14 @@ class SQLiteConnection:
         self.execute("BEGIN IMMEDIATE")
 
     def lock_property(self, property_id: str) -> None:
+        # BEGIN IMMEDIATE already serializes SQLite writers.
+        return None
+
+    def lock_rate_limit_scope(self, scope: str) -> None:
+        # BEGIN IMMEDIATE already serializes SQLite writers.
+        return None
+
+    def lock_rate_limit_bucket(self, scope: str, bucket_hash: str) -> None:
         # BEGIN IMMEDIATE already serializes SQLite writers.
         return None
 
@@ -168,6 +178,143 @@ def close_database_pool() -> None:
         from .postgres import close_postgres_pool
 
         close_postgres_pool()
+
+
+def _rate_limit_bucket(conn: Connection, scope: str, bucket_hash: str, now: int):
+    conn.execute(
+        "INSERT INTO rate_limit_buckets(scope,bucket_hash,window_started_at,request_count,blocked_until) "
+        "VALUES(?,?,?,0,0) ON CONFLICT(scope,bucket_hash) DO NOTHING",
+        (scope, bucket_hash, now),
+    )
+    conn.lock_rate_limit_bucket(scope, bucket_hash)
+    return conn.execute(
+        "SELECT window_started_at,request_count,blocked_until FROM rate_limit_buckets "
+        "WHERE scope=? AND bucket_hash=?",
+        (scope, bucket_hash),
+    ).fetchone()
+
+
+def login_rate_limit_status(database_path: Path, logger: logging.Logger, bucket_hash: str, now: int) -> int:
+    with database_connection(database_path, logger) as conn:
+        row = conn.execute(
+            "SELECT blocked_until FROM rate_limit_buckets WHERE scope='login' AND bucket_hash=?",
+            (bucket_hash,),
+        ).fetchone()
+    return max(0, row["blocked_until"] - now) if row else 0
+
+
+def record_login_failure(
+    database_path: Path,
+    logger: logging.Logger,
+    bucket_hash: str,
+    now: int,
+    window_seconds: int,
+    limit: int,
+    block_seconds: int,
+    max_buckets: int,
+) -> int:
+    with database_transaction(database_path, logger) as conn:
+        conn.lock_rate_limit_scope("login")
+        exists = conn.execute(
+            "SELECT 1 FROM rate_limit_buckets WHERE scope='login' AND bucket_hash=?", (bucket_hash,)
+        ).fetchone()
+        if exists is None:
+            active = conn.execute(
+                "SELECT COUNT(*) AS n FROM rate_limit_buckets "
+                "WHERE scope='login' AND (window_started_at>? OR blocked_until>?)",
+                (now - max(window_seconds, 1200), now),
+            ).fetchone()["n"]
+            if active >= max_buckets:
+                return block_seconds
+        row = _rate_limit_bucket(conn, "login", bucket_hash, now)
+        if row["blocked_until"] > now:
+            return row["blocked_until"] - now
+        start = row["window_started_at"]
+        count = row["request_count"]
+        if start <= now - window_seconds:
+            start = now
+            count = 0
+        count += 1
+        blocked_until = now + block_seconds if count >= limit else 0
+        conn.execute(
+            "UPDATE rate_limit_buckets SET window_started_at=?,request_count=?,blocked_until=? "
+            "WHERE scope='login' AND bucket_hash=?",
+            (start, count, blocked_until, bucket_hash),
+        )
+        return max(0, blocked_until - now)
+
+
+def clear_login_rate_limit(database_path: Path, logger: logging.Logger, bucket_hash: str) -> None:
+    with database_transaction(database_path, logger) as conn:
+        conn.lock_rate_limit_scope("login")
+        conn.execute("DELETE FROM rate_limit_buckets WHERE scope='login' AND bucket_hash=?", (bucket_hash,))
+
+
+def consume_rate_limits(
+    database_path: Path,
+    logger: logging.Logger,
+    requests: Sequence[tuple[str, str, int]],
+    now: int,
+    window_seconds: int,
+    max_buckets_per_scope: int,
+) -> tuple[int, bool]:
+    """Atomically check and increment multiple windows across API replicas."""
+    with database_transaction(database_path, logger) as conn:
+        scopes = sorted({scope for scope, _, _ in requests})
+        for scope in scopes:
+            conn.lock_rate_limit_scope(scope)
+
+        cutoff = now - window_seconds
+        missing_by_scope: dict[str, int] = {scope: 0 for scope in scopes}
+        for scope, bucket_hash, _ in requests:
+            row = conn.execute(
+                "SELECT window_started_at,request_count FROM rate_limit_buckets "
+                "WHERE scope=? AND bucket_hash=?",
+                (scope, bucket_hash),
+            ).fetchone()
+            if row is None:
+                missing_by_scope[scope] += 1
+        for scope in scopes:
+            active = conn.execute(
+                "SELECT COUNT(*) AS n FROM rate_limit_buckets "
+                "WHERE scope=? AND (window_started_at>? OR blocked_until>?)",
+                (scope, now - 1200, now),
+            ).fetchone()["n"]
+            if active + missing_by_scope[scope] > max_buckets_per_scope:
+                return window_seconds, True
+
+        rows = {}
+        for scope, bucket_hash, _ in sorted(requests):
+            rows[(scope, bucket_hash)] = _rate_limit_bucket(conn, scope, bucket_hash, now)
+
+        retry_after = 0
+        for scope, bucket_hash, limit in requests:
+            row = rows[(scope, bucket_hash)]
+            if row["window_started_at"] > cutoff and row["request_count"] >= limit:
+                retry_after = max(retry_after, row["window_started_at"] + window_seconds - now)
+        if retry_after:
+            return max(1, retry_after), False
+
+        for scope, bucket_hash, _ in requests:
+            row = rows[(scope, bucket_hash)]
+            if row["window_started_at"] <= cutoff:
+                start, count = now, 1
+            else:
+                start, count = row["window_started_at"], row["request_count"] + 1
+            conn.execute(
+                "UPDATE rate_limit_buckets SET window_started_at=?,request_count=?,blocked_until=0 "
+                "WHERE scope=? AND bucket_hash=?",
+                (start, count, scope, bucket_hash),
+            )
+    return 0, False
+
+
+def prune_rate_limit_buckets(database_path: Path, logger: logging.Logger, now: int) -> None:
+    with database_transaction(database_path, logger) as conn:
+        conn.execute(
+            "DELETE FROM rate_limit_buckets WHERE window_started_at<=? AND blocked_until<=?",
+            (now - 1200, now),
+        )
 
 
 def _migration_checksum(migration) -> str:
