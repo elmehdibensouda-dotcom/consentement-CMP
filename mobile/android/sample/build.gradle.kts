@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "ma.aman.consent.sample"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "ma.aman.consent.sample"

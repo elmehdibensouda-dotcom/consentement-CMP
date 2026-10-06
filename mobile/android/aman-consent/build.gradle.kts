@@ -10,7 +10,7 @@ version = "0.1.0"
 
 android {
     namespace = "ma.aman.consent"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 23
