@@ -50,10 +50,10 @@ jobs:
         with:
           gradle-version: "9.6.0"
           cache-provider: basic
-      - name: Install Android SDK platform
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-37"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-37
       - name: Build Android library and sample
         working-directory: mobile/android
         run: gradle --no-daemon :aman-consent:assembleRelease :sample:assembleDebug
