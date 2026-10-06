@@ -1,6 +1,6 @@
 # Séquence de prospection — banques et grands groupes au Maroc
 
-**Document interne · 5 octobre 2026 · Brouillons non envoyés**
+**Document interne · 6 octobre 2026 · Brouillons non envoyés**
 
 Ces textes servent à obtenir un entretien de découverte, pas à présenter Aman comme un produit de production ou une solution certifiée. Ajouter le nom du destinataire et une signature professionnelle validée avant tout envoi. Aucun message ni formulaire n’a été envoyé ou soumis.
 
@@ -11,8 +11,25 @@ Ces textes servent à obtenir un entretien de découverte, pas à présenter Ama
 | CIH BANK | Gouvernance des parcours digitaux et protection des données au moment de publier des changements Web | Produit / canaux digitaux ou gouvernance digitale | [Rapport ESG 2024](https://www.cihbank.ma/sites/default/files/2025-04/Rapport_ESG_CIH_2024.pdf) |
 | BANK OF AFRICA | Cohérence des préférences entre les différents services numériques et équipes qui les opèrent | Direction digitale, produit ou canaux à distance | [Stratégie du groupe](https://www.bankofafrica.ma/fr/groupe/valeurs-et-perspectives) · [Services numériques entreprises](https://www.bankofafrica.ma/fr/entreprises/banque-a-distance) |
 | Attijariwafa bank | Gouvernance à grande échelle, partage des règles et processus d’homologation fournisseur | Transformation digitale / expérience client ; demander le canal fournisseur approprié | [Profil du groupe](https://www.attijariwafabank.com/fr/notre-groupe-bancaire) · [Rapport annuel 2024](https://publications.attijariwafabank.com/rapport_annuel_2024_EN/33-Attijariwafa-bank-2024-Annual-Report.html) |
+| Maroc Telecom (IAM) | Cohérence des préférences entre le site public, le self-care et les parcours mobiles | Produit / expérience client numérique ou canaux digitaux | [Document d’enregistrement universel 2025](https://www.iam.ma/documents/66341/0/Document%2Bd%27enregistrement%2Buniversel%2B2025.pdf/3be70f4c-df20-161d-ec17-dcea815f8769?t=1774538846840) · [Politique de protection de la vie privée](https://www.iam.ma/groupe-maroc-telecom/politique-de-protection-de-la-vie-priv%C3%A9e) |
 
 Les angles sont des hypothèses commerciales tirées du contexte publié par les organisations ; ces publications ne démontrent ni besoin de CMP, ni budget, ni volonté d’achat. Les faits et limites par compte sont détaillés dans [PROSPECTION_BANQUES_MAROC.md](./PROSPECTION_BANQUES_MAROC.md).
+
+### Maroc Telecom (IAM)
+
+**Objet :** Échange exploratoire — préférences sur les parcours numériques
+
+Bonjour [Prénom],
+
+Je développe Aman, un projet de console qui vise à aider les organisations à configurer et gouverner les choix de consentement sur plusieurs propriétés numériques. Votre [Document d’enregistrement universel 2025](https://www.iam.ma/documents/66341/0/Document%2Bd%27enregistrement%2Buniversel%2B2025.pdf/3be70f4c-df20-161d-ec17-dcea815f8769?t=1774538846840) décrit plusieurs parcours numériques, notamment la souscription en ligne et l’espace self-care. Je cherche à comprendre comment les équipes produit, canaux, sécurité et protection des données coordonnent aujourd’hui les préférences et changements de traceurs sur ces parcours.
+
+Accepteriez-vous un échange exploratoire de 25 minutes ? Je peux montrer un démonstrateur local avec des données fictives ; je ne sollicite aucun accès à vos systèmes ni aucune donnée client. Aman reste un prototype et ne constitue pas un service de production.
+
+Bien cordialement,
+
+[Nom et fonction]
+
+[Coordonnées professionnelles validées]
 
 ## Messages d’introduction à personnaliser
 
@@ -80,6 +97,7 @@ Mettre à jour uniquement à partir d’informations réellement obtenues. Ne pa
 | CIH BANK | À renseigner | À renseigner | À renseigner | — | — | — | — | — | — | — |
 | BANK OF AFRICA | À renseigner | À renseigner | À renseigner | — | — | — | — | — | — | — |
 | Attijariwafa bank | À renseigner | À renseigner | À renseigner | — | — | — | — | — | — | — |
+| Maroc Telecom (IAM) | À renseigner | À renseigner | À renseigner | — | — | — | — | — | — | — |
 
 ### Étapes de qualification
 
