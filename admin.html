@@ -17,6 +17,7 @@
     <div class="brand"><i>A</i> ALAMANE <small style="font-size:11px;color:#75807b;font-weight:500">control</small></div>
     <div class="card"><h2>Connexion à la console</h2><p class="help">Accès réservé aux membres invités de l’organisation.</p>
       <div id="loginError" class="error" role="alert"></div>
+      <div id="localSetupHelp" class="notice warning hidden" role="status">Cette page est ouverte comme fichier local. Pour lancer la démo connectée, ouvre Terminal à la racine du projet, exécute <code>bash scripts/start-demo.sh</code>, puis ouvre <a href="http://localhost:8000/admin.html">la console sur localhost</a>. <a href="README.md">Voir le guide de démarrage</a>.</div>
       <form id="loginForm"><div class="field"><label for="email">Adresse e-mail</label><input id="email" type="email" autocomplete="username" required></div><div class="field"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required></div><button class="btn primary" type="submit" style="width:100%;margin-top:7px">Se connecter</button></form>
       <button class="btn" id="showInvite" style="width:100%;margin-top:10px">Accepter une invitation</button>
       <div id="invitePanel" class="invite-panel"><div class="field"><label for="inviteToken">Jeton d’invitation</label><input id="inviteToken" autocomplete="off"></div><button class="btn" id="previewInvite" type="button">Vérifier l’invitation</button><p id="inviteSummary" class="help" aria-live="polite"></p><div class="field"><label for="invitePassword">Mot de passe ALAMANE existant, ou nouveau mot de passe (12 caractères minimum)</label><input id="invitePassword" type="password" minlength="12" autocomplete="current-password"></div><button class="btn primary" id="acceptInvite">Accepter l’invitation</button><button class="btn" id="cancelInvite">Retour</button><div id="inviteError" class="error"></div></div>
@@ -70,6 +71,7 @@
     const API=(configuredApi||defaultApi).replace(/\/+$/,'');
     const state={csrf:'',user:null,orgs:[],org:null,members:[],properties:[],property:null,editingPolicyId:null,editingPolicy:null,editingPolicyRevision:null};
     const $=id=>document.getElementById(id);
+    if(location.protocol==='file:')$('localSetupHelp').classList.remove('hidden');
     function cookie(name){const found=document.cookie.split('; ').find(x=>x.startsWith(name+'='));return found?decodeURIComponent(found.slice(name.length+1)):''}
     async function api(path,{method='GET',body,publicCall=false,omitCredentials=false}={}){
       const headers={'Content-Type':'application/json'};
