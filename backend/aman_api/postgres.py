@@ -11,6 +11,7 @@ from typing import Any, Sequence
 from psycopg import Connection as PsycopgConnection
 from psycopg import Error as PsycopgError
 from psycopg import IntegrityError as PsycopgIntegrityError
+from psycopg import connect as psycopg_connect
 from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -24,17 +25,19 @@ _POOL: ConnectionPool | None = None
 _POOL_CONNINFO: str | None = None
 
 
-def _validate_tls(conninfo: str) -> None:
+def _connection_options(conninfo: str) -> dict[str, Any]:
     try:
         options = conninfo_to_dict(conninfo)
     except Exception:
-        raise RuntimeError("AMAN_DATABASE_URL is not a valid PostgreSQL connection string") from None
+        raise RuntimeError("A PostgreSQL connection URL is invalid") from None
     hosts = (options.get("host") or "localhost").split(",")
     local_hosts = {"localhost", "127.0.0.1", "::1", ""}
     is_remote = any(host.strip().strip("[]").lower() not in local_hosts for host in hosts)
     sslmode = options.get("sslmode", "prefer")
     if is_remote and sslmode != "verify-full":
-        raise RuntimeError("Remote PostgreSQL requires sslmode=verify-full in AMAN_DATABASE_URL")
+        raise RuntimeError("Remote PostgreSQL requires sslmode=verify-full in its connection URL")
+    options["_aman_is_remote"] = is_remote
+    return options
 
 
 def _pool_size() -> int:
@@ -78,7 +81,7 @@ def _get_pool(conninfo: str) -> ConnectionPool:
 class PostgreSQLConnection:
     """Adapt psycopg to the same connection contract as the SQLite adapter."""
 
-    def __init__(self, pool: ConnectionPool, native: PsycopgConnection):
+    def __init__(self, pool: ConnectionPool | None, native: PsycopgConnection):
         self.pool = pool
         self.native = native
 
@@ -103,7 +106,10 @@ class PostgreSQLConnection:
             raise DatabaseError(str(error)) from error
 
     def close(self) -> None:
-        self.pool.putconn(self.native)
+        if self.pool is None:
+            self.native.close()
+        else:
+            self.pool.putconn(self.native)
 
     def begin_write_transaction(self) -> None:
         self.execute("BEGIN")
@@ -155,12 +161,53 @@ class PostgreSQLConnection:
 
 
 def connect_postgres(conninfo: str) -> Connection:
-    _validate_tls(conninfo)
+    _connection_options(conninfo)
     pool = _get_pool(conninfo)
     try:
         return PostgreSQLConnection(pool, pool.getconn(timeout=10))
     except Exception:
         raise DatabaseError("Could not obtain a PostgreSQL connection from the configured pool") from None
+
+
+def connect_postgres_migration(runtime_conninfo: str, migration_conninfo: str | None) -> Connection:
+    """Use a one-shot operator connection and enforce distinct remote DB roles."""
+    runtime_options = _connection_options(runtime_conninfo)
+    if not migration_conninfo:
+        if runtime_options["_aman_is_remote"]:
+            raise RuntimeError("Remote PostgreSQL requires a separate AMAN_MIGRATION_DATABASE_URL")
+        migration_conninfo = runtime_conninfo
+
+    migration_options = _connection_options(migration_conninfo)
+    if runtime_options["_aman_is_remote"] or migration_options["_aman_is_remote"]:
+        runtime_user = str(runtime_options.get("user") or "").strip()
+        migration_user = str(migration_options.get("user") or "").strip()
+        if not runtime_user or not migration_user or runtime_user == migration_user:
+            raise RuntimeError("Remote PostgreSQL requires distinct explicit API and migration database roles")
+        runtime_hosts = tuple(
+            host.strip().strip("[]").lower()
+            for host in str(runtime_options.get("host") or "localhost").split(",")
+        )
+        migration_hosts = tuple(
+            host.strip().strip("[]").lower()
+            for host in str(migration_options.get("host") or "localhost").split(",")
+        )
+        runtime_port = str(runtime_options.get("port") or "5432")
+        migration_port = str(migration_options.get("port") or "5432")
+        runtime_database = str(runtime_options.get("dbname") or "").strip()
+        migration_database = str(migration_options.get("dbname") or "").strip()
+        if (
+            not runtime_database
+            or runtime_database != migration_database
+            or runtime_hosts != migration_hosts
+            or runtime_port != migration_port
+        ):
+            raise RuntimeError("API and migration PostgreSQL URLs must target the same explicit server and database")
+
+    try:
+        native = psycopg_connect(migration_conninfo, autocommit=True, row_factory=dict_row)
+    except PsycopgError:
+        raise DatabaseError("Could not establish the configured PostgreSQL migration connection") from None
+    return PostgreSQLConnection(None, native)
 
 
 def close_postgres_pool() -> None:

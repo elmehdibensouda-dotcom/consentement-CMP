@@ -1,4 +1,4 @@
-"""SQLite connection lifecycle and versioned schema migration support."""
+"""Database connection contracts and SQLite/PostgreSQL adapter selection."""
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +6,6 @@ import logging
 import os
 import sqlite3
 import stat
-import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator, Protocol, Sequence
@@ -118,9 +117,31 @@ def connect_database(database_path: Path, logger: logging.Logger) -> Connection:
     return connect_sqlite(database_path, logger)
 
 
+def connect_migration_database(database_path: Path, logger: logging.Logger) -> Connection:
+    """Open the operator connection used only by the migration command."""
+    runtime_url = os.environ.get("AMAN_DATABASE_URL")
+    migration_url = os.environ.get("AMAN_MIGRATION_DATABASE_URL")
+    if migration_url and not runtime_url:
+        raise RuntimeError("AMAN_DATABASE_URL must identify the API database when AMAN_MIGRATION_DATABASE_URL is set")
+    if runtime_url:
+        from .postgres import connect_postgres_migration
+
+        return connect_postgres_migration(runtime_url, migration_url)
+    return connect_sqlite(database_path, logger)
+
+
 @contextmanager
 def database_connection(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
     conn = connect_database(database_path, logger)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def migration_database_connection(database_path: Path, logger: logging.Logger) -> Generator[Connection, None, None]:
+    conn = connect_migration_database(database_path, logger)
     try:
         yield conn
     finally:

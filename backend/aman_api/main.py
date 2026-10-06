@@ -40,6 +40,7 @@ from .database import (
     connect_database,
     database_connection,
     database_transaction,
+    migration_database_connection,
 )
 
 
@@ -182,8 +183,9 @@ def transaction() -> Generator[Connection, None, None]:
 
 def init_db() -> None:
     ensure_scrypt_available()
-    with connection() as conn:
+    with migration_database_connection(DATABASE_PATH, LOGGER) as conn:
         conn.initialize_schema()
+    with connection() as conn:
         conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (utc_now(),))
         conn.commit()
 

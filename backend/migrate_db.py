@@ -1,10 +1,10 @@
-"""Apply pending local SQLite migrations for Aman."""
-from aman_api.main import connection, init_db
+"""Apply pending local SQLite or PostgreSQL migrations for Aman."""
+from aman_api.main import DATABASE_PATH, LOGGER, init_db, migration_database_connection
 
 
 def main() -> int:
     init_db()
-    with connection() as conn:
+    with migration_database_connection(DATABASE_PATH, LOGGER) as conn:
         version = conn.execute("SELECT MAX(version) AS version FROM schema_migrations").fetchone()["version"]
     print(f"Aman database schema is current at migration {version}.")
     return 0

@@ -19,7 +19,21 @@ Les changements de schéma SQLite sont versionnés dans `backend/aman_api/migrat
 
 Le stockage de développement est SQLite dans `~/.alamane/aman-dev.sqlite3` par défaut ; une nouvelle base est créée avec le mode `0600` et son répertoire dédié en `0700`. Le chemin peut être remplacé par `AMAN_DATABASE_PATH`, à condition de choisir un répertoire privé. Les permissions des bases existantes ne sont pas modifiées automatiquement : vérifiez-les et protégez également les fichiers WAL/SHM déjà présents. La doc interactive est à <http://127.0.0.1:8001/docs>.
 
-Pour une préproduction isolée, `AMAN_DATABASE_URL` sélectionne l’adaptateur PostgreSQL et un pool borné par `AMAN_DB_POOL_MAX_SIZE` (1 à 50, 10 par défaut et par processus API). Fournir l’URL depuis le gestionnaire de secrets de l’environnement, jamais depuis le dépôt. Toute connexion distante exige `sslmode=verify-full`; les hôtes loopback sont acceptés pour un PostgreSQL local. `python backend/migrate_db.py` crée et versionne le schéma PostgreSQL avec des horodatages 64 bits. L’outil et l’API utilisent encore la même URL de connexion ; il faut séparer les rôles opérateur et applicatif avant un pilote avec données client. Cette voie n’a pas encore été éprouvée contre le service géré d’un acheteur; elle ne lève pas le refus du mode `production`.
+Pour une préproduction isolée, `AMAN_DATABASE_URL` sélectionne l’adaptateur PostgreSQL et un pool borné par `AMAN_DB_POOL_MAX_SIZE` (1 à 50, 10 par défaut et par processus API). Injecter cette URL depuis le gestionnaire de secrets, jamais depuis le dépôt. Toute connexion distante exige `sslmode=verify-full`. La commande opérateur `python backend/migrate_db.py` et les scripts `create_admin.py` / `seed_demo.py` appliquent le schéma avec `AMAN_MIGRATION_DATABASE_URL`; pour un PostgreSQL distant, l’API et l’opérateur doivent nommer des rôles différents et cibler le même serveur et la même base. Le rôle opérateur doit pouvoir créer et modifier le schéma. L’API ne fait que vérifier `schema_migrations` au démarrage. Pour un serveur local, la même URL loopback peut servir aux deux rôles pour le développement.
+
+Après la migration distante, accorder les droits applicatifs séparément, sans donner à l’API la propriété du schéma ni les droits DDL. Pour un schéma `public`, le DBA peut appliquer le minimum DML sur les tables métier (adapter les noms de rôles et base) :
+
+```sql
+GRANT CONNECT ON DATABASE aman TO aman_api;
+GRANT USAGE ON SCHEMA public TO aman_api;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+  users, organizations, memberships, invitations, ownership_transfers,
+  properties, policies, sessions, audit_events, consent_events, scan_reports
+  TO aman_api;
+GRANT SELECT ON TABLE schema_migrations TO aman_api;
+```
+
+Cette voie n’a pas encore été éprouvée contre un service PostgreSQL géré par un acheteur et ne lève pas le refus du mode `production`.
 
 La démo web utilise `http://localhost:8000`; l’API autorise cette origine pour les appels avec cookies. `admin.html` lit l’URL API depuis `<meta name="aman-api-base-url" content="https://api.exemple.ma">`; en l’absence de ce réglage, elle utilise le port 8001 en local et la même origine en hébergement distant. `AMAN_CORS_ORIGINS` doit contenir les origines exactes des consoles qui utilisent les cookies. Chaque origine de propriété Web est vérifiée à l’exécution et autorise seulement les routes publiques de lecture de politique et d’envoi d’événement de consentement, sans cookies. Une origine saisie dans Aman est une association de configuration, pas une preuve de contrôle du domaine. Le compte initial est créé par commande locale, pas par une route d’inscription publique.
 
