@@ -1,6 +1,6 @@
 # ALAMANE — support de découverte et de démonstration
 
-**Version de travail · 5 octobre 2026**  
+**Version de travail · 6 octobre 2026**
 **Cible initiale :** banques et grandes entreprises au Maroc  
 **Usage :** préparer un entretien exploratoire et une démonstration sur données fictives. Ce document n’est ni une offre contractuelle ni une déclaration de conformité ou de sécurité.
 
@@ -66,7 +66,7 @@ Ne pas démarrer sur une application de production ou avec des données personne
 | Console et API | Tranche locale avec organisations, rôles, transfert de propriété accepté par le destinataire, propriétés, politiques, publication à deux personnes, journal d’administration et révocation auditée des invitations | « Nous pouvons démontrer le parcours sur environnement local. » |
 | Tableau de bord | Comptes de configuration réels en session ; agrégats Web disponibles seulement si l’intégrateur active la transmission ; chiffres intégrés de scan simulés ; imports JSON locaux limités aux propriétés Web et aux 20 derniers rapports | « Les comptes viennent de la configuration ALAMANE. La collecte des décisions est facultative. Le rapport d’inventaire est produit localement puis importé à la main ; l’équipe doit vérifier l’hôte et classer les résultats. » |
 | SDK Web | Source de démonstration et tags fictifs | « Le flux Web se démontre sur nos pages factices ; l’intégration client reste à valider. » |
-| SDK iOS et Android | Packages source non compilés ni distribués dans un environnement acheteur | « Les bases natives sont en préparation ; elles ne sont pas encore validées pour intégration. » |
+| SDK iOS et Android | CI privée réussie pour compiler la bibliothèque Android et l’exemple, ainsi que le package iOS pour simulateur. Un aperçu téléchargeable AAR/APK debug a été produit ; aucun SDK n’a été intégré dans une application acheteur, signé comme release ou distribué en environnement client. Le tarball React Native reste du code source et n’est pas compilé dans la CI. | « Les bases Android et iOS se compilent dans notre CI. Elles restent à intégrer et valider sur vos versions et appareils cibles ; nous ne fournissons pas encore de release mobile signée. » |
 | Événements de choix centralisés | Agrégats et export CSV des événements encore retenus après activation explicite Web ou appel natif ; aucune preuve d’identité, d’affichage ou de consentement juridique | « Nous pouvons montrer des compteurs client-déclarés après activation explicite. Leur modèle de preuve doit être défini avec le client et ses conseils. » |
 | Hébergement et contrôles de production | Non disponibles dans cette tranche ; l’API refuse le mode production | « Aucun déploiement bancaire ou service de production n’est proposé aujourd’hui. » |
 | Conformité | Aucune certification ou garantie portée par ALAMANE | « ALAMANE est un outil de configuration ; le client et ses conseils déterminent les règles applicables. » |

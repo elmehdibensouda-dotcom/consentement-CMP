@@ -1,6 +1,6 @@
 # ALAMANE — dossier de sécurité fournisseur (document de travail)
 
-**État au 5 octobre 2026 · Usage interne pour préparer les échanges de qualification**
+**État au 6 octobre 2026 · Usage interne pour préparer les échanges de qualification**
 
 Ce document décrit l’état du prototype dans ce dépôt. Ce n’est ni une attestation de sécurité, ni une réponse approuvée à un questionnaire bancaire, ni un engagement contractuel. Il doit être actualisé et revu avec les responsables techniques, sécurité, juridiques et hébergement avant toute transmission à un prospect. Aucune donnée réelle de banque, d’employé ou de client ne doit être introduite dans cette version.
 
@@ -16,7 +16,7 @@ ALAMANE démontre localement une console multi-organisation, le contrôle d’ac
 | Données | Les événements de choix n’acceptent pas de compte visiteur ni d’identifiant persistant d’appareil ; purge locale selon la politique configurée | Analyse de traitement, suppression vérifiée, sauvegarde/restauration et cycle de vie contractuel |
 | Plateforme | SQLite local, limiteurs en mémoire, CORS configuré par origine | Base et migrations adaptées, limitation distribuée, infrastructure, TLS, secrets, sauvegardes, supervision et reprise |
 | Assurance | Aucun rapport de test indépendant ou certificat n’est fourni | Modèle de menace, analyse de risques, test d’intrusion, gestion des vulnérabilités et preuves de remédiation |
-| SDK | Sources Web, Swift et Android disponibles ; envoi des choix désactivé par défaut côté mobile | Compilation, signature, provenance et publication, matrice de compatibilité, revue des dépendances et validation hôte |
+| SDK | Le workflow privé compile la bibliothèque Android et l’exemple, ainsi que le package Swift pour le simulateur iOS ; le contrôle du SDK Web est syntaxique. Une exécution manuelle a produit un AAR, un APK de démonstration debug et un tarball source React Native, avec empreintes de fichiers. | Aucune intégration dans une application cliente, matrice de compatibilité ou validation sur appareil cible ; l’APK est signé avec une clé debug, les packages ne sont pas signés/publiés comme releases, le code React Native n’est pas compilé par la CI et aucune revue indépendante n’est fournie. |
 
 ## Inventaire des traitements du prototype
 
@@ -40,6 +40,8 @@ La durée de conservation des événements reçus est dérivée de la politique 
 - Contrôles d’accès, sessions, CSRF, politiques, journal et stockage : `backend/aman_api/main.py`.
 - Format de politique partagé : [schemas/consent-policy.schema.json](./schemas/consent-policy.schema.json).
 - Capacités et limites des canaux : [guide iOS](./mobile/ios/README.md), [guide Android](./mobile/android/README.md) et `aman-cmp.js`.
+- La [CI privée du 6 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37501530814) a réussi la compilation du SDK Android, de son application exemple et du package iOS pour simulateur ; elle ne constitue pas une validation de sécurité, d’intégration client ou de release signée.
+- La [prévisualisation mobile manuelle](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37487329772) a joint un AAR Android, un APK debug et le tarball React Native au commit indiqué dans son manifeste ; ces artefacts temporaires ne sont pas des releases de production.
 - Les vérifications locales de syntaxe ne sont pas des tests de sécurité, une homologation ou un test d’intrusion.
 
 ## Questions auxquelles ne pas répondre par supposition
