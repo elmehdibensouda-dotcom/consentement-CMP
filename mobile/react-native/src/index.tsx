@@ -234,30 +234,34 @@ export class AmanConsentClient {
     if (cachedRaw) {
       try { cached = validatePolicy(JSON.parse(cachedRaw), this.propertyId, this.channel); } catch { cached = null; }
     }
+    let policy: AmanPolicy;
+    let fetchedFresh = false;
     try {
       const response = await this.fetcher(`${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/policy`, {
         method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error',
         headers: { Accept: 'application/json' },
       });
       if (!response.ok) throw new Error(`Aman policy request failed (${response.status}).`);
-      const policy = validatePolicy(await response.json(), this.propertyId, this.channel);
-      await this.storage.setItem(this.policyKey, JSON.stringify(policy));
-      const previousVersion = this.policyValue?.policyVersion ?? cached?.policyVersion;
-      if (previousVersion && previousVersion !== policy.policyVersion) {
-        this.decisionValue = null;
-        await this.storage.removeItem(this.decisionKey);
-      }
-      this.policyValue = policy;
-      await this.restoreDecision(policy);
-      this.notify();
-      return policy;
+      policy = validatePolicy(await response.json(), this.propertyId, this.channel);
+      fetchedFresh = true;
     } catch (error) {
-      if (!cached) throw error;
-      this.policyValue = cached;
-      await this.restoreDecision(cached);
-      this.notify();
-      return cached;
+      if (this.policyValue) policy = this.policyValue;
+      else if (cached) policy = cached;
+      else throw error;
     }
+    const previousVersion = this.policyValue?.policyVersion ?? cached?.policyVersion;
+    this.policyValue = policy;
+    if (previousVersion && previousVersion !== policy.policyVersion) {
+      this.decisionValue = null;
+      await this.storage.removeItem(this.decisionKey);
+    }
+    if (fetchedFresh) {
+      // A cache write failure must not replace a fresh server policy with stale cached content.
+      try { await this.storage.setItem(this.policyKey, JSON.stringify(policy)); } catch { /* Keep the fresh policy in memory. */ }
+    }
+    await this.restoreDecision(policy);
+    this.notify();
+    return policy;
   }
 
   private async restoreDecision(policy: AmanPolicy) {
