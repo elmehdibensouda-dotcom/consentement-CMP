@@ -521,6 +521,7 @@ def validate_policy(body: Dict[str, Any], property_id: str, channel: str) -> dic
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    ensure_scrypt_available()
     with connection() as conn:
         require_current_sqlite_schema(conn)
     sweeper = asyncio.create_task(purge_expired_consent_events())
