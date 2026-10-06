@@ -834,6 +834,10 @@ def dashboard(request: Request):
         organization["property_count"] = len(scoped)
         organization["published_property_count"] = sum(item["published_version"] is not None for item in scoped)
         organization["draft_count"] = sum(item["draft_count"] for item in scoped)
+        organization["consent_decision_count_30d"] = sum(item["consent_decision_count_30d"] for item in scoped)
+        organization["consent_accept_all_count_30d"] = sum(item["consent_accept_all_count_30d"] for item in scoped)
+        organization["consent_reject_all_count_30d"] = sum(item["consent_reject_all_count_30d"] for item in scoped)
+        organization["consent_custom_count_30d"] = sum(item["consent_custom_count_30d"] for item in scoped)
     events = [{**dict(row), "details": json.loads(row["details"])} for row in recent_events]
     return {
         "summary": {
@@ -841,6 +845,10 @@ def dashboard(request: Request):
             "property_count": len(property_items),
             "published_property_count": sum(item["published_version"] is not None for item in property_items),
             "draft_count": sum(item["draft_count"] for item in property_items),
+            "consent_decision_count_30d": sum(item["consent_decision_count_30d"] for item in property_items),
+            "consent_accept_all_count_30d": sum(item["consent_accept_all_count_30d"] for item in property_items),
+            "consent_reject_all_count_30d": sum(item["consent_reject_all_count_30d"] for item in property_items),
+            "consent_custom_count_30d": sum(item["consent_custom_count_30d"] for item in property_items),
         },
         "organizations": organization_items,
         "properties": property_items,

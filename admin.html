@@ -34,7 +34,7 @@
           <div id="dashboardError" class="error"></div>
           <div class="card"><div id="dashboardSummary" class="empty">Chargement des données de l’espace…</div></div>
           <div class="card"><h2>Organisations accessibles</h2><p class="help">Les comptes affichés proviennent de ta session et respectent tes appartenances.</p><div id="dashboardOrganizations" class="empty">Chargement…</div></div>
-          <div class="card"><h2>Propriétés et décisions reçues</h2><p class="help">Les décisions sont déclarées par les SDK connectés et ne prouvent pas seules l’identité du visiteur ni l’affichage de l’interface.</p><div id="dashboardProperties" class="empty">Chargement…</div></div>
+          <div class="card"><h2>Propriétés et décisions reçues</h2><p class="help">Ces chiffres comptent les événements déclarés par les SDK connectés et reçus par l’API sur 30 jours. Ils ne prouvent ni l’identité du visiteur, ni l’affichage de l’interface, ni l’application effective du choix.</p><div id="dashboardProperties" class="empty">Chargement…</div></div>
           <div class="card"><h2>Activité administrative récente</h2><div id="dashboardActivity" class="empty">Chargement…</div></div>
         </section>
         <section id="organizations" class="page"><div class="heading"><div><div class="eyebrow">ESPACE DE TRAVAIL</div><h1>Organisations</h1><p>Les organisations et rôles auxquels ton compte a accès.</p></div></div>
@@ -101,6 +101,7 @@
     function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('show',p.id===id));document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));if(id==='overview'&&state.user)loadDashboard().catch(err=>error('dashboardError',err.message))}
     function dashboardTable(target,headers,rows,emptyMessage){
       target.replaceChildren();
+      target.style.overflowX='auto';
       if(!rows.length){target.textContent=emptyMessage;return}
       const table=node('table');table.className='table';
       const head=node('tr');headers.forEach(label=>head.append(node('th',label)));table.append(head);
@@ -110,13 +111,13 @@
       clearError('dashboardError');
       const data=await api('/v1/dashboard');
       const summary=data.summary||{};
-      const metrics=[['Organisations',summary.organization_count||0],['Propriétés',summary.property_count||0],['Avec politique publiée',summary.published_property_count||0],['Brouillons',summary.draft_count||0]];
+      const metrics=[['Organisations',summary.organization_count||0],['Propriétés',summary.property_count||0],['Avec politique publiée',summary.published_property_count||0],['Brouillons à examiner',summary.draft_count||0],['Événements SDK reçus · 30 j',summary.consent_decision_count_30d||0],['Tout accepter · 30 j',summary.consent_accept_all_count_30d||0],['Tout refuser · 30 j',summary.consent_reject_all_count_30d||0],['Personnalisés · 30 j',summary.consent_custom_count_30d||0]];
       const metricGrid=node('div');metricGrid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px';
       metrics.forEach(([label,value])=>{const metric=node('div');metric.style.cssText='border:1px solid var(--line);border-radius:9px;padding:14px';const title=node('small',label);title.style.color='var(--muted)';const count=node('strong',String(value));count.style.cssText='display:block;font-size:24px;margin-top:6px';metric.append(title,count);metricGrid.append(metric)});
       $('dashboardSummary').replaceChildren(metricGrid);
-      dashboardTable($('dashboardOrganizations'),['Organisation','Rôle','Propriétés','Publiées','Brouillons','Action'],(data.organizations||[]).map(org=>{
+      dashboardTable($('dashboardOrganizations'),['Organisation','Rôle','Propriétés','Publiées','Brouillons','Événements SDK · 30 j','Accepter','Refuser','Personnalisés','Action'],(data.organizations||[]).map(org=>{
         const roleLabel=({owner:'Propriétaire',admin:'Administrateur',editor:'Éditeur',viewer:'Lecteur'})[org.role]||org.role;
-        const row=node('tr');row.append(node('td',org.name),node('td',roleLabel),node('td',String(org.property_count)),node('td',String(org.published_property_count)),node('td',String(org.draft_count)));
+        const row=node('tr');row.append(node('td',org.name),node('td',roleLabel),node('td',String(org.property_count)),node('td',String(org.published_property_count)),node('td',String(org.draft_count)),node('td',String(org.consent_decision_count_30d||0)),node('td',String(org.consent_accept_all_count_30d||0)),node('td',String(org.consent_reject_all_count_30d||0)),node('td',String(org.consent_custom_count_30d||0)));
         const cell=node('td');const button=node('button','Gérer','btn');button.type='button';button.addEventListener('click',()=>openDashboardOrganization(org.id));cell.append(button);row.append(cell);return row;
       }),'Aucune organisation accessible. Crée une organisation depuis la section Organisations.');
       dashboardTable($('dashboardProperties'),['Organisation','Propriété','Canal','Environnement','Version publiée','Brouillons','Décisions · 30 j'],(data.properties||[]).map(property=>{
