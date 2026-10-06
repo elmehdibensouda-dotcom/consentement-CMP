@@ -66,15 +66,30 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         working-directory: mobile/react-native
         run: npm pack --pack-destination "$RUNNER_TEMP"
-      - name: Attach Android preview packages for manual runs
+      - name: Prepare traceable preview bundle
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bundle="$RUNNER_TEMP/alamane-mobile-preview"
+          mkdir -p "$bundle"
+          cp mobile/android/aman-consent/build/outputs/aar/aman-consent-release.aar "$bundle/"
+          cp mobile/android/sample/build/outputs/apk/debug/sample-debug.apk "$bundle/"
+          cp "$RUNNER_TEMP/aman-consent-react-native-0.1.0.tgz" "$bundle/"
+          {
+            echo "source_commit=$SOURCE_COMMIT"
+            echo "workflow_run=$WORKFLOW_RUN_URL"
+            echo "artifact_type=unsigned preview; not a release"
+          } > "$bundle/BUILD-INFO.txt"
+          cd "$bundle"
+          sha256sum aman-consent-release.aar sample-debug.apk aman-consent-react-native-0.1.0.tgz > SHA256SUMS
+      - name: Attach mobile preview bundle for manual runs
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7.0.1
         with:
           name: alamane-mobile-preview-${{ github.sha }}
-          path: |
-            mobile/android/aman-consent/build/outputs/aar/aman-consent-release.aar
-            mobile/android/sample/build/outputs/apk/debug/sample-debug.apk
-            ${{ runner.temp }}/aman-consent-react-native-0.1.0.tgz
+          path: ${{ runner.temp }}/alamane-mobile-preview/
           if-no-files-found: error
           retention-days: 14
 

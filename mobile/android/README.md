@@ -11,7 +11,7 @@ gradle :aman-consent:assembleRelease
 gradle :sample:assembleDebug
 ```
 
-Le workflow GitHub Actions `Product validation` compile ces deux cibles. Un lancement manuel du workflow joint l’AAR et l’APK d’exemple comme artefacts de prévisualisation conservés 14 jours. Ils servent aux essais internes d’intégration : ils ne sont pas signés comme release ni publiés dans un dépôt Maven.
+Le workflow GitHub Actions `Product validation` compile ces deux cibles. Un lancement manuel du workflow joint l’AAR, l’APK d’exemple et le tarball React Native dans un artefact de prévisualisation conservé 14 jours. Vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis consulter `BUILD-INFO.txt` pour confirmer le commit source et l’exécution. Ces fichiers permettent de détecter une corruption après téléchargement; ils ne sont pas signés comme release ni publiés dans un dépôt Maven.
 
 The library AAR is produced at `aman-consent/build/outputs/aar/aman-consent-release.aar`. To create a local Maven repository for inspection or internal distribution:
 

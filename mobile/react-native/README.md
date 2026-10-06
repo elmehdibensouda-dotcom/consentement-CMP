@@ -4,7 +4,7 @@ Ce package source fournit un panneau natif React Native FR/AR, le chargement d�
 
 ## Installation du paquet pilote privé
 
-Depuis l’exécution manuelle du workflow GitHub Actions, télécharger l’artefact `alamane-mobile-preview-<commit>` et extraire `aman-consent-react-native-0.1.0.tgz`. Dans l’application cliente, installer le tarball avec l’adaptateur de stockage choisi par l’application :
+Depuis l’exécution manuelle du workflow GitHub Actions, télécharger l’artefact `alamane-mobile-preview-<commit>`, vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis vérifier `BUILD-INFO.txt` pour confirmer le commit source et l’exécution attendue. Le manifeste protège l’intégrité après téléchargement; il ne signe pas le package et ne certifie pas son origine. Extraire `aman-consent-react-native-0.1.0.tgz`. Dans l’application cliente, installer le tarball avec l’adaptateur de stockage choisi par l’application :
 
 ```sh
 npm install ./aman-consent-react-native-0.1.0.tgz @react-native-async-storage/async-storage
