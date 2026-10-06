@@ -1,10 +1,20 @@
 # ALAMANE Consent — React Native SDK starter
 
-Ce package source fournit un panneau natif React Native FR/AR, le chargement d’une politique publiée, la conservation locale d’un choix par propriété dans le stockage privé choisi par l’application, et une méthode d’envoi facultative appelée explicitement. Après le choix, il expose un bouton accessible « Gérer mes préférences » pour rouvrir le panneau; placer le composant dans une zone durable de l’application, comme ses paramètres de confidentialité. Il vise React Native 0.72+ et React 18+. Aucun binaire ni package npm public n’est publié.
+Ce package source fournit un panneau natif React Native FR/AR, le chargement d’une politique publiée, la conservation locale d’un choix par propriété dans le stockage privé choisi par l’application, et une méthode d’envoi facultative appelée explicitement. Après le choix, il expose un bouton accessible « Gérer mes préférences » pour rouvrir le panneau; placer le composant dans une zone durable de l’application, comme ses paramètres de confidentialité. Il vise React Native 0.72+ et React 18+. Il n’est pas publié sur un registre npm; un tarball privé est joint aux exécutions manuelles du workflow GitHub Actions pendant 14 jours.
+
+## Installation du paquet pilote privé
+
+Depuis l’exécution manuelle du workflow GitHub Actions, télécharger l’artefact `alamane-mobile-preview-<commit>` et extraire `aman-consent-react-native-0.1.0.tgz`. Dans l’application cliente, installer le tarball avec l’adaptateur de stockage choisi par l’application :
+
+```sh
+npm install ./aman-consent-react-native-0.1.0.tgz @react-native-async-storage/async-storage
+```
+
+Le tarball inclut le guide et le code source TypeScript. Il n’est pas signé ni publié sur un registre; vérifiez son origine et intégrez-le d’abord dans une application pilote.
 
 ## Installation locale pour un pilote
 
-Ce package n’est pas encore publié sur npm. Pour un pilote, cloner le dépôt à côté de l’application cliente, puis installer le dossier source avec un adaptateur de stockage choisi par l’application :
+Pour travailler depuis le checkout plutôt que d’utiliser le tarball, cloner le dépôt à côté de l’application cliente, puis installer le dossier source avec un adaptateur de stockage choisi par l’application :
 
 ```sh
 # Depuis la racine de l’application React Native ; adapter le chemin au checkout.
