@@ -48,7 +48,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6.4.0
         with:
-          gradle-version: "9.6"
+          gradle-version: "9.6.0"
           cache-provider: basic
       - name: Install Android SDK platform
         run: |
@@ -76,4 +76,4 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7.0.1
       - name: Compile for the iOS simulator
-        run: swift build --package-path mobile/ios --triple arm64-apple-ios16.0-simulator
+        run: swift build --package-path mobile/ios --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios16.0-simulator
