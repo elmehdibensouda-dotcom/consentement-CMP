@@ -113,6 +113,75 @@
     const configuredMs = Math.max(1, Number(cfg.retentionDays) || 180) * 24 * 60 * 60 * 1000;
     return cfg.channel === 'web' ? Math.min(configuredMs, DEFAULT_MAX_AGE_MS) : configuredMs;
   }
+  function isRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+  function hasOnlyKeys(value, allowed) {
+    return isRecord(value) && Object.keys(value).every(function (key) { return allowed.includes(key); });
+  }
+  function validText(value, maximum) {
+    return typeof value === 'string' && value.trim().length > 0 && value.length <= maximum;
+  }
+  function validPrivacyNotice(notice) {
+    if (!hasOnlyKeys(notice, ['controllerName', 'contact', 'processingReference', 'dataCategories', 'recipients', 'transfers'])) return false;
+    return validText(notice.controllerName, 200) && validText(notice.contact, 256) &&
+      validText(notice.processingReference, 120) &&
+      ['dataCategories', 'recipients', 'transfers'].every(function (field) {
+        return Array.isArray(notice[field]) && notice[field].length > 0 &&
+          notice[field].every(function (item) { return validText(item, 200); });
+      });
+  }
+  function validatePublishedPolicy(policy, cfg) {
+    if (!hasOnlyKeys(policy, ['schemaVersion', 'propertyId', 'policyVersion', 'status', 'purposes', 'languages', 'defaultLanguage', 'retentionDays', 'notice', 'noticeTranslations']) ||
+        policy.schemaVersion !== 1 || policy.status !== 'published' || policy.propertyId !== cfg.propertyId ||
+        !validText(policy.policyVersion, 64) || !Number.isInteger(policy.retentionDays) ||
+        policy.retentionDays < 1 || policy.retentionDays > 3650 ||
+        (cfg.channel === 'web' && policy.retentionDays > 180) ||
+        !validPrivacyNotice(policy.notice)) {
+      throw new Error('Aman policy does not match the supported schema.');
+    }
+    const supportedLanguages = ['fr', 'ar'];
+    if (!Array.isArray(policy.languages) || policy.languages.length === 0 ||
+        new Set(policy.languages).size !== policy.languages.length ||
+        !policy.languages.every(function (language) { return supportedLanguages.includes(language); }) ||
+        (policy.defaultLanguage !== undefined && !policy.languages.includes(policy.defaultLanguage))) {
+      throw new Error('Aman policy has unsupported language settings.');
+    }
+    if (policy.noticeTranslations !== undefined) {
+      if (!hasOnlyKeys(policy.noticeTranslations, ['fr', 'ar']) ||
+          !validPrivacyNotice(policy.noticeTranslations.fr) || !validPrivacyNotice(policy.noticeTranslations.ar) ||
+          !Object.keys(policy.noticeTranslations).every(function (language) { return policy.languages.includes(language); })) {
+        throw new Error('Aman policy has incomplete translated notices.');
+      }
+    }
+    if (!Array.isArray(policy.purposes) || policy.purposes.length === 0) {
+      throw new Error('Aman policy must define at least one purpose.');
+    }
+    const ids = new Set();
+    const supportedChannels = ['web', 'ios', 'android'];
+    policy.purposes.forEach(function (purpose) {
+      if (!hasOnlyKeys(purpose, ['id', 'label', 'description', 'required', 'consentRequired', 'channels', 'vendors']) ||
+          typeof purpose.id !== 'string' || !/^[a-z][a-z0-9_-]{1,63}$/.test(purpose.id) || ids.has(purpose.id) ||
+          !hasOnlyKeys(purpose.label, ['fr', 'ar']) ||
+          !validText(purpose.label.fr, 120) || !validText(purpose.label.ar, 120) ||
+          !hasOnlyKeys(purpose.description, ['fr', 'ar']) ||
+          !validText(purpose.description.fr, 600) || !validText(purpose.description.ar, 600) ||
+          typeof purpose.required !== 'boolean' || typeof purpose.consentRequired !== 'boolean' ||
+          (purpose.required && purpose.consentRequired) ||
+          !Array.isArray(purpose.channels) || purpose.channels.length === 0 ||
+          new Set(purpose.channels).size !== purpose.channels.length ||
+          !purpose.channels.every(function (channel) { return supportedChannels.includes(channel); }) ||
+          (purpose.vendors !== undefined && (!Array.isArray(purpose.vendors) ||
+            !purpose.vendors.every(function (vendor) { return typeof vendor === 'string' && vendor.length <= 128; })))) {
+        throw new Error('Aman policy contains an unsupported purpose.');
+      }
+      ids.add(purpose.id);
+    });
+    if (!policy.purposes.some(function (purpose) { return purpose.channels.includes(cfg.channel); })) {
+      throw new Error('Aman policy does not contain a purpose for this channel.');
+    }
+    return policy;
+  }
   function secureApiBase(value) {
     let url;
     try { url = new URL(String(value), window.location.href); }
@@ -157,14 +226,12 @@
     let policy;
     if (response === null) policy = cached.policy;
     else if (response.status === 304 && cached) policy = cached.policy;
-    else if (response.ok) {
-      policy = await response.json();
-      write(cacheKey, { etag: response.headers.get('ETag'), policy });
-    } else throw new Error('Aucune politique Aman publiée pour cette propriété.');
-    if (!policy || policy.status !== 'published' || policy.propertyId !== cfg.propertyId) {
-      throw new Error('La politique publiée ne correspond pas à cette propriété.');
-    }
-    const locale = normalizeLocale(cfg.localeExplicit ? cfg.locale : (policy.defaultLanguage || cfg.locale || 'fr'));
+    else if (response.ok) policy = await response.json();
+    else throw new Error('Aucune politique Aman publiée pour cette propriété.');
+    validatePublishedPolicy(policy, cfg);
+    if (response && response.ok) write(cacheKey, { etag: response.headers.get('ETag'), policy });
+    const requestedLocale = normalizeLocale(cfg.localeExplicit ? cfg.locale : (policy.defaultLanguage || cfg.locale || 'fr'));
+    const locale = policy.languages.includes(requestedLocale) ? requestedLocale : (policy.defaultLanguage || policy.languages[0]);
     const localizedNotice = policy.noticeTranslations && policy.noticeTranslations[locale];
     const channel = cfg.channel || 'web';
     const purposes = (policy.purposes || []).filter(function (purpose) {

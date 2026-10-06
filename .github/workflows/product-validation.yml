@@ -1,0 +1,79 @@
+name: Product validation
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-and-web:
+    name: Backend and web SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install API dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run backend regression suite
+        run: python -m unittest discover backend/tests -v
+      - name: Check web SDK syntax
+        run: |
+          node --check aman-cmp.js
+          node --check aman-scanner.js
+
+  android-sdk:
+    name: Android SDK and sample build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          gradle-version: "9.6"
+          cache-provider: basic
+      - name: Install Android SDK platform
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-37"
+      - name: Build Android library and sample
+        working-directory: mobile/android
+        run: gradle --no-daemon :aman-consent:assembleRelease :sample:assembleDebug
+      - name: Attach Android preview packages for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: aman-android-preview-${{ github.sha }}
+          path: |
+            mobile/android/aman-consent/build/outputs/aar/aman-consent-release.aar
+            mobile/android/sample/build/outputs/apk/debug/sample-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-sdk:
+    name: iOS SDK compile
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Compile for the iOS simulator
+        run: swift build --package-path mobile/ios --triple arm64-apple-ios16.0-simulator

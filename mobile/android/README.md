@@ -11,6 +11,8 @@ gradle :aman-consent:assembleRelease
 gradle :sample:assembleDebug
 ```
 
+Le workflow GitHub Actions `Product validation` compile ces deux cibles. Un lancement manuel du workflow joint l’AAR et l’APK d’exemple comme artefacts de prévisualisation conservés 14 jours. Ils servent aux essais internes d’intégration : ils ne sont pas signés comme release ni publiés dans un dépôt Maven.
+
 The library AAR is produced at `aman-consent/build/outputs/aar/aman-consent-release.aar`. To create a local Maven repository for inspection or internal distribution:
 
 ```sh

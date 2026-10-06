@@ -13,6 +13,7 @@ import json
 import os
 import secrets
 import sqlite3
+import stat
 import time
 import csv
 import io
@@ -36,7 +37,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, constr
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "schemas" / "consent-policy.schema.json"
-DATABASE_PATH = Path(os.environ.get("AMAN_DATABASE_PATH", "/tmp/aman-dev.sqlite3"))
+DEFAULT_DATABASE_PATH = Path.home() / ".alamane" / "aman-dev.sqlite3"
+DATABASE_PATH = Path(os.environ.get("AMAN_DATABASE_PATH", str(DEFAULT_DATABASE_PATH)))
 ENVIRONMENT = os.environ.get("AMAN_ENVIRONMENT", "development").lower()
 SESSION_COOKIE = "aman_session"
 CSRF_COOKIE = "aman_csrf"
@@ -88,7 +90,24 @@ def utc_now() -> int:
 
 
 def db_connect() -> sqlite3.Connection:
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    parent_mode = DATABASE_PATH.parent.stat().st_mode
+    if parent_mode & (stat.S_IWGRP | stat.S_IWOTH) and not parent_mode & stat.S_ISVTX:
+        raise PermissionError("SQLite databases must be stored in a private directory or a sticky shared directory")
+    try:
+        database_fd = os.open(DATABASE_PATH, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+    except FileExistsError:
+        # Preserve existing databases; permissions on legacy files are reported
+        # to the operator instead of being changed implicitly.
+        existing = DATABASE_PATH.lstat()
+        if not stat.S_ISREG(existing.st_mode):
+            raise PermissionError("The configured SQLite database must be a regular file")
+        if hasattr(os, "getuid") and existing.st_uid != os.getuid():
+            raise PermissionError("The configured SQLite database must be owned by the current user")
+        if existing.st_mode & (stat.S_IRGRP | stat.S_IROTH):
+            LOGGER.warning("An existing SQLite database is group/world-readable; review its mode and WAL/SHM files")
+    else:
+        os.close(database_fd)
     conn = sqlite3.connect(DATABASE_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -119,6 +138,7 @@ def transaction() -> Generator[sqlite3.Connection, None, None]:
 
 
 def init_db() -> None:
+    ensure_scrypt_available()
     with connection() as conn:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(
@@ -269,8 +289,15 @@ def check_password(password: str, stored: str) -> bool:
             return False
         candidate = hash_password(password, bytes.fromhex(salt_hex)).split("$", 2)[2]
         return hmac.compare_digest(candidate, hash_hex)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return False
+
+
+def ensure_scrypt_available() -> None:
+    if not callable(getattr(hashlib, "scrypt", None)):
+        raise RuntimeError(
+            "This Python/OpenSSL build does not provide hashlib.scrypt, which is required for ALAMANE password authentication."
+        )
 
 
 def login_client_key(request: Request) -> str:
@@ -692,7 +719,13 @@ def login(body: LoginBody, request: Request, response: Response):
     email = str(body.email).strip().lower()
     with connection() as conn:
         user = conn.execute("SELECT id,password_hash,disabled FROM users WHERE email=?", (email,)).fetchone()
-    if not user or user["disabled"] or not check_password(body.password, user["password_hash"]):
+    password_hash = (
+        user["password_hash"]
+        if user and not user["disabled"]
+        else f"scrypt${secrets.token_bytes(16).hex()}${'0' * 128}"
+    )
+    password_matches = check_password(body.password, password_hash)
+    if not user or user["disabled"] or not password_matches:
         retry_after = note_failed_login(client_key)
         if retry_after:
             raise HTTPException(

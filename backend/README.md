@@ -14,9 +14,9 @@ python backend/create_admin.py
 uvicorn aman_api.main:app --app-dir backend --host 127.0.0.1 --port 8001 --no-access-log
 ```
 
-Le stockage de développement est SQLite dans `/tmp/aman-dev.sqlite3`. Il peut être remplacé par `AMAN_DATABASE_PATH`. La doc interactive est à <http://127.0.0.1:8001/docs>.
+Le stockage de développement est SQLite dans `~/.alamane/aman-dev.sqlite3` par défaut ; une nouvelle base est créée avec le mode `0600` et son répertoire dédié en `0700`. Le chemin peut être remplacé par `AMAN_DATABASE_PATH`, à condition de choisir un répertoire privé. Les permissions des bases existantes ne sont pas modifiées automatiquement : vérifiez-les et protégez également les fichiers WAL/SHM déjà présents. La doc interactive est à <http://127.0.0.1:8001/docs>.
 
-La démo web utilise `http://localhost:8000`; l’API autorise cette origine pour les appels avec cookies. `AMAN_CORS_ORIGINS` contient les origines des consoles qui utilisent les cookies. Chaque origine de propriété Web est vérifiée à l’exécution et autorise seulement les routes publiques de lecture de politique et d’envoi d’événement de consentement, sans cookies. Une origine saisie dans Aman est une association de configuration, pas une preuve de contrôle du domaine. Le compte initial est créé par commande locale, pas par une route d’inscription publique.
+La démo web utilise `http://localhost:8000`; l’API autorise cette origine pour les appels avec cookies. `admin.html` lit l’URL API depuis `<meta name="aman-api-base-url" content="https://api.exemple.ma">`; en l’absence de ce réglage, elle utilise le port 8001 en local et la même origine en hébergement distant. `AMAN_CORS_ORIGINS` doit contenir les origines exactes des consoles qui utilisent les cookies. Chaque origine de propriété Web est vérifiée à l’exécution et autorise seulement les routes publiques de lecture de politique et d’envoi d’événement de consentement, sans cookies. Une origine saisie dans Aman est une association de configuration, pas une preuve de contrôle du domaine. Le compte initial est créé par commande locale, pas par une route d’inscription publique.
 
 ## Fonctionnalités du socle
 
@@ -94,7 +94,7 @@ La console `admin.html` utilise ces routes et permet de créer des organisations
 - SQLite local uniquement, sans migrations, chiffrement de base ou modèle de haute disponibilité.
 - Pas de limitation de débit partagée ou opérée en production, MFA, SSO, récupération de compte, alertes, service d’e-mail, supervision ni procédure d’incident.
 - Pas de rotation centralisée de secrets ni d’intégration à un coffre de secrets.
-- La console entreprise, le SDK web et les clients SDK natifs savent lire la politique publique. Android a un module Gradle et une application exemple, mais aucun binaire n’a encore été compilé ou publié ; iOS reste un package source à compiler dans un environnement Apple.
+- La console entreprise, le SDK web et les clients SDK natifs savent lire la politique publique. Android a un module Gradle et une application exemple ; iOS a un package Swift ; React Native a un package TypeScript source. Aucun binaire ou package mobile n’a encore été publié, et les intégrations restent à compiler et valider sur les versions clientes visées.
 - Les événements Web/iOS/Android sont des assertions des SDK client et ne constituent pas une preuve d’identité ni une preuve juridique complète. L’intégrateur doit activer l’envoi seulement après validation de l’information et du traitement par le client. Les appels natifs sont explicites ; ils ne sont pas activés par défaut.
 - Les inventaires peuvent contenir des noms de cookies et des chemins de ressources internes. L’outil n’envoie rien automatiquement, mais un membre qui importe le JSON conserve explicitement ces éléments dans SQLite local ; vérifier manuellement l’hôte et le périmètre avant import. L’outil observe une seule page et n’accède pas aux cookies HttpOnly.
 - L’association d’origine empêche les erreurs de rattachement ordinaires, mais n’atteste pas que le rapport a été réellement collecté sur cette page ni que l’organisation contrôle ce domaine ; l’import JSON est une action explicite d’un membre.
