@@ -57,6 +57,9 @@ INVITATION_ACCEPT_LIMIT = 20
 INVITATION_RATE_WINDOW_SECONDS = 60
 INVITATION_RATE_MAX_BUCKETS = 20000
 SCAN_REPORT_MAX_BYTES = 1_048_576
+API_REQUEST_MAX_BYTES = 1_048_576
+POLICY_MAX_BYTES = 524_288
+CONSENT_EVENT_MAX_BYTES = 16_384
 SCAN_REPORTS_PER_PROPERTY = 20
 _LOGIN_LOCK = Lock()
 _LOGIN_FAILURES: Dict[str, Deque[int]] = {}
@@ -83,6 +86,70 @@ ALLOWED_ORIGINS = [
 SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 POLICY_VALIDATOR = Draft202012Validator(SCHEMA)
 LOGGER = logging.getLogger("aman.consent")
+
+
+class RequestBodyLimitMiddleware:
+    """Bound API request bodies before FastAPI parses JSON or validates models."""
+
+    def __init__(self, app):
+        self.app = app
+
+    @staticmethod
+    def limit_for(scope) -> Optional[int]:
+        if scope.get("type") != "http" or scope.get("method") not in {"POST", "PUT", "PATCH"}:
+            return None
+        path = scope.get("path", "")
+        if re.fullmatch(r"/v1/public/properties/[^/]+/consent-events", path):
+            return CONSENT_EVENT_MAX_BYTES
+        if re.fullmatch(r"/v1/organizations/[^/]+/(?:properties/[^/]+/policies|policies/[^/]+)", path):
+            return POLICY_MAX_BYTES
+        if path.startswith("/v1/"):
+            return API_REQUEST_MAX_BYTES
+        return None
+
+    async def __call__(self, scope, receive, send):
+        limit = self.limit_for(scope)
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        raw_length = headers.get(b"content-length")
+        if raw_length and raw_length.isdigit() and int(raw_length) > limit:
+            await self.reject(send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > limit:
+                await self.reject(send)
+                return
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                break
+
+        replayed = False
+
+        async def replay_receive():
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+    @staticmethod
+    async def reject(send):
+        body = b'{"detail":"Request body exceeds the configured limit"}'
+        await send({"type": "http.response.start", "status": 413, "headers": [
+            (b"content-type", b"application/json"), (b"content-length", str(len(body)).encode("ascii"))
+        ]})
+        await send({"type": "http.response.body", "body": body})
 
 
 def utc_now() -> int:
@@ -627,6 +694,7 @@ async def purge_expired_consent_events() -> None:
 
 
 app = FastAPI(title="Aman Consent API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
