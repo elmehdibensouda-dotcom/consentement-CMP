@@ -539,7 +539,7 @@
     $('dashboardRefresh').addEventListener('click',()=>loadDashboard().catch(e=>error('dashboardError',e.message)));$('refresh').addEventListener('click',()=>loadOrganizations().catch(e=>error('orgError',e.message)));$('refreshMembers').addEventListener('click',()=>loadMembers().catch(e=>error('memberError',e.message)));$('refreshInvitations').addEventListener('click',()=>loadInvitations().catch(e=>error('memberError',e.message)));$('refreshPolicies').addEventListener('click',()=>loadPolicies().catch(e=>error('policyError',e.message)));$('refreshAudit').addEventListener('click',()=>loadAudit().catch(e=>error('auditError',e.message)));$('exportAudit').addEventListener('click',exportAudit);
     const invitationFromLink=new URLSearchParams(location.hash.slice(1)).get('invite');
     if(invitationFromLink){$('inviteToken').value=invitationFromLink;$('invitePanel').classList.add('show');$('showInvite').classList.add('hidden');history.replaceState(null,document.title,location.pathname+location.search);previewInvitation(invitationFromLink);}
-    (async()=>{if(invitationFromLink)return;state.csrf=cookie('aman_csrf');try{await enterApp()}catch(_){$('loginView').classList.remove('hidden');$('appView').classList.add('hidden')}})();
+    (async()=>{if(invitationFromLink)return;state.csrf=cookie('aman_csrf');try{await enterApp()}catch(err){$('loginView').classList.remove('hidden');$('appView').classList.add('hidden');if(err?.status!==401)error('loginError',err instanceof Error?err.message:'API ALAMANE indisponible. Vérifie le démarrage local.')}})();
   </script>
 </body>
 </html>
