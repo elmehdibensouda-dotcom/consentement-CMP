@@ -112,7 +112,7 @@ struct ConsentSetupView: View {
 }
 ```
 
-Le code d’exemple laisse volontairement l’API du fournisseur en fonctions de remplacement. Le client doit raccorder chaque finalité à son propre SDK et empêcher son initialisation avant le choix applicable. Aman ne peut pas désinitialiser une bibliothèque native déjà lancée.
+Le code d’exemple laisse volontairement l’API du fournisseur en fonctions de remplacement. Le client doit raccorder chaque finalité à son propre SDK et empêcher son initialisation avant le choix applicable. Désactive l’auto-initialisation et l’auto-collecte dans la configuration native du fournisseur : le callback de l’application intervient après le démarrage et un arrêt tardif ne peut pas effacer un envoi déjà effectué. Aman ne peut pas désinitialiser une bibliothèque native déjà lancée.
 
 Sans paramètre `language`, `AmanConsentSheet` reprend `defaultLanguage` de la politique publiée (`fr` ou `ar`). L’application hôte peut fournir explicitement une langue pour adapter l’écran à sa propre préférence de langue.
 

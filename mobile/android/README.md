@@ -25,10 +25,12 @@ The local publication is written below `aman-consent/build/repository/`; change 
 
 For a source checkout, include `:aman-consent` as a Gradle project module. For an internal artifact repository, use the coordinates `ma.aman:aman-consent-android:0.1.0` after publishing a reviewed release. The app must have network access to the published policy endpoint; the library manifest declares Android's `INTERNET` permission. Remote policy endpoints must use HTTPS. HTTP is accepted only for loopback development hosts (`localhost`, `127.0.0.1`, and `::1`).
 
+Avant d’utiliser ce code, désactive l’auto-initialisation et l’auto-collecte de chaque SDK facultatif dans sa configuration Android. Le callback intervient après le démarrage de l’application ; `startAnalyticsIfNotStarted()` doit initialiser le SDK seulement si l’état est autorisé. `stopAnalyticsIfSupported()` ne peut pas annuler les données déjà envoyées ni décharger une bibliothèque native.
+
 ```kotlin
 val policyClient = AmanConsentAPIClient(applicationContext)
 var consent: AmanConsentManager? = null
-// Démarrer fermé : aucune finalité optionnelle avant une politique valide.
+// Démarrer fermé. Les SDK facultatifs doivent déjà être configurés sans auto-initialisation.
 stopAnalyticsIfSupported()
 policyClient.fetchPublishedPolicy("https://cmp.example.ma", "PROPERTY_ID") { result ->
     result.onSuccess { policy ->

@@ -67,7 +67,7 @@ L’identifiant de propriété est une référence publique de configuration, pa
 
 ## Relier les finalités aux SDK de l’application
 
-Le panneau enregistre le choix sur l’appareil et ne démarre aucun SDK tiers. L’application hôte applique les états effectifs à ses propres SDK et les réconcilie après chargement ou changement de politique :
+Le panneau enregistre le choix sur l’appareil et ne démarre aucun SDK tiers. Avant d’intégrer le composant, désactive l’auto-initialisation et l’auto-collecte des SDK facultatifs dans leur configuration native. Un `useEffect` intervient après le montage React : l’application ne doit donc pas compter sur un appel d’arrêt tardif pour empêcher leur premier envoi. Initialise chaque SDK uniquement depuis `startAnalyticsIfNotStarted()` lorsque `isAllowed()` vaut `true`; `stopAnalyticsIfSupported()` sert à appliquer un refus ou un retrait après coup. L’application hôte réconcilie les états après chargement ou changement de politique :
 
 ```tsx
 useEffect(() => {
@@ -76,7 +76,7 @@ useEffect(() => {
     else stopAnalyticsIfSupported();
   };
   const unsubscribe = aman.subscribe(apply);
-  apply(); // Sans politique chargée, isAllowed() est false : arrêter les SDK optionnels d’abord.
+  apply(); // Démarrage fermé côté JS ; les SDK doivent aussi être configurés pour ne pas s’auto-initialiser.
   // AmanConsentBanner charge la politique, notifie ce client et propose une nouvelle tentative.
   return unsubscribe;
 }, []);
