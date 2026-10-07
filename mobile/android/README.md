@@ -28,6 +28,8 @@ For a source checkout, include `:aman-consent` as a Gradle project module. For a
 ```kotlin
 val policyClient = AmanConsentAPIClient(applicationContext)
 var consent: AmanConsentManager? = null
+// Démarrer fermé : aucune finalité optionnelle avant une politique valide.
+stopAnalyticsIfSupported()
 policyClient.fetchPublishedPolicy("https://cmp.example.ma", "PROPERTY_ID") { result ->
     result.onSuccess { policy ->
         val current = consent ?: AmanConsentManager(applicationContext, policy).also { created ->

@@ -76,6 +76,7 @@ useEffect(() => {
     else stopAnalyticsIfSupported();
   };
   const unsubscribe = aman.subscribe(apply);
+  apply(); // Sans politique chargée, isAllowed() est false : arrêter les SDK optionnels d’abord.
   aman.loadPolicy().then(apply).catch(reportConsentSetupError);
   return unsubscribe;
 }, []);

@@ -46,6 +46,8 @@ struct ConsentSetupView: View {
     }
 
     private func loadConsentPolicy() async {
+        // Démarrer fermé : aucune finalité optionnelle avant une politique valide.
+        applyAnalyticsChoice(false)
         do {
             let client = AmanConsentAPIClient()
             let apiBaseURL = URL(string: "https://cmp.example.ma")!
