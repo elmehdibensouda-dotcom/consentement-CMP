@@ -45,7 +45,7 @@ export type AmanPolicy = {
   defaultLanguage?: AmanLanguage;
   retentionDays: number;
   notice: PrivacyNotice;
-  noticeTranslations?: Partial<Record<AmanLanguage, PrivacyNotice>>;
+  noticeTranslations?: Record<AmanLanguage, PrivacyNotice>;
 };
 export type AmanDecision = {
   propertyId: string;
@@ -125,13 +125,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isText(value: unknown, maxLength: number): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength;
+}
+
+function isTextList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 32 &&
+    value.every((item) => isText(item, 200));
+}
+
+function isPrivacyNotice(value: unknown): value is PrivacyNotice {
+  return isRecord(value) && isText(value.controllerName, 200) &&
+    isText(value.contact, 256) && isText(value.processingReference, 120) &&
+    isTextList(value.dataCategories) && isTextList(value.recipients) && isTextList(value.transfers);
+}
+
 function validatePolicy(value: unknown, propertyId: string, channel: AmanChannel): AmanPolicy {
   if (!isRecord(value) || value.schemaVersion !== 1 || value.status !== 'published' ||
       value.propertyId !== propertyId || typeof value.policyVersion !== 'string' ||
-      !Array.isArray(value.purposes) || value.purposes.length === 0 ||
-      !Array.isArray(value.languages) || value.languages.length === 0 ||
+      value.policyVersion.length < 1 || value.policyVersion.length > 64 ||
+      !Array.isArray(value.purposes) || value.purposes.length === 0 || value.purposes.length > 64 ||
+      !Array.isArray(value.languages) || value.languages.length === 0 || value.languages.length > 2 ||
       !Number.isInteger(value.retentionDays) || (value.retentionDays as number) < 1 ||
-      (value.retentionDays as number) > 3650 || !isRecord(value.notice)) {
+      (value.retentionDays as number) > 3650 || !isPrivacyNotice(value.notice)) {
     throw new Error('Aman returned an invalid or unpublished consent policy.');
   }
   const languages = value.languages as unknown[];
@@ -140,16 +156,28 @@ function validatePolicy(value: unknown, propertyId: string, channel: AmanChannel
       (value.defaultLanguage !== undefined && !languages.includes(value.defaultLanguage))) {
     throw new Error('Aman policy language settings are invalid.');
   }
+  if (value.noticeTranslations !== undefined) {
+    const translations = value.noticeTranslations;
+    if (!isRecord(translations) || Object.keys(translations).some((key) => key !== 'fr' && key !== 'ar') ||
+        Object.keys(translations).some((key) => !languages.includes(key)) ||
+        !isPrivacyNotice(translations.fr) || !isPrivacyNotice(translations.ar)) {
+      throw new Error('Aman policy notice translations are invalid.');
+    }
+  }
   const purposeIds = new Set<string>();
   for (const entry of value.purposes) {
     if (!isRecord(entry) || typeof entry.id !== 'string' ||
         !/^[a-z][a-z0-9_-]{1,63}$/.test(entry.id) || purposeIds.has(entry.id) ||
         !isRecord(entry.label) || !isRecord(entry.description) ||
-        typeof entry.label.fr !== 'string' || typeof entry.label.ar !== 'string' ||
-        typeof entry.description.fr !== 'string' || typeof entry.description.ar !== 'string' ||
+        !isText(entry.label.fr, 120) || !isText(entry.label.ar, 120) ||
+        !isText(entry.description.fr, 600) || !isText(entry.description.ar, 600) ||
         typeof entry.required !== 'boolean' || typeof entry.consentRequired !== 'boolean' ||
         (entry.required && entry.consentRequired) || !Array.isArray(entry.channels) ||
-        !entry.channels.includes(channel) || entry.channels.some((item) => !['web', 'ios', 'android'].includes(String(item)))) {
+        entry.channels.length === 0 || entry.channels.length > 3 ||
+        new Set(entry.channels).size !== entry.channels.length || !entry.channels.includes(channel) ||
+        entry.channels.some((item) => !['web', 'ios', 'android'].includes(String(item))) ||
+        (entry.vendors !== undefined && (!Array.isArray(entry.vendors) || entry.vendors.length > 32 ||
+          entry.vendors.some((vendor) => !isText(vendor, 128))))) {
       throw new Error('Aman policy contains an invalid purpose for this app.');
     }
     purposeIds.add(entry.id);
