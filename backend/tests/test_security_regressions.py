@@ -377,7 +377,58 @@ class SecurityRegressionTests(unittest.TestCase):
         missing = api.ConsentEventBody(**{**base, "eventId": str(uuid4())}, purposes={"essential": True})
         self.assert_http_status(422, lambda: api.record_consent_event("property-a", missing, request))
 
+    def test_invalid_consent_requests_do_not_consume_property_rate_limit(self) -> None:
+        def bucket_count(scope: str, value: str) -> int:
+            bucket_hash = api.rate_limit_hash(scope, value)
+            with api.connection() as conn:
+                row = conn.execute(
+                    "SELECT request_count FROM rate_limit_buckets WHERE scope=? AND bucket_hash=?",
+                    (scope, bucket_hash),
+                ).fetchone()
+            return row["request_count"] if row else 0
+
+        def body() -> api.ConsentEventBody:
+            return api.ConsentEventBody(
+                eventId=str(uuid4()),
+                policyVersion="1",
+                channel="web",
+                action="reject_all",
+                purposes={"essential": True, "analytics": False},
+            )
+
+        wrong_origin = make_request(
+            "198.51.100.21", extra_headers=(("origin", "https://attacker.example"),)
+        )
+        self.assert_http_status(403, lambda: api.record_consent_event("property-a", body(), wrong_origin))
+        self.assertEqual(bucket_count("consent_client", "198.51.100.21"), 1)
+        self.assertEqual(bucket_count("consent_property", "property-a"), 0)
+
+        unknown_property = make_request(
+            "198.51.100.22", extra_headers=(("origin", "https://bank-a.example"),)
+        )
+        self.assert_http_status(
+            404, lambda: api.record_consent_event("unknown-property", body(), unknown_property)
+        )
+        self.assertEqual(bucket_count("consent_client", "198.51.100.22"), 1)
+        self.assertEqual(bucket_count("consent_property", "unknown-property"), 0)
+
+        valid_request = make_request(
+            "198.51.100.23", extra_headers=(("origin", "https://bank-a.example"),)
+        )
+        self.assertEqual(api.record_consent_event("property-a", body(), valid_request)["recorded"], True)
+        self.assertEqual(bucket_count("consent_client", "198.51.100.23"), 1)
+        self.assertEqual(bucket_count("consent_property", "property-a"), 1)
+
     def test_consent_event_id_cannot_be_reused_with_different_values(self) -> None:
+        def property_bucket_count() -> int:
+            bucket_hash = api.rate_limit_hash("consent_property", "property-a")
+            with api.connection() as conn:
+                row = conn.execute(
+                    "SELECT request_count FROM rate_limit_buckets WHERE scope=? AND bucket_hash=?",
+                    ("consent_property", bucket_hash),
+                ).fetchone()
+            return row["request_count"] if row else 0
+
         event_id = str(uuid4())
         request = make_request(extra_headers=(("origin", "https://bank-a.example"),))
         first = api.ConsentEventBody(
@@ -389,7 +440,9 @@ class SecurityRegressionTests(unittest.TestCase):
             purposes={"essential": True, "analytics": True},
         )
         self.assertEqual(api.record_consent_event("property-a", first, request)["recorded"], True)
+        self.assertEqual(property_bucket_count(), 1)
         self.assert_http_status(409, lambda: api.record_consent_event("property-a", changed, request))
+        self.assertEqual(property_bucket_count(), 2)
 
     def test_logout_invalidates_session(self) -> None:
         request, csrf = self.session()

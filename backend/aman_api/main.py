@@ -255,16 +255,26 @@ def clear_login_failures(client_key: str) -> None:
     clear_login_rate_limit(DATABASE_PATH, LOGGER, client_key)
 
 
-def enforce_consent_event_rate_limit(request: Request, property_id: str) -> None:
-    """Atomically bound ingestion by source and property across API replicas."""
+def enforce_consent_event_rate_limit(
+    request: Request,
+    property_id: Optional[str] = None,
+    transaction_connection: Optional[Connection] = None,
+) -> None:
+    """Rate-limit by source before lookup, then by property after request validation."""
     now = utc_now()
     remote_ip = request.client.host if request.client else "unknown"
-    limits = (
-        ("consent_client", rate_limit_hash("consent_client", remote_ip), CONSENT_EVENT_CLIENT_LIMIT),
-        ("consent_property", rate_limit_hash("consent_property", property_id), CONSENT_EVENT_PROPERTY_LIMIT),
-    )
+    if property_id is None:
+        limits = (("consent_client", rate_limit_hash("consent_client", remote_ip), CONSENT_EVENT_CLIENT_LIMIT),)
+    else:
+        limits = (("consent_property", rate_limit_hash("consent_property", property_id), CONSENT_EVENT_PROPERTY_LIMIT),)
     retry_after, capacity_limited = consume_rate_limits(
-        DATABASE_PATH, LOGGER, limits, now, CONSENT_EVENT_WINDOW_SECONDS, CONSENT_EVENT_MAX_BUCKETS
+        DATABASE_PATH,
+        LOGGER,
+        limits,
+        now,
+        CONSENT_EVENT_WINDOW_SECONDS,
+        CONSENT_EVENT_MAX_BUCKETS,
+        transaction_connection=transaction_connection,
     )
     if capacity_limited:
         raise HTTPException(status_code=429, detail="Consent event capacity is temporarily limited",
@@ -1582,8 +1592,10 @@ def get_published_policy(property_id: str, request: Request, if_none_match: Opti
 def record_consent_event(property_id: str, body: ConsentEventBody, request: Request):
     """Record a client-reported decision without visitor or device identifiers."""
     origin = request.headers.get("origin")
-    enforce_consent_event_rate_limit(request, property_id)
+    enforce_consent_event_rate_limit(request)
     now = utc_now()
+    event_id_conflict = False
+    duplicate_event = False
     with transaction() as conn:
         row = conn.execute(
             "SELECT pr.channel,pr.origin,p.body FROM properties pr JOIN policies p ON p.property_id=pr.id "
@@ -1618,6 +1630,8 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
         if body.action == "reject_all" and any(optional_values):
             raise HTTPException(status_code=422, detail="reject_all must disable every optional purpose")
 
+        enforce_consent_event_rate_limit(request, property_id, transaction_connection=conn)
+
         purposes_json = json.dumps(body.purposes, sort_keys=True, separators=(",", ":"))
         existing = conn.execute("SELECT * FROM consent_events WHERE event_id=?", (body.eventId,)).fetchone()
         if existing:
@@ -1629,16 +1643,22 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
                 and existing["purposes"] == purposes_json
             )
             if not same_event:
-                raise HTTPException(status_code=409, detail="Consent event identifier was already used")
-            return {"recorded": False, "duplicate": True}
-
-        conn.execute(
-            "INSERT INTO consent_events(event_id,property_id,policy_version,channel,action,purposes,recorded_at,expires_at) "
-            "VALUES(?,?,?,?,?,?,?,?)",
-            (body.eventId, property_id, body.policyVersion, body.channel, body.action, purposes_json,
-             now, now + int(policy["retentionDays"]) * 86_400),
-        )
-        conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (now,))
+                event_id_conflict = True
+            else:
+                duplicate_event = True
+        else:
+            conn.execute(
+                "INSERT INTO consent_events(event_id,property_id,policy_version,channel,action,purposes,recorded_at,expires_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (body.eventId, property_id, body.policyVersion, body.channel, body.action, purposes_json,
+                 now, now + int(policy["retentionDays"]) * 86_400),
+            )
+            conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (now,))
+    if event_id_conflict:
+        # Raise after commit so the valid conflicting attempt remains charged to the property quota.
+        raise HTTPException(status_code=409, detail="Consent event identifier was already used")
+    if duplicate_event:
+        return {"recorded": False, "duplicate": True}
     return {"recorded": True, "duplicate": False, "recordedAt": now}
 
 

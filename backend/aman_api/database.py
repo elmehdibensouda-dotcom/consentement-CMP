@@ -6,7 +6,7 @@ import logging
 import os
 import sqlite3
 import stat
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Generator, Protocol, Sequence
 
@@ -257,9 +257,15 @@ def consume_rate_limits(
     now: int,
     window_seconds: int,
     max_buckets_per_scope: int,
+    transaction_connection: Connection | None = None,
 ) -> tuple[int, bool]:
-    """Atomically check and increment multiple windows across API replicas."""
-    with database_transaction(database_path, logger) as conn:
+    """Atomically check and increment limits, optionally within an existing transaction."""
+    transaction = (
+        database_transaction(database_path, logger)
+        if transaction_connection is None
+        else nullcontext(transaction_connection)
+    )
+    with transaction as conn:
         scopes = sorted({scope for scope, _, _ in requests})
         for scope in scopes:
             conn.lock_rate_limit_scope(scope)
