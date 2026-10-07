@@ -38,6 +38,8 @@ Cette voie n’a pas encore été éprouvée contre un service PostgreSQL géré
 
 La démo web utilise `http://localhost:8000`; l’API autorise cette origine pour les appels avec cookies. `admin.html` lit l’URL API depuis `<meta name="aman-api-base-url" content="https://api.exemple.ma">`; en l’absence de ce réglage, elle utilise le port 8001 en local et la même origine en hébergement distant. `AMAN_CORS_ORIGINS` doit contenir les origines exactes des consoles qui utilisent les cookies. Chaque origine de propriété Web est vérifiée à l’exécution et autorise seulement les routes publiques de lecture de politique et d’envoi d’événement de consentement, sans cookies. Une origine saisie dans Aman est une association de configuration, pas une preuve de contrôle du domaine. Le compte initial est créé par commande locale, pas par une route d’inscription publique.
 
+`GET /health` indique que le processus API répond. `GET /health/ready` vérifie également une requête à la base configurée et la version/checksum des migrations ; il retourne `503` sans détail de connexion si la base est indisponible ou si le schéma n’est pas à jour. Une sonde verte ne rend pas le service prêt pour la production : le mode `production` reste refusé tant que les autres contrôles ne sont pas validés.
+
 ## Fonctionnalités du socle
 
 - Connexion par session opaque stockée sous forme de condensat ; cookie HTTP-only, SameSite strict ; jeton CSRF séparé pour les mutations.

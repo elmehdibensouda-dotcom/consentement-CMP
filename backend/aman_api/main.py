@@ -598,6 +598,26 @@ def health():
     return {"service": "aman-consent-api", "status": "ok", "environment": ENVIRONMENT}
 
 
+@app.get("/health/ready")
+def readiness():
+    """Report ready only when the configured database and its schema are usable."""
+    try:
+        with connection() as conn:
+            conn.execute("SELECT 1").fetchone()
+            conn.require_current_schema()
+    except Exception as error:
+        LOGGER.warning("Readiness check failed (%s)", type(error).__name__)
+        return JSONResponse(
+            {"service": "aman-consent-api", "status": "not_ready"},
+            status_code=503,
+            headers={"Cache-Control": "no-store"},
+        )
+    return JSONResponse(
+        {"service": "aman-consent-api", "status": "ready"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/v1/auth/login")
 def login(body: LoginBody, request: Request, response: Response):
     client_key = login_client_key(request)
