@@ -109,6 +109,7 @@ public enum AmanConsentAPIError: Error {
     case invalidURL
     case insecureTransport
     case invalidResponse
+    case policyUnavailable(Int)
     case unsupportedSchemaVersion
     case unpublishedPolicy
     case wrongProperty
@@ -159,22 +160,53 @@ public final class AmanConsentAPIClient {
             let (data, response) = try await session.data(for: request, delegate: redirectBlocker)
             guard let http = response as? HTTPURLResponse else { throw AmanConsentAPIError.invalidResponse }
             guard let responseURL = http.url, isSecureBaseURL(responseURL) else {
+                defaults.removeObject(forKey: cacheKey)
                 throw AmanConsentAPIError.insecureTransport
             }
             if http.statusCode == 304, let cached {
-                try validate(cached.policy, propertyId: propertyId, channel: channel)
-                return cached.policy
+                do {
+                    try validate(cached.policy, propertyId: propertyId, channel: channel)
+                    return cached.policy
+                } catch {
+                    defaults.removeObject(forKey: cacheKey)
+                    throw error
+                }
             }
-            guard http.statusCode == 200 else { throw AmanConsentAPIError.invalidResponse }
-            let policy = try JSONDecoder().decode(AmanConsentPolicy.self, from: data)
-            try validate(policy, propertyId: propertyId, channel: channel)
+            guard http.statusCode == 200 else {
+                let temporaryFailure = http.statusCode == 408 || http.statusCode == 425 ||
+                    http.statusCode == 429 || (500...599).contains(http.statusCode)
+                if temporaryFailure, let cached {
+                    do {
+                        try validate(cached.policy, propertyId: propertyId, channel: channel)
+                        return cached.policy
+                    } catch {
+                        defaults.removeObject(forKey: cacheKey)
+                        throw error
+                    }
+                }
+                if !temporaryFailure { defaults.removeObject(forKey: cacheKey) }
+                throw AmanConsentAPIError.policyUnavailable(http.statusCode)
+            }
+            let policy: AmanConsentPolicy
+            do {
+                policy = try JSONDecoder().decode(AmanConsentPolicy.self, from: data)
+                try validate(policy, propertyId: propertyId, channel: channel)
+            } catch {
+                defaults.removeObject(forKey: cacheKey)
+                throw AmanConsentAPIError.invalidResponse
+            }
             let value = CachedPolicy(etag: http.value(forHTTPHeaderField: "ETag"), policy: policy)
             if let saved = try? JSONEncoder().encode(value) { defaults.set(saved, forKey: cacheKey) }
             return policy
         } catch let error as URLError {
             if let cached {
-                try validate(cached.policy, propertyId: propertyId, channel: channel)
-                return cached.policy
+                do {
+                    try validate(cached.policy, propertyId: propertyId, channel: channel)
+                    return cached.policy
+                } catch {
+                    defaults.removeObject(forKey: cacheKey)
+                    throw error
+                }
             }
             throw error
         }
@@ -269,6 +301,7 @@ public final class AmanConsentAPIClient {
 public final class AmanConsentManager: ObservableObject {
     @Published public private(set) var policy: AmanConsentPolicy
     @Published public private(set) var decision: AmanConsentDecision?
+    @Published public private(set) var policyAvailable = true
 
     private let defaults: UserDefaults
     private let now: () -> Date
@@ -299,6 +332,7 @@ public final class AmanConsentManager: ObservableObject {
         let previousPropertyId = policy.propertyId
         let previousVersion = policy.policyVersion
         policy = updated
+        policyAvailable = true
         if previousPropertyId != updated.propertyId {
             restoreDecision()
         } else if previousVersion != updated.policyVersion {
@@ -314,6 +348,7 @@ public final class AmanConsentManager: ObservableObject {
     public func isAllowed(_ purposeId: String) -> Bool {
         guard let purpose = activePurposes.first(where: { $0.id == purposeId }) else { return false }
         if purpose.required { return true }
+        guard policyAvailable else { return false }
         guard let decision, decision.propertyId == policy.propertyId, decision.channel == "ios",
               decision.policyVersion == policy.policyVersion, decision.expiresAt > now() else {
             return !purpose.consentRequired
@@ -327,6 +362,7 @@ public final class AmanConsentManager: ObservableObject {
     }
 
     public func saveChoices(_ requested: [String: Bool], action: AmanConsentAction = .custom) {
+        guard policyAvailable else { return }
         let choices = Dictionary(uniqueKeysWithValues: activePurposes.map { purpose in
             (purpose.id, purpose.required || (requested[purpose.id] ?? !purpose.consentRequired))
         })
@@ -372,6 +408,16 @@ public final class AmanConsentManager: ObservableObject {
         decision = nil
         onEffectivePurposeStatesChanged?(effectivePurposeStates)
         return true
+    }
+
+    /// Disables optional purposes and clears the saved choice until updatePolicy receives a valid policy.
+    public func markPolicyUnavailable() {
+        policyAvailable = false
+        expiryTimer?.invalidate()
+        expiryTimer = nil
+        defaults.removeObject(forKey: storageKey)
+        decision = nil
+        onEffectivePurposeStatesChanged?(effectivePurposeStates)
     }
 
     private func scheduleExpiryRefresh() {
@@ -452,6 +498,11 @@ public struct AmanConsentSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(copy("Choisissez les catégories que vous autorisez.", "اختر الفئات التي تسمح بها."))
                         .font(.subheadline).foregroundStyle(.secondary)
+                    if !manager.policyAvailable {
+                        Text(copy("La politique n’est pas disponible. Les finalités optionnelles restent désactivées.",
+                                  "السياسة غير متاحة. ستظل الأغراض الاختيارية معطلة."))
+                            .font(.callout).foregroundStyle(.red)
+                    }
                     ForEach(manager.activePurposes) { purpose in
                         Toggle(isOn: Binding(
                             get: { choices[purpose.id] ?? false },
@@ -494,6 +545,7 @@ public struct AmanConsentSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 .padding()
+                .disabled(!manager.policyAvailable)
             }
             .navigationTitle(copy("Vos préférences", "تفضيلاتك"))
             .navigationBarTitleDisplayMode(.inline)

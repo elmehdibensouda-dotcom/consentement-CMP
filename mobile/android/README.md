@@ -27,17 +27,27 @@ For a source checkout, include `:aman-consent` as a Gradle project module. For a
 
 ```kotlin
 val policyClient = AmanConsentAPIClient(applicationContext)
+var consent: AmanConsentManager? = null
 policyClient.fetchPublishedPolicy("https://cmp.example.ma", "PROPERTY_ID") { result ->
     result.onSuccess { policy ->
-        val consent = AmanConsentManager(applicationContext, policy)
-        consent.addEffectivePurposeStatesChangedListener { states ->
-            runOnUiThread {
-                if (states["analytics"] == true) startAnalyticsIfNotStarted()
-                else stopAnalyticsIfSupported()
+        val current = consent ?: AmanConsentManager(applicationContext, policy).also { created ->
+            consent = created
+            created.addEffectivePurposeStatesChangedListener { states ->
+                runOnUiThread {
+                    if (states["analytics"] == true) startAnalyticsIfNotStarted()
+                    else stopAnalyticsIfSupported()
+                }
             }
         }
-        if (consent.decision == null) consent.showConsentDialog(this)
-        if (consent.isAllowed("analytics")) startAnalyticsIfNotStarted()
+        current.updatePolicy(policy)
+        if (current.decision == null) current.showConsentDialog(this)
+        if (current.isAllowed("analytics")) startAnalyticsIfNotStarted()
+    }.onFailure {
+        runOnUiThread {
+            consent?.markPolicyUnavailable()
+            stopAnalyticsIfSupported()
+            showPolicyRetry()
+        }
     }
 }
 ```
@@ -45,6 +55,8 @@ policyClient.fetchPublishedPolicy("https://cmp.example.ma", "PROPERTY_ID") { res
 Policy and decision API callbacks run on the Android main thread by default. Pass a custom `callbackExecutor` to `AmanConsentAPIClient` if the host needs another callback thread; the network work always stays on its background executor. Effective-state callbacks run on the thread that saved the choice or called `updatePolicy`; dispatch UI and SDK lifecycle work to the main thread. The host app is responsible for wiring each purpose to its actual SDK start/stop lifecycle and for describing third-party SDK practices in its platform disclosures. When `consentRequired` is false, a purpose starts active by default but its switch remains available; an explicit refusal is retained. Aman cannot unload a native library that the host initialized earlier.
 
 Before caching or applying a policy, the client rejects unknown schema versions, unsupported languages or purposes, contradictory purpose rules, and retention periods outside the shared schema limits. If `defaultLanguage` is absent, the first declared language is used.
+
+The client uses its last valid cache only for transport errors or temporary HTTP responses (`408`, `425`, `429`, or `5xx`). A non-temporary response (including `404`) or invalid policy clears the cached policy and returns `Result.failure`. When a fetch fails, call `markPolicyUnavailable()` on the existing manager and stop optional SDKs; the method clears the saved choice, dismisses an open consent dialog, and makes optional `isAllowed(...)` checks return `false` until a valid `updatePolicy(...)`. Show a retry path. A valid cached policy is returned as success for temporary outages.
 
 Without the optional `language` argument, `showConsentDialog` uses `defaultLanguage` from the published policy (`fr` or `ar`). The host application can still pass a language explicitly when its own language preference should take precedence.
 
@@ -89,7 +101,7 @@ consent.addConsentChangedListener { decision ->
 
 The call uses an event-specific random ID so retrying the same local decision is idempotent. It does not attach an account or persistent device ID. The API stores the purpose booleans and server receipt time; it does not verify identity, screen display or app authenticity. These client-reported events do not constitute a legal proof by themselves, and network errors leave the local decision intact.
 
-The `sample` app lets an integrator enter an API URL and property ID, fetch a published Android policy, display the consent dialog, and inspect the analytics decision. Its analytics action is intentionally a placeholder; it does not include a third-party analytics library.
+The `sample` app lets an integrator enter an API URL and property ID, fetch a published Android policy, display the consent dialog, and inspect the analytics decision. It refreshes the policy when the activity returns to the foreground and updates the existing manager so a newly published version invalidates the previous choice. If no valid policy is available, it marks the manager unavailable, clears the saved choice, and tells the integrator to leave optional SDKs stopped. Its analytics action is intentionally a placeholder; it does not include a third-party analytics library.
 
 ## Current integration limits
 

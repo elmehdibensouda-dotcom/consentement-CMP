@@ -145,12 +145,14 @@ class AmanConsentManager(
     private val preferences = context.applicationContext.getSharedPreferences("aman_consent", Context.MODE_PRIVATE)
     private val expiryHandler = Handler(Looper.getMainLooper())
     private var expiryRunnable: Runnable? = null
+    @Volatile private var activeConsentDialog: AlertDialog? = null
     private val listeners = CopyOnWriteArrayList<(AmanConsentDecision) -> Unit>()
     private val effectivePurposeListeners = CopyOnWriteArrayList<(Map<String, Boolean>) -> Unit>()
     var policy: AmanConsentPolicy = policy
         private set
     var decision: AmanConsentDecision? = null
         private set
+    @Volatile private var policyAvailable = true
     val activePurposes: List<AmanPurpose>
         get() = if (policy.status == "published") policy.purposes.filter { "android" in it.channels } else emptyList()
     val effectivePurposeStates: Map<String, Boolean>
@@ -165,6 +167,7 @@ class AmanConsentManager(
         val previousPropertyId = policy.propertyId
         val changed = policy.policyVersion != updated.policyVersion
         policy = updated
+        policyAvailable = true
         if (previousPropertyId != updated.propertyId) {
             // A manager can be reused for another property, but its saved choice must stay scoped to that property.
             restore()
@@ -179,6 +182,7 @@ class AmanConsentManager(
     fun isAllowed(purposeId: String): Boolean {
         val purpose = activePurposes.firstOrNull { it.id == purposeId } ?: return false
         if (purpose.required) return true
+        if (!policyAvailable) return false
         val current = decision
         if (current == null || current.propertyId != policy.propertyId || current.channel != "android" ||
             current.policyVersion != policy.policyVersion || current.expiresAtMillis <= clockMillis()) {
@@ -195,6 +199,7 @@ class AmanConsentManager(
 
     @Synchronized
     fun saveChoices(requested: Map<String, Boolean>, action: AmanConsentAction) {
+        if (!policyAvailable) return
         val capturedAt = clockMillis()
         val normalized = activePurposes.associate { purpose ->
             purpose.id to (purpose.required || (requested[purpose.id] ?: !purpose.consentRequired))
@@ -247,6 +252,19 @@ class AmanConsentManager(
         return true
     }
 
+    /** Disables optional purposes and clears the saved choice until updatePolicy receives a valid policy. */
+    @Synchronized
+    fun markPolicyUnavailable() {
+        policyAvailable = false
+        val dialog = activeConsentDialog
+        activeConsentDialog = null
+        if (dialog != null) expiryHandler.post { dialog.dismiss() }
+        preferences.edit().remove(storageKey).apply()
+        decision = null
+        scheduleExpiryRefresh()
+        effectivePurposeListeners.forEach { it(effectivePurposeStates) }
+    }
+
     fun addConsentChangedListener(listener: (AmanConsentDecision) -> Unit) { listeners.add(listener) }
     fun removeConsentChangedListener(listener: (AmanConsentDecision) -> Unit) { listeners.remove(listener) }
     /** Observes effective purpose states after choices and policy changes; this is not a decision/audit event. */
@@ -258,6 +276,7 @@ class AmanConsentManager(
     }
 
     fun showConsentDialog(activity: Activity, language: String? = null) {
+        if (!policyAvailable) return
         val selectedLanguage = language ?: policy.defaultLanguage
         val isArabic = selectedLanguage.lowercase().startsWith("ar")
         val active = activePurposes
@@ -286,6 +305,10 @@ class AmanConsentManager(
             .setNegativeButton(if (isArabic) "رفض الكل" else "Tout refuser") { _, _ -> rejectOptional() }
             .setNeutralButton(if (isArabic) "حفظ اختياراتي" else "Enregistrer mes choix") { _, _ -> saveChoices(choices) }
         val dialog = builder.create()
+        activeConsentDialog = dialog
+        dialog.setOnDismissListener {
+            if (activeConsentDialog === dialog) activeConsentDialog = null
+        }
         dialog.setOnShowListener {
             dialog.window?.decorView?.layoutDirection = if (isArabic) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
         }
@@ -410,17 +433,45 @@ class AmanConsentAPIClient(
                 }
                 val code = connection.responseCode
                 if (code == HttpURLConnection.HTTP_NOT_MODIFIED && !cachedJson.isNullOrBlank()) {
-                    val cachedPolicy = AmanConsentPolicy.fromJson(cachedJson)
-                    validateFetchedPolicy(cachedPolicy, propertyId, channel)
-                    callbackExecutor.execute { callback(Result.success(cachedPolicy)) }
+                    try {
+                        val cachedPolicy = AmanConsentPolicy.fromJson(cachedJson)
+                        validateFetchedPolicy(cachedPolicy, propertyId, channel)
+                        callbackExecutor.execute { callback(Result.success(cachedPolicy)) }
+                    } catch (error: Exception) {
+                        preferences.edit().remove(cacheKey).remove("$cacheKey:etag").apply()
+                        callbackExecutor.execute { callback(Result.failure(error)) }
+                    }
                     return@execute
                 }
                 if (code != HttpURLConnection.HTTP_OK) {
-                    throw IllegalStateException("Aman policy endpoint returned HTTP $code")
+                    val temporaryFailure = code == 408 || code == 425 || code == 429 || code in 500..599
+                    if (temporaryFailure && !cachedJson.isNullOrBlank()) {
+                        try {
+                            val cachedPolicy = AmanConsentPolicy.fromJson(cachedJson)
+                            validateFetchedPolicy(cachedPolicy, propertyId, channel)
+                            callbackExecutor.execute { callback(Result.success(cachedPolicy)) }
+                        } catch (error: Exception) {
+                            preferences.edit().remove(cacheKey).remove("$cacheKey:etag").apply()
+                            callbackExecutor.execute { callback(Result.failure(error)) }
+                        }
+                    } else {
+                        if (!temporaryFailure) {
+                            preferences.edit().remove(cacheKey).remove("$cacheKey:etag").apply()
+                        }
+                        callbackExecutor.execute {
+                            callback(Result.failure(IllegalStateException("Aman policy endpoint returned HTTP $code")))
+                        }
+                    }
+                    return@execute
                 }
                 val raw = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val policy = AmanConsentPolicy.fromJson(raw)
-                validateFetchedPolicy(policy, propertyId, channel)
+                val policy = try {
+                    AmanConsentPolicy.fromJson(raw).also { validateFetchedPolicy(it, propertyId, channel) }
+                } catch (error: Exception) {
+                    preferences.edit().remove(cacheKey).remove("$cacheKey:etag").apply()
+                    callbackExecutor.execute { callback(Result.failure(error)) }
+                    return@execute
+                }
                 preferences.edit()
                     .putString(cacheKey, raw)
                     .putString("$cacheKey:etag", connection.getHeaderField("ETag"))
@@ -433,6 +484,7 @@ class AmanConsentAPIClient(
                         validateFetchedPolicy(cachedPolicy, propertyId, channel)
                         callbackExecutor.execute { callback(Result.success(cachedPolicy)) }
                     } catch (cacheError: Exception) {
+                        preferences.edit().remove(cacheKey).remove("$cacheKey:etag").apply()
                         callbackExecutor.execute { callback(Result.failure(cacheError)) }
                     }
                 } else callbackExecutor.execute { callback(Result.failure(error)) }

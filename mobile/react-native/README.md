@@ -1,6 +1,8 @@
 # ALAMANE Consent — React Native SDK starter
 
-Ce SDK fournit un panneau natif React Native FR/AR, le chargement d’une politique publiée, la conservation locale d’un choix par propriété dans le stockage privé choisi par l’application, et une méthode d’envoi facultative appelée explicitement. Après le choix, il expose un bouton accessible « Gérer mes préférences » pour rouvrir le panneau; placer le composant dans une zone durable de l’application, comme ses paramètres de confidentialité. Il vise React Native 0.72+ et React 18+. Le code TypeScript/TSX est compilé en JavaScript CommonJS par Babel pour le paquet. Il n’est pas publié sur un registre npm; un tarball privé est joint aux exécutions manuelles du workflow GitHub Actions pendant 14 jours.
+Ce SDK fournit un panneau natif React Native FR/AR, le chargement d’une politique publiée, la conservation locale d’un choix par propriété dans le stockage privé choisi par l’application, et une méthode d’envoi facultative appelée explicitement. Si le stockage refuse une lecture, le SDK essaie quand même de charger la politique depuis le serveur ; un choix dont l’écriture échoue reste appliqué en mémoire pendant la session et le panneau avertit qu’il pourra être redemandé après fermeture. Le panneau recharge la politique lorsque l’application revient au premier plan ; une nouvelle version invalide le choix local précédent, puis le visiteur est invité à choisir selon cette version. Après le choix, il expose un bouton accessible « Gérer mes préférences » pour rouvrir le panneau ; placer le composant dans une zone durable de l’application, comme ses paramètres de confidentialité. Il vise React Native 0.72+ et React 18+. Le code TypeScript/TSX est compilé en JavaScript CommonJS par Babel pour le paquet. Il n’est pas publié sur un registre npm ; un tarball privé est joint aux exécutions manuelles du workflow GitHub Actions pendant 14 jours.
+
+Le SDK peut utiliser la dernière politique valide en cache lors d’une erreur réseau ou d’une réponse temporaire du service (`408`, `425`, `429` ou `5xx`). Une réponse non temporaire (dont `404`, qui signifie qu’aucune politique n’est publiée) ou une réponse de politique invalide efface la politique et le choix locaux ; `isAllowed()` renvoie alors `false` jusqu’au chargement d’une politique valide.
 
 ## Installation du paquet pilote privé
 
@@ -84,6 +86,6 @@ Pour signaler un choix au serveur, l’application peut appeler `aman.recordDeci
 ## Limites avant pilote
 
 - SDK pilote compilé et non publié sur npm; aucune matrice de compatibilité, release signée, SBOM ou validation d’accessibilité n’est fournie.
-- Le stockage est fourni par l’application. Le choix reste local jusqu’à un appel d’envoi explicite; il n’existe pas de synchronisation multi-appareil ni de file de reprise.
+- Le stockage est fourni par l’application. Si son écriture échoue, le choix ne dure que pendant la session en mémoire. Le choix reste local jusqu’à un appel d’envoi explicite; il n’existe pas de synchronisation multi-appareil ni de file de reprise.
 - L’application doit démarrer, arrêter et réconcilier réellement ses SDK tiers. Une bibliothèque native déjà initialisée peut ne pas pouvoir être déchargée.
 - La collecte, les formalités, les durées et le contenu de l’avis restent à valider par le client et ses conseils; le SDK ne garantit pas la conformité.

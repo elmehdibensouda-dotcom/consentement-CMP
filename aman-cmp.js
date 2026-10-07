@@ -25,8 +25,8 @@
     ]
   };
   const LABELS = {
-    fr: { accept: 'Tout accepter', reject: 'Tout refuser', customize: 'Personnaliser', details: 'Informations détaillées', information: 'Informations sur le traitement', controller: 'Responsable', categories: 'Catégories de données', recipients: 'Destinataires', transfers: 'Transferts à l’étranger', reference: 'Référence CNDP', contact: 'Contact pour exercer vos droits', save: 'Enregistrer mes choix', close: 'Fermer', manage: 'Gérer mes cookies', title: 'Vos préférences', saved: 'Vos préférences ont été enregistrées.', temporary: 'Votre choix s’applique à cet onglet seulement : le navigateur ne l’a pas enregistré durablement.', unavailable: 'Le centre de préférences est temporairement indisponible. Les scripts facultatifs restent désactivés.' },
-    ar: { accept: 'قبول الكل', reject: 'رفض الكل', customize: 'تخصيص', details: 'معلومات مفصلة', information: 'معلومات حول المعالجة', controller: 'المسؤول عن المعالجة', categories: 'فئات البيانات', recipients: 'الجهات المستفيدة', transfers: 'التحويلات إلى الخارج', reference: 'مرجع CNDP', contact: 'جهة الاتصال لممارسة حقوقك', save: 'حفظ اختياراتي', close: 'إغلاق', manage: 'إدارة ملفات تعريف الارتباط', title: 'تفضيلاتك', saved: 'تم حفظ تفضيلاتك.', temporary: 'يسري اختيارك في علامة التبويب هذه فقط؛ لم يتم حفظه بشكل دائم.', unavailable: 'مركز التفضيلات غير متاح مؤقتًا. ستظل البرامج النصية الاختيارية معطلة.' }
+    fr: { accept: 'Tout accepter', reject: 'Tout refuser', customize: 'Personnaliser', details: 'Informations détaillées', information: 'Informations sur le traitement', controller: 'Responsable', categories: 'Catégories de données', recipients: 'Destinataires', transfers: 'Transferts à l’étranger', reference: 'Référence CNDP', contact: 'Contact pour exercer vos droits', save: 'Enregistrer mes choix', close: 'Fermer', manage: 'Gérer mes cookies', retry: 'Réessayer', loading: 'Nouvelle tentative…', title: 'Vos préférences', saved: 'Vos préférences ont été enregistrées.', temporary: 'Votre choix s’applique à cet onglet seulement : le navigateur ne l’a pas enregistré durablement.', unavailable: 'Le centre de préférences est temporairement indisponible. Les scripts facultatifs restent désactivés.' },
+    ar: { accept: 'قبول الكل', reject: 'رفض الكل', customize: 'تخصيص', details: 'معلومات مفصلة', information: 'معلومات حول المعالجة', controller: 'المسؤول عن المعالجة', categories: 'فئات البيانات', recipients: 'الجهات المستفيدة', transfers: 'التحويلات إلى الخارج', reference: 'مرجع CNDP', contact: 'جهة الاتصال لممارسة حقوقك', save: 'حفظ اختياراتي', close: 'إغلاق', manage: 'إدارة ملفات تعريف الارتباط', retry: 'إعادة المحاولة', loading: 'جارٍ إعادة المحاولة…', title: 'تفضيلاتك', saved: 'تم حفظ تفضيلاتك.', temporary: 'يسري اختيارك في علامة التبويب هذه فقط؛ لم يتم حفظه بشكل دائم.', unavailable: 'مركز التفضيلات غير متاح مؤقتًا. ستظل البرامج النصية الاختيارية معطلة.' }
   };
 
   function read(key) {
@@ -108,6 +108,10 @@
     return merged;
   }
   function choiceKey(cfg) { return cfg.propertyId ? 'aman:choice:' + cfg.propertyId : STORAGE_CHOICE; }
+  function clearCachedPolicyAndChoice(cfg, policyKey) {
+    removeStorageKey(policyKey);
+    removeStorageKey(choiceKey(cfg));
+  }
   function readChoice(cfg) { return read(choiceKey(cfg)); }
   function choiceRetentionMs(cfg) {
     const configuredMs = Math.max(1, Number(cfg.retentionDays) || 180) * 24 * 60 * 60 * 1000;
@@ -215,20 +219,41 @@
     if (response && response.url) {
       let finalUrl;
       try { finalUrl = new URL(response.url); }
-      catch (_) { throw new Error('URL finale de la politique Aman invalide.'); }
+      catch (_) {
+        clearCachedPolicyAndChoice(cfg, cacheKey);
+        throw new Error('URL finale de la politique Aman invalide.');
+      }
       const finalHost = finalUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '');
       const finalLoopback = ['localhost', '127.0.0.1', '::1'].includes(finalHost);
       if (finalUrl.username || finalUrl.password || finalUrl.search || finalUrl.hash ||
           (finalUrl.protocol !== 'https:' && !(finalUrl.protocol === 'http:' && finalLoopback))) {
+        clearCachedPolicyAndChoice(cfg, cacheKey);
         throw new Error('Aman refuse une redirection vers une connexion non sécurisée.');
       }
     }
     let policy;
     if (response === null) policy = cached.policy;
-    else if (response.status === 304 && cached) policy = cached.policy;
-    else if (response.ok) policy = await response.json();
-    else throw new Error('Aucune politique Aman publiée pour cette propriété.');
-    validatePublishedPolicy(policy, cfg);
+    else if (response.status === 304 && cached && cached.policy) policy = cached.policy;
+    else if (response.ok) {
+      try { policy = await response.json(); }
+      catch (error) {
+        clearCachedPolicyAndChoice(cfg, cacheKey);
+        throw error;
+      }
+    } else {
+      const temporaryFailure = response.status === 408 || response.status === 425 ||
+        response.status === 429 || response.status >= 500;
+      if (temporaryFailure && cached && cached.policy) policy = cached.policy;
+      else {
+        if (!temporaryFailure) clearCachedPolicyAndChoice(cfg, cacheKey);
+        throw new Error('Aucune politique Aman publiée pour cette propriété.');
+      }
+    }
+    try { validatePublishedPolicy(policy, cfg); }
+    catch (error) {
+      clearCachedPolicyAndChoice(cfg, cacheKey);
+      throw error;
+    }
     if (response && response.ok) write(cacheKey, { etag: response.headers.get('ETag'), policy });
     const requestedLocale = normalizeLocale(cfg.localeExplicit ? cfg.locale : (policy.defaultLanguage || cfg.locale || 'fr'));
     const locale = policy.languages.includes(requestedLocale) ? requestedLocale : (policy.defaultLanguage || policy.languages[0]);
@@ -489,6 +514,7 @@
     status.lang = statusLocale;
     status.dir = statusLocale === 'ar' ? 'rtl' : 'ltr';
     status.textContent = message;
+    return status;
   }
   function openPanel(cfg, choice) {
     if (activePanel) return;
@@ -619,13 +645,23 @@
     if (cfg.apiBaseUrl && cfg.propertyId) {
       try { cfg = await loadPublishedPolicy(cfg); }
       catch (_) {
-        renderStatus(t(cfg).unavailable, cfg.locale);
+        const status = renderStatus(t(cfg).unavailable, cfg.locale);
+        const retry = make('button', 'aman-button aman-secondary', t(cfg).retry);
+        retry.type = 'button';
+        retry.addEventListener('click', function () {
+          retry.disabled = true;
+          retry.textContent = t(cfg).loading;
+          void init();
+        });
+        status.append(' ', retry);
         document.dispatchEvent(new CustomEvent('aman:initialization-error', {
           detail: { propertyId: cfg.propertyId || null }
         }));
         return;
       }
     }
+    const previousStatus = document.getElementById('aman-demo-status');
+    if (previousStatus) previousStatus.remove();
     const choice = currentChoice(cfg);
     scheduleChoiceExpiry(cfg, choice);
     observeManagedTags(cfg);

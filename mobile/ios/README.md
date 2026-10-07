@@ -8,7 +8,7 @@ Dans Xcode, utiliser **File → Add Package Dependencies…** puis indiquer l’
 
 ## Charger une politique et afficher les choix
 
-Le client récupère la politique publiée de la propriété et conserve la dernière version valide sur l’appareil pour les démarrages hors ligne. Sa session réseau par défaut est éphémère, sans cookie ni identifiants de connexion partagés avec l’application hôte, et refuse les redirections pour le chargement comme pour l’envoi. Le gestionnaire conserve le choix dans `UserDefaults`. Il ne l’envoie pas automatiquement à Aman ; le client peut appeler explicitement l’API d’envoi après validation de son modèle de collecte.
+Le client récupère la politique publiée de la propriété et conserve la dernière version valide sur l’appareil pour les démarrages hors ligne. Le cache ne sert qu’en cas d’erreur réseau ou de réponse temporaire (`408`, `425`, `429` ou `5xx`). Une réponse non temporaire (dont `404`) ou une politique invalide efface le cache et retourne une erreur ; l’application hôte doit alors arrêter ses SDK optionnels et demander une nouvelle tentative. Sa session réseau par défaut est éphémère, sans cookie ni identifiants de connexion partagés avec l’application hôte, et refuse les redirections pour le chargement comme pour l’envoi. Le gestionnaire conserve le choix dans `UserDefaults`. Il ne l’envoie pas automatiquement à Aman ; le client peut appeler explicitement l’API d’envoi après validation de son modèle de collecte.
 
 Avant de mettre une politique en cache ou de l’appliquer, le client rejette les versions de schéma inconnues, les langues ou finalités non prises en charge, les règles de finalité contradictoires et les durées hors limites du schéma. Si `defaultLanguage` est absent, la première langue déclarée dans la politique est utilisée.
 
@@ -40,9 +40,8 @@ struct ConsentSetupView: View {
         }
         .task { await loadConsentPolicy() }
         .onChange(of: scenePhase) { phase in
-            guard phase == .active, let manager else { return }
-            manager.refreshExpiredDecision()
-            applyAnalyticsChoice(manager.isAllowed("analytics"))
+            guard phase == .active else { return }
+            Task { await refreshConsentPolicy() }
         }
     }
 
@@ -55,6 +54,7 @@ struct ConsentSetupView: View {
                 propertyId: "PROPERTY_ID",
                 channel: "ios"
             )
+            errorMessage = nil
             let consentManager = AmanConsentManager(policy: policy)
             consentManager.onEffectivePurposeStatesChanged = { states in
                 applyAnalyticsChoice(states["analytics"] == true)
@@ -66,8 +66,34 @@ struct ConsentSetupView: View {
             }
             applyAnalyticsChoice(consentManager.isAllowed("analytics"))
         } catch {
+            manager?.markPolicyUnavailable()
+            showingPreferences = false
+            applyAnalyticsChoice(false)
             errorMessage = "Impossible de charger la politique de préférences."
-            // Keep optional SDKs disabled until a valid policy is available.
+        }
+    }
+
+    private func refreshConsentPolicy() async {
+        guard let manager else {
+            await loadConsentPolicy()
+            return
+        }
+        do {
+            let client = AmanConsentAPIClient()
+            let apiBaseURL = URL(string: "https://cmp.example.ma")!
+            let policy = try await client.fetchPolicy(
+                baseURL: apiBaseURL,
+                propertyId: "PROPERTY_ID",
+                channel: "ios"
+            )
+            manager.updatePolicy(policy)
+            errorMessage = nil
+            applyAnalyticsChoice(manager.isAllowed("analytics"))
+        } catch {
+            manager.markPolicyUnavailable()
+            showingPreferences = false
+            applyAnalyticsChoice(false)
+            errorMessage = "Aucune politique valide n’est disponible ; les SDK optionnels restent arrêtés."
         }
     }
 
@@ -91,6 +117,8 @@ Sans paramètre `language`, `AmanConsentSheet` reprend `defaultLanguage` de la p
 Les champs de notice traduits se trouvent dans `noticeTranslations.fr` et `noticeTranslations.ar`. La feuille choisit le bloc correspondant à la langue affichée ; elle accepte aussi l’ancien champ `notice` comme solution de repli. Le client doit fournir et faire relire les contenus pour chaque langue proposée.
 
 `onEffectivePurposeStatesChanged` signale l’état effectif après un choix enregistré et après `updatePolicy(_:)`. Quand une nouvelle politique invalide un ancien choix, le callback transmet les valeurs de départ de la nouvelle version afin que l’application puisse arrêter ou démarrer ses SDK en conséquence. Il ne représente pas un nouveau choix du visiteur et ne doit pas être envoyé comme événement de consentement. L’application doit aussi appliquer une première fois `isAllowed(_:)` après avoir créé le gestionnaire.
+
+Si `fetchPolicy` échoue, aucune politique exploitable n’est disponible : appeler `markPolicyUnavailable()` sur le gestionnaire existant et désactiver les finalités optionnelles. Cette méthode efface le choix enregistré et fait renvoyer `false` par `isAllowed(_:)` pour les finalités optionnelles, jusqu’à ce que `updatePolicy(_:)` reçoive une politique valide. `AmanConsentSheet` affiche alors un message et désactive ses contrôles. Les pannes réseau et réponses temporaires avec un cache valide sont déjà retournées comme une politique valide par le client.
 
 ### Remontée facultative des décisions
 

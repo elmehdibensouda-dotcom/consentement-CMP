@@ -16,6 +16,9 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var apiClient: AmanConsentAPIClient
     private var manager: AmanConsentManager? = null
+    private var activeApiBaseUrl: String? = null
+    private var activePropertyId: String? = null
+    private var policyRequestId = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +71,10 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         manager?.refreshExpiredDecision()
+        if (::apiBaseUrl.isInitialized && ::propertyId.isInitialized &&
+            apiBaseUrl.text.isNotBlank() && propertyId.text.isNotBlank()) {
+            loadPolicy()
+        }
     }
 
     private fun loadPolicy() {
@@ -77,23 +84,38 @@ class MainActivity : Activity() {
             status.text = "Renseigne l’URL de l’API et l’identifiant de propriété."
             return
         }
+        if (activeApiBaseUrl != null && (activeApiBaseUrl != base || activePropertyId != id)) {
+            manager = null
+            activeApiBaseUrl = null
+            activePropertyId = null
+        }
         status.text = "Chargement…"
+        val requestId = ++policyRequestId
         apiClient.fetchPublishedPolicy(base, id) { result ->
             runOnUiThread {
+                if (requestId != policyRequestId) return@runOnUiThread
                 result.onSuccess { policy ->
-                    val current = AmanConsentManager(applicationContext, policy)
-                    manager = current
-                    current.addConsentChangedListener { decision ->
-                        runOnUiThread { renderIntegrationState(current, decision.policyVersion) }
+                    val current = manager
+                    if (current == null) {
+                        val created = AmanConsentManager(applicationContext, policy)
+                        manager = created
+                        created.addConsentChangedListener { decision ->
+                            runOnUiThread { renderIntegrationState(created, decision.policyVersion) }
+                        }
+                        created.addEffectivePurposeStatesChangedListener {
+                            runOnUiThread { renderIntegrationState(created, created.policy.policyVersion) }
+                        }
+                    } else {
+                        current.updatePolicy(policy)
                     }
-                    current.addEffectivePurposeStatesChangedListener {
-                        runOnUiThread { renderIntegrationState(current, current.policy.policyVersion) }
-                    }
-                    renderIntegrationState(current, policy.policyVersion)
-                    if (current.decision == null) current.showConsentDialog(this)
+                    activeApiBaseUrl = base
+                    activePropertyId = id
+                    val updated = requireNotNull(manager)
+                    renderIntegrationState(updated, policy.policyVersion)
+                    if (updated.decision == null) updated.showConsentDialog(this)
                 }.onFailure { error ->
-                    manager = null
-                    status.text = "Impossible de charger la politique : ${error.message ?: "erreur inconnue"}"
+                    manager?.markPolicyUnavailable()
+                    status.text = "Politique indisponible : ${error.message ?: "erreur inconnue"}\nLes SDK optionnels doivent rester arrêtés jusqu’à une politique valide."
                 }
             }
         }

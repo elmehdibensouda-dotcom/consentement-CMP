@@ -87,6 +87,7 @@ const strings = {
     active: 'Actif par défaut et révocable',
     loading: 'Chargement des préférences…',
     retry: 'Réessayer',
+    storageWarning: 'Votre choix est appliqué dans cette session, mais le stockage local est indisponible. Il pourra être redemandé après la fermeture de l’application.',
   },
   ar: {
     title: 'تفضيلاتك',
@@ -108,6 +109,7 @@ const strings = {
     active: 'نشط افتراضيًا وقابل للرفض',
     loading: 'جارٍ تحميل التفضيلات…',
     retry: 'إعادة المحاولة',
+    storageWarning: 'تم تطبيق اختيارك خلال هذه الجلسة، لكن التخزين المحلي غير متاح. قد يُطلب منك الاختيار مجددًا بعد إغلاق التطبيق.',
   },
 } as const;
 
@@ -232,8 +234,10 @@ export class AmanConsentClient {
   readonly channel: AmanChannel;
   private readonly storage: AmanStorage;
   private readonly fetcher: typeof fetch;
+  private policyLoadPromise: Promise<AmanPolicy> | null = null;
   private policyValue: AmanPolicy | null = null;
   private decisionValue: AmanDecision | null = null;
+  private decisionStoredDurablyValue = true;
   private listeners = new Set<() => void>();
   private decisionListeners = new Set<(decision: AmanDecision) => void>();
 
@@ -248,6 +252,7 @@ export class AmanConsentClient {
 
   get policy(): AmanPolicy | null { return this.policyValue; }
   get decision(): AmanDecision | null { return this.decisionValue; }
+  get decisionStoredDurably(): boolean { return this.decisionStoredDurablyValue; }
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -264,31 +269,64 @@ export class AmanConsentClient {
   private get decisionKey() { return `aman.choice.v1.${this.channel}.${this.propertyId}`; }
 
   async loadPolicy(): Promise<AmanPolicy> {
-    const cachedRaw = await this.storage.getItem(this.policyKey);
+    if (this.policyLoadPromise) return this.policyLoadPromise;
+    const pending = this.loadPolicyOnce();
+    this.policyLoadPromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.policyLoadPromise === pending) this.policyLoadPromise = null;
+    }
+  }
+
+  private async loadPolicyOnce(): Promise<AmanPolicy> {
+    let cachedRaw: string | null = null;
+    try { cachedRaw = await this.storage.getItem(this.policyKey); } catch { /* Fetch a fresh policy if the cache adapter is unavailable. */ }
     let cached: AmanPolicy | null = null;
     if (cachedRaw) {
       try { cached = validatePolicy(JSON.parse(cachedRaw), this.propertyId, this.channel); } catch { cached = null; }
     }
-    let policy: AmanPolicy;
+    let policy: AmanPolicy | null = null;
     let fetchedFresh = false;
+    let response: Response | null = null;
     try {
-      const response = await this.fetcher(`${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/policy`, {
+      response = await this.fetcher(`${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/policy`, {
         method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error',
         headers: { Accept: 'application/json' },
       });
-      if (!response.ok) throw new Error(`Aman policy request failed (${response.status}).`);
-      policy = validatePolicy(await response.json(), this.propertyId, this.channel);
-      fetchedFresh = true;
     } catch (error) {
       if (this.policyValue) policy = this.policyValue;
       else if (cached) policy = cached;
       else throw error;
     }
+    if (response) {
+      if (!response.ok) {
+        const temporaryFailure = response.status === 408 || response.status === 425 ||
+          response.status === 429 || response.status >= 500;
+        if (temporaryFailure) {
+          if (this.policyValue) policy = this.policyValue;
+          else if (cached) policy = cached;
+          else throw new Error(`Aman policy request failed (${response.status}).`);
+        } else {
+          await this.clearPolicyAndDecision();
+          throw new Error(`Aman policy request failed (${response.status}).`);
+        }
+      } else {
+        try {
+          policy = validatePolicy(await response.json(), this.propertyId, this.channel);
+          fetchedFresh = true;
+        } catch (error) {
+          await this.clearPolicyAndDecision();
+          throw error;
+        }
+      }
+    }
+    if (!policy) throw new Error('Aman could not load a published consent policy.');
     const previousVersion = this.policyValue?.policyVersion ?? cached?.policyVersion;
     this.policyValue = policy;
     if (previousVersion && previousVersion !== policy.policyVersion) {
       this.decisionValue = null;
-      await this.storage.removeItem(this.decisionKey);
+      try { await this.storage.removeItem(this.decisionKey); } catch { /* The old choice remains inactive in memory. */ }
     }
     if (fetchedFresh) {
       // A cache write failure must not replace a fresh server policy with stale cached content.
@@ -299,16 +337,30 @@ export class AmanConsentClient {
     return policy;
   }
 
+  private async clearPolicyAndDecision() {
+    this.policyValue = null;
+    this.decisionValue = null;
+    try { await this.storage.removeItem(this.policyKey); } catch { /* Keep the in-memory client fail-closed. */ }
+    try { await this.storage.removeItem(this.decisionKey); } catch { /* Keep the in-memory client fail-closed. */ }
+    this.notify();
+  }
+
   private async restoreDecision(policy: AmanPolicy) {
-    const raw = await this.storage.getItem(this.decisionKey);
+    let raw: string | null;
+    try { raw = await this.storage.getItem(this.decisionKey); } catch {
+      this.decisionValue = null;
+      this.decisionStoredDurablyValue = false;
+      return;
+    }
     if (!raw) { this.decisionValue = null; return; }
     try {
       const saved = validateDecision(JSON.parse(raw), policy, this.channel);
       if (saved.expiresAt <= Date.now()) throw new Error('stale choice');
       this.decisionValue = saved;
+      this.decisionStoredDurablyValue = true;
     } catch {
       this.decisionValue = null;
-      await this.storage.removeItem(this.decisionKey);
+      try { await this.storage.removeItem(this.decisionKey); } catch { /* Invalid choices are not used in memory. */ }
     }
   }
 
@@ -330,7 +382,7 @@ export class AmanConsentClient {
   async refreshExpiredDecision(): Promise<boolean> {
     if (!this.decisionValue || this.decisionValue.expiresAt > Date.now()) return false;
     this.decisionValue = null;
-    await this.storage.removeItem(this.decisionKey);
+    try { await this.storage.removeItem(this.decisionKey); } catch { /* Expired choices stay inactive in memory. */ }
     this.notify();
     return true;
   }
@@ -363,7 +415,12 @@ export class AmanConsentClient {
       action: recordedAction, eventId: randomEventId(), purposes,
     };
     validateDecision(decision, policy, this.channel);
-    await this.storage.setItem(this.decisionKey, JSON.stringify(decision));
+    try {
+      await this.storage.setItem(this.decisionKey, JSON.stringify(decision));
+      this.decisionStoredDurablyValue = true;
+    } catch {
+      this.decisionStoredDurablyValue = false;
+    }
     this.decisionValue = decision;
     this.notify();
     this.decisionListeners.forEach((listener) => listener(decision));
@@ -416,12 +473,27 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
     const refresh = () => { void client.refreshExpiredDecision(); };
     const decision = client.decision;
     const timeout = decision ? setTimeout(refresh, Math.max(0, decision.expiresAt - Date.now())) : undefined;
-    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') refresh(); });
     return () => {
       if (timeout) clearTimeout(timeout);
-      subscription.remove();
     };
   }, [client, revision]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      void (async () => {
+        try {
+          await client.refreshExpiredDecision();
+          await client.loadPolicy();
+          setError(null);
+        } catch (reason) {
+          const message = reason instanceof Error ? reason.message : 'Unable to load consent preferences.';
+          setError(message);
+          onLoadError?.(new Error(message));
+        }
+      })();
+    });
+    return () => subscription.remove();
+  }, [client, onLoadError]);
   useEffect(() => {
     if (!client.decision && client.policy) setOpen(true);
   }, [client, revision]);
@@ -430,13 +502,16 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
   const t = strings[lang];
   const rtl = lang === 'ar';
   if (client.decision && !open) return (
-    <Pressable accessibilityRole="button" onPress={() => {
-      setChoices(client.decision?.purposes ?? client.effectivePurposeStates());
-      setEditing(true);
-      setOpen(true);
-    }} style={styles.manageButton}>
-      <Text style={styles.manageText}>{t.manage}</Text>
-    </Pressable>
+    <View>
+      {!client.decisionStoredDurably && <View style={styles.storageWarning} accessibilityRole="alert"><Text style={styles.storageWarningText}>{t.storageWarning}</Text></View>}
+      <Pressable accessibilityRole="button" onPress={() => {
+        setChoices(client.decision?.purposes ?? client.effectivePurposeStates());
+        setEditing(true);
+        setOpen(true);
+      }} style={styles.manageButton}>
+        <Text style={styles.manageText}>{t.manage}</Text>
+      </Pressable>
+    </View>
   );
 
   const save = async (action: AmanDecision['action']) => {
@@ -456,7 +531,10 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
       <Text style={styles.body}>{error}</Text>
       <Pressable accessibilityRole="button" onPress={() => {
         setError(null);
-        client.loadPolicy().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Policy unavailable.'));
+        void client.loadPolicy().then(() => {
+          setError(null);
+          setOpen(!client.decision);
+        }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Policy unavailable.'));
       }}><Text style={styles.link}>{t.retry}</Text></Pressable>
     </View>
   );
@@ -465,6 +543,7 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
   const notice = policy.noticeTranslations?.[lang] ?? policy.notice;
   return (
     <ScrollView style={styles.card} contentContainerStyle={styles.content} accessibilityLabel={t.title}>
+      {!client.decisionStoredDurably && <View style={styles.storageWarning} accessibilityRole="alert"><Text style={styles.storageWarningText}>{t.storageWarning}</Text></View>}
       <View style={[styles.copy, rtl && styles.rtl]}>
         <Text style={styles.title}>{t.title}</Text>
         <Text style={styles.body}>{t.intro}</Text>
@@ -534,4 +613,6 @@ const styles = StyleSheet.create({
   error: { color: '#a53c38', fontSize: 12 },
   manageButton: { alignSelf: 'flex-start', borderColor: '#cbd6cd', borderRadius: 8, borderWidth: 1, margin: 12, paddingHorizontal: 12, paddingVertical: 9 },
   manageText: { color: '#176447', fontSize: 12, fontWeight: '600' },
+  storageWarning: { backgroundColor: '#fff8e8', borderColor: '#e7d9ad', borderRadius: 8, borderWidth: 1, marginBottom: 10, padding: 10 },
+  storageWarningText: { color: '#705821', fontSize: 12, lineHeight: 18 },
 });
