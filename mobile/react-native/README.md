@@ -77,7 +77,7 @@ useEffect(() => {
   };
   const unsubscribe = aman.subscribe(apply);
   apply(); // Sans politique chargée, isAllowed() est false : arrêter les SDK optionnels d’abord.
-  aman.loadPolicy().then(apply).catch(reportConsentSetupError);
+  // AmanConsentBanner charge la politique, notifie ce client et propose une nouvelle tentative.
   return unsubscribe;
 }, []);
 ```
