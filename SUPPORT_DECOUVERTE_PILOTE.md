@@ -19,7 +19,7 @@ Chercher un sponsor métier ou digital et, dès le premier échange, demander à
 
 ## Parcours de démonstration — 20 minutes
 
-Utiliser uniquement l’environnement local avec des données fictives. Après avoir créé le premier admin et démarré les serveurs, lancer `python backend/seed_demo.py` pour préparer une organisation, une propriété Web locale et un brouillon fictifs. Depuis la console, inviter un second compte de démonstration et accepter l’invitation dans un autre profil de navigateur. Pendant la séance, un compte prépare le brouillon et le second le publie ; la publication à deux personnes reste active.
+Utiliser uniquement l’environnement local avec des données fictives. Après avoir créé le premier admin et démarré les serveurs, lancer `python backend/seed_demo.py` pour préparer une organisation, une propriété Web locale et un brouillon fictifs. Depuis la console, inviter un second compte de démonstration et accepter l’invitation dans un autre profil de navigateur. Pendant la séance, un compte prépare le brouillon et le second le publie ; la validation à deux personnes est activée par défaut. Elle est imposée pour les propriétés étiquetées production, même si l’organisation la désactive pour le développement ou la recette.
 
 1. **Cadrer le problème (2 min).** Demander comment les finalités, tags et approbations sont actuellement répartis entre les domaines et équipes.
 2. **Montrer le tableau de bord (2 min).** En session connectée, montrer les comptes de configuration réels — organisations, propriétés, états de politiques et brouillons — puis filtrer par organisation. Les décisions reçues sont agrégées par propriété et exportables en CSV uniquement si la collecte a été activée ; la propriété préparée par le seed n’a aucun événement fictif injecté. Les chiffres de scan du tableau de bord sont simulés. Un outil séparé permet un inventaire ponctuel local sur une page ouverte et exporte un JSON. L’éditeur peut l’importer manuellement sur une propriété Web de la console locale ; ne pas importer d’URL ou d’inventaire client réel dans cette démo.
@@ -34,7 +34,7 @@ Ne pas faire de démonstration live d’une app bancaire, d’un domaine tiers o
 
 1. Combien de domaines, marques, applications et équipes doivent partager les mêmes règles ou les faire varier ?
 2. Comment recensez-vous aujourd’hui les cookies, tags Web et SDK intégrés aux applications ? À quelle fréquence l’inventaire est-il revu ?
-3. Qui décide et approuve une finalité ? Faut-il distinguer environnements de test et de production ou imposer une validation à deux personnes ?
+3. Qui décide et approuve une finalité ? Au-delà de la double validation déjà imposée pour une propriété de production, quelles approbations ou séparations d’environnement sont nécessaires ?
 4. Quel comportement doit suivre chaque technologie quand le visiteur refuse, retire son choix ou n’a pas encore répondu ?
 5. Quelles langues, exigences d’accessibilité et contraintes de marque s’appliquent aux parcours Web et mobile ?
 6. Faut-il conserver une preuve de choix côté terminal, dans le SI du client ou dans un service central ? Quelles données seraient acceptables pour cette preuve ?
@@ -63,7 +63,7 @@ Ne pas démarrer sur une application de production ou avec des données personne
 
 | Élément | État actuel | Formulation à employer |
 | --- | --- | --- |
-| Console et API | Tranche locale avec organisations, rôles, transfert de propriété accepté par le destinataire, propriétés, politiques, publication à deux personnes, journal d’administration et révocation auditée des invitations | « Nous pouvons démontrer le parcours sur environnement local. » |
+| Console et API | Tranche locale avec organisations, rôles, transfert de propriété accepté par le destinataire, propriétés, politiques, validation à deux personnes configurable par organisation et imposée en production, journal d’administration et révocation auditée des invitations | « Nous pouvons démontrer le parcours sur environnement local. » |
 | Tableau de bord | Comptes de configuration réels en session ; agrégats Web disponibles seulement si l’intégrateur active la transmission ; chiffres intégrés de scan simulés ; imports JSON locaux limités aux propriétés Web et aux 20 derniers rapports | « Les comptes viennent de la configuration ALAMANE. La collecte des décisions est facultative. Le rapport d’inventaire est produit localement puis importé à la main ; l’équipe doit vérifier l’hôte et classer les résultats. » |
 | SDK Web | Source de démonstration et tags fictifs | « Le flux Web se démontre sur nos pages factices ; l’intégration client reste à valider. » |
 | SDK iOS, Android et React Native | CI privée : compilation de la bibliothèque Android et de l’exemple, compilation iOS pour simulateur, et compilation TypeScript/TSX puis packaging du tarball React Native à chaque push et pull request. Un aperçu AAR/APK debug n’est pas une release. Aucun SDK n’a été intégré dans une application acheteur, signé comme release ou distribué en environnement client. | « Nos bibliothèques iOS et Android se compilent dans notre CI, et notre paquet React Native est compilé et emballé. Ils restent à intégrer et valider sur vos versions et appareils cibles ; nous ne fournissons pas encore de release mobile signée. » |
