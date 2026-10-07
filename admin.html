@@ -81,8 +81,8 @@
         response=await fetch(API+path,{method,headers,credentials:omitCredentials?'omit':'include',body:body?JSON.stringify(body):undefined});
       }catch(_){
         const message=location.protocol==='file:'
-          ?'La console est ouverte en file://, une origine que l’API locale refuse. Démarre les services selon le README, puis ouvre http://localhost:8000/admin.html.'
-          :`API ALAMANE injoignable sur ${API}. Vérifie l’URL et que le serveur API est démarré.`;
+          ?'La console est ouverte en file://, une origine que l’API locale refuse. Depuis la racine du dépôt, lance bash scripts/start-demo.sh puis ouvre http://localhost:8000/admin.html.'
+          :`API ALAMANE injoignable sur ${API}. Vérifie l’URL et le serveur. Pour la démo locale, lance bash scripts/start-demo.sh depuis la racine du dépôt.`;
         throw new Error(message);
       }
       let data={};try{data=await response.json()}catch(_){}
