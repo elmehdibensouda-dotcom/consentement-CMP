@@ -79,7 +79,7 @@ _LOGIN_FAILURES: Dict[str, list[int]] = {}
 _LOGIN_BLOCKED_UNTIL: Dict[str, int] = {}
 _CONFIGURED_RATE_LIMIT_HASH_KEY = os.environ.get("AMAN_RATE_LIMIT_HASH_KEY", "").encode("utf-8")
 _RATE_LIMIT_HASH_KEY = _CONFIGURED_RATE_LIMIT_HASH_KEY or secrets.token_bytes(32)
-COOKIE_SECURE = ENVIRONMENT == "production"
+COOKIE_SECURE = ENVIRONMENT != "development"
 if ENVIRONMENT == "production":
     raise RuntimeError(
         "This development API is not production-deployable: it uses SQLite and has no reviewed deployment controls."
