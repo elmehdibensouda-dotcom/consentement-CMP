@@ -1448,7 +1448,7 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
         row = conn.execute(
-            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,o.require_two_person_publish "
+            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,pr.environment,o.require_two_person_publish "
             "FROM policies p JOIN properties pr ON pr.id=p.property_id "
             "JOIN organizations o ON o.id=pr.org_id WHERE p.id=? AND pr.org_id=?",
             (policy_id, org_id),
@@ -1457,7 +1457,7 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
             raise HTTPException(status_code=404, detail="Policy not found")
         conn.lock_property(row["property_id"])
         row = conn.execute(
-            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,o.require_two_person_publish "
+            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,pr.environment,o.require_two_person_publish "
             "FROM policies p JOIN properties pr ON pr.id=p.property_id "
             "JOIN organizations o ON o.id=pr.org_id WHERE p.id=? AND pr.org_id=?",
             (policy_id, org_id),
@@ -1466,7 +1466,8 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
             raise HTTPException(status_code=404, detail="Policy not found")
         if row["status"] != "draft":
             raise HTTPException(status_code=409, detail="Only a draft can be published")
-        if row["require_two_person_publish"] and row["last_edited_by"] == context.user_id:
+        requires_second_person = row["require_two_person_publish"] or row["environment"] == "production"
+        if requires_second_person and row["last_edited_by"] == context.user_id:
             raise HTTPException(status_code=409, detail="A different owner or administrator must publish after the last draft edit")
         current = conn.execute("SELECT id FROM policies WHERE property_id=? AND status='published'",
                                (row["property_id"],)).fetchone()

@@ -367,6 +367,11 @@
       const data=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/policies`);
       const target=$('policyList');target.replaceChildren();
       if(!data.policies.length){target.textContent='Aucune version. Crée le premier brouillon ci-dessus.';return}
+      target.append(node('p',property.environment==='production'
+        ?'Publication en production : un owner/admin différent du dernier éditeur doit publier le brouillon.'
+        :state.org.requireTwoPersonPublish
+          ?'Publication à deux personnes activée : un owner/admin différent du dernier éditeur doit publier le brouillon.'
+          :'Publication à une personne activée pour cet environnement.','help'));
       const table=node('table');table.className='table';const head=node('tr');
       ['Version','État','Créée par','Dernier éditeur','Créée le','Publiée par','Publiée le','Action'].forEach(x=>head.append(node('th',x)));table.append(head);
       data.policies.forEach(p=>{
