@@ -1,6 +1,6 @@
 # ALAMANE Consent — React Native SDK starter
 
-Ce package source fournit un panneau natif React Native FR/AR, le chargement d’une politique publiée, la conservation locale d’un choix par propriété dans le stockage privé choisi par l’application, et une méthode d’envoi facultative appelée explicitement. Après le choix, il expose un bouton accessible « Gérer mes préférences » pour rouvrir le panneau; placer le composant dans une zone durable de l’application, comme ses paramètres de confidentialité. Il vise React Native 0.72+ et React 18+. Il n’est pas publié sur un registre npm; un tarball privé est joint aux exécutions manuelles du workflow GitHub Actions pendant 14 jours.
+Ce SDK fournit un panneau natif React Native FR/AR, le chargement d’une politique publiée, la conservation locale d’un choix par propriété dans le stockage privé choisi par l’application, et une méthode d’envoi facultative appelée explicitement. Après le choix, il expose un bouton accessible « Gérer mes préférences » pour rouvrir le panneau; placer le composant dans une zone durable de l’application, comme ses paramètres de confidentialité. Il vise React Native 0.72+ et React 18+. Le code TypeScript/TSX est compilé en JavaScript CommonJS par Babel pour le paquet. Il n’est pas publié sur un registre npm; un tarball privé est joint aux exécutions manuelles du workflow GitHub Actions pendant 14 jours.
 
 ## Installation du paquet pilote privé
 
@@ -10,7 +10,7 @@ Depuis l’exécution manuelle du workflow GitHub Actions, télécharger l’art
 npm install ./aman-consent-react-native-0.1.0.tgz @react-native-async-storage/async-storage
 ```
 
-Le tarball inclut le guide et le code source TypeScript. Il n’est pas signé ni publié sur un registre; vérifiez son origine et intégrez-le d’abord dans une application pilote.
+Le tarball inclut le guide, le code source TypeScript et le JavaScript compilé utilisé par les applications. La CI construit et emballe ce paquet sur chaque exécution; l’artefact téléchargeable est joint aux exécutions manuelles. Il n’est pas signé ni publié sur un registre; vérifiez son origine et intégrez-le d’abord dans une application pilote.
 
 ## Installation locale pour un pilote
 
@@ -83,7 +83,7 @@ Pour signaler un choix au serveur, l’application peut appeler `aman.recordDeci
 
 ## Limites avant pilote
 
-- Package source de démarrage, non publié sur npm, à compiler et intégrer dans les versions React Native ciblées; aucune matrice de compatibilité, release signée, SBOM ou validation d’accessibilité n’est fournie.
+- SDK pilote compilé et non publié sur npm; aucune matrice de compatibilité, release signée, SBOM ou validation d’accessibilité n’est fournie.
 - Le stockage est fourni par l’application. Le choix reste local jusqu’à un appel d’envoi explicite; il n’existe pas de synchronisation multi-appareil ni de file de reprise.
 - L’application doit démarrer, arrêter et réconcilier réellement ses SDK tiers. Une bibliothèque native déjà initialisée peut ne pas pouvoir être déchargée.
 - La collecte, les formalités, les durées et le contenu de l’avis restent à valider par le client et ses conseils; le SDK ne garantit pas la conformité.

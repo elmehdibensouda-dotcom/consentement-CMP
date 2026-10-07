@@ -2,11 +2,13 @@
 .venv-old/
 .local/
 __pycache__/
+node_modules/
 *.py[cod]
 .DS_Store
 .gradle/
 .build/
 build/
 **/build/
+mobile/react-native/lib/
 local.properties
 .idea/
