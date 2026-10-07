@@ -40,11 +40,11 @@ La durée de conservation des événements reçus est dérivée de la politique 
 - Contrôles d’accès, sessions, CSRF, politiques, journal et stockage : `backend/aman_api/main.py`.
 - Format de politique partagé : [schemas/consent-policy.schema.json](./schemas/consent-policy.schema.json).
 - Capacités et limites des canaux : [guide iOS](./mobile/ios/README.md), [guide Android](./mobile/android/README.md) et `aman-cmp.js`.
-- Le workflow [Product validation](./.github/workflows/product-validation.yml) configure la compilation Android/iOS et l’emballage React Native ; sa définition n’est pas une preuve qu’une exécution a validé le code local actuel.
-- La [CI privée du 6 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37501530814) a réussi sur la révision distante de cette date la compilation Android/iOS ; elle ne constitue pas une validation de sécurité, d’intégration client ou de release signée, et ne couvre pas les changements SDK locaux non poussés.
+- Le workflow [Product validation](./.github/workflows/product-validation.yml) configure la compilation Android/iOS et l’emballage React Native ; sa définition n’est pas une preuve qu’une exécution a validé le dernier commit.
+- La [CI privée du 6 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37501530814) a réussi sur la révision distante de cette date la compilation Android/iOS ; elle ne constitue pas une validation de sécurité, d’intégration client ou de release signée, et ne couvre pas le commit ultérieur `5982b6e`.
 - La [prévisualisation mobile manuelle](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37487329772) a joint un AAR Android, un APK debug et le tarball React Native au commit indiqué dans son manifeste ; ces artefacts temporaires ne sont pas des releases de production.
 - Le commit local `ebdc5e9` corrige le finding de limitation de débit du scan historique du 7 octobre ; la suite backend locale a passé 17 tests. Le rapport de scan original reste attaché à la révision pré-correction `0066e2a` et ne décrit pas l’état post-correction.
-- Les vérifications locales de compilation et de syntaxe ne sont pas des tests de sécurité, une homologation ou un test d’intrusion. Les modifications mobiles non commitées de ce dossier ne sont pas présentes sur GitHub.
+- Le commit `5982b6e` du 7 octobre 2026, poussé sur `codex/alamane-b2b-readiness`, contient les changements SDK Web/mobile de cette révision. L’état de sa CI n’a pas été confirmé lors de la mise à jour de ce dossier ; vérifier l’exécution correspondante avant de s’appuyer sur ses résultats. Les vérifications locales de compilation et de syntaxe ne sont pas des tests de sécurité, une homologation ou un test d’intrusion.
 
 ## Questions auxquelles ne pas répondre par supposition
 
