@@ -317,7 +317,7 @@ class AmanConsentManager(
                 action = json.optString("action").takeIf { it.isNotBlank() && it != "null" }
             )
             if (stored.propertyId != policy.propertyId || stored.channel != "android" ||
-                stored.policyVersion != policy.policyVersion || stored.expiresAtMillis <= clockMillis()) {
+                stored.policyVersion != policy.policyVersion || !isValidStoredDecision(stored)) {
                 preferences.edit().remove(storageKey).apply()
                 decision = null
             } else decision = stored
@@ -326,6 +326,28 @@ class AmanConsentManager(
             decision = null
         }
         scheduleExpiryRefresh()
+    }
+
+    private fun isValidStoredDecision(stored: AmanConsentDecision): Boolean {
+        val currentTime = clockMillis()
+        val active = activePurposes
+        val optional = active.filterNot { it.required }
+        val expectedPurposeIds = active.map { it.id }.toSet()
+        val duration = stored.expiresAtMillis - stored.capturedAtMillis
+        if (stored.capturedAtMillis < 0 || stored.capturedAtMillis > currentTime + 60_000L ||
+            stored.expiresAtMillis <= currentTime || duration <= 0 ||
+            duration > policy.retentionDays.toLong() * 86_400_000L ||
+            stored.purposes.keys != expectedPurposeIds ||
+            active.any { it.required && stored.purposes[it.id] != true } ||
+            (stored.eventId != null && runCatching { java.util.UUID.fromString(stored.eventId) }.isFailure)) {
+            return false
+        }
+        return when (stored.action) {
+            "accept_all" -> optional.all { stored.purposes[it.id] == true }
+            "reject_all" -> optional.all { stored.purposes[it.id] == false }
+            null, "custom" -> true
+            else -> false
+        }
     }
 
     private fun scheduleExpiryRefresh() {

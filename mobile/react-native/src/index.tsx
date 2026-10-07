@@ -194,6 +194,13 @@ function validateDecision(value: unknown, policy: AmanPolicy, channel: AmanChann
       (value.expiresAt as number) <= (value.capturedAt as number) || !isRecord(value.purposes)) {
     throw new Error('The saved consent decision is invalid.');
   }
+  const capturedAt = value.capturedAt as number;
+  const expiresAt = value.expiresAt as number;
+  const maximumRetention = policy.retentionDays * 86400000;
+  if (capturedAt < 0 || capturedAt > Date.now() + 60_000 ||
+      expiresAt - capturedAt > maximumRetention) {
+    throw new Error('The saved consent decision is outside the policy retention window.');
+  }
   const active = policy.purposes.filter((purpose) => purpose.channels.includes(channel));
   const choices = value.purposes;
   if (Object.keys(choices).length !== active.length ||

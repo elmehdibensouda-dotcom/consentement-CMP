@@ -398,12 +398,35 @@ public final class AmanConsentManager: ObservableObject {
               stored.propertyId == policy.propertyId,
               stored.channel == "ios",
               stored.policyVersion == policy.policyVersion,
-              stored.expiresAt > now() else {
+              isValidStoredDecision(stored) else {
             defaults.removeObject(forKey: storageKey)
             decision = nil
             return
         }
         decision = stored
+    }
+
+    private func isValidStoredDecision(_ stored: AmanConsentDecision) -> Bool {
+        let currentTime = now()
+        let active = activePurposes
+        let purposeIds = Set(active.map(\.id))
+        let optional = active.filter { !$0.required }
+        let duration = stored.expiresAt.timeIntervalSince(stored.capturedAt)
+        guard stored.capturedAt.timeIntervalSince1970 >= 0,
+              stored.capturedAt <= currentTime.addingTimeInterval(60),
+              stored.expiresAt > currentTime,
+              duration > 0,
+              duration <= TimeInterval(policy.retentionDays) * 86_400,
+              Set(stored.purposes.keys) == purposeIds,
+              active.allSatisfy({ !$0.required || stored.purposes[$0.id] == true }),
+              stored.eventId.map({ UUID(uuidString: $0) != nil }) ?? true else {
+            return false
+        }
+        switch stored.action {
+        case .some(.acceptAll): return optional.allSatisfy { stored.purposes[$0.id] == true }
+        case .some(.rejectAll): return optional.allSatisfy { stored.purposes[$0.id] == false }
+        case .some(.custom), .none: return true
+        }
     }
 }
 
