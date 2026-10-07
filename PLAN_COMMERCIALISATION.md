@@ -111,7 +111,7 @@ Valider le budget auprès de l’acheteur économique, pas uniquement de l’éq
 - Créer un script d’installation et un parcours guidé pour les informations CNDP.
 - Préparer un dossier fournisseur : architecture, flux et sous-traitants, hébergement/transferts, contrôle d’accès, chiffrement, sauvegardes, réponse aux incidents, SLA, tests de sécurité et continuité.
 - Préparer politique de confidentialité ALAMANE, conditions SaaS, accord de sous-traitance et support. Validation juridique nécessaire avant usage commercial.
-- Figer le contrat de politique partagé entre le tableau de bord, le SDK web et les futurs SDK mobiles ; une règle n’est pas supposée identique entre une catégorie de cookies et une permission native.
+- Figer le contrat de politique partagé entre le tableau de bord, le SDK web et les SDK mobiles ; une règle n’est pas supposée identique entre une catégorie de cookies et une permission native.
 
 ### Semaines 9–12 · preuve de concept encadrée
 
@@ -142,7 +142,7 @@ Les brouillons d’approche et le tableau de suivi sont dans [SEQUENCE_PROSPECTI
 ### Vérifications avant toute diffusion publique
 
 - **Nom de travail « ALAMANE » :** l’hôtelier ALAMANE Group utilise déjà l’expression « ALAMANE Cookie Consent tool » pour le mécanisme de consentement de son propre site ([politique officielle](https://www.aman.com/cookie-policy)). Ce constat signale un risque de confusion à examiner ; il ne permet pas, à lui seul, de conclure à un conflit juridique. Faire une recherche d’antériorité et demander une revue de marque au Maroc et dans les marchés visés via l’[OMPIC](https://www.ompic.ma/fr) avant campagne, contrat ou investissement important dans l’identité. Ne pas lancer publiquement le nom avant cette revue.
-- **Contact commercial :** le bouton de la page [commercialisation.html](./commercialisation.html) ouvre `bonjour@aman.ma`. La propriété et la réception de cette adresse n’ont pas été confirmées. Vérifier le domaine, la boîte et la réception d’un message de bout en bout, ou remplacer l’adresse par un contact validé, avant de diffuser la page.
+- **Contact commercial :** l’adresse `bonjour@aman.ma` n’a pas été vérifiée. Le bouton de la page [commercialisation.html](./commercialisation.html) est désactivé et indique que l’adresse doit être confirmée. Vérifier le domaine, la boîte et la réception d’un message de bout en bout, ou remplacer par un contact validé, avant de diffuser la page.
 - **Présence en ligne :** vérifier disponibilité et droits d’usage des domaines et identifiants sociaux retenus après décision sur le nom. Ne pas interpréter la présence d’un domaine comme une autorisation d’utiliser une marque.
 
 ## 8. Mesures de décision
