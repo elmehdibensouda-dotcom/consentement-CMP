@@ -1,6 +1,6 @@
 # Plan de transition vers un service hébergeable
 
-**État :** plan d’ingénierie interne, 7 octobre 2026
+**État :** plan d’ingénierie interne, 8 octobre 2026
 **But :** préparer un pilote entreprise sans présenter le prototype local comme apte à recevoir des données réelles.
 
 ## Décision d’architecture proposée
@@ -9,7 +9,7 @@ Conserver SQLite pour le développement local et retenir PostgreSQL comme cible 
 
 Le serveur continuera de refuser `AMAN_ENVIRONMENT=production` jusqu’à ce que les critères de mise en service ci-dessous soient satisfaits et qu’une revue sécurité distincte ait été effectuée.
 
-## État source vérifié au 7 octobre 2026
+## État source vérifié au 8 octobre 2026
 
 - `backend/aman_api/main.py` conserve SQLite comme moteur local, mais reçoit maintenant une interface `Connection` et délègue l’ouverture, la fermeture, les transactions et les erreurs d’intégrité au module `backend/aman_api/database.py`.
 - L’adaptateur SQLite garde le mode WAL, les clés étrangères, le mode d’accès aux lignes, les vérifications de permissions et `BEGIN IMMEDIATE`. Le SQL métier reste dans les routes et utilise le marqueur `?` ; l’extraction en dépôts métier et la définition du paramétrage portable ne sont donc pas terminées.
@@ -21,6 +21,7 @@ Le serveur continuera de refuser `AMAN_ENVIRONMENT=production` jusqu’à ce que
 - L’analyse statique interne du 8 octobre 2026 a confirmé que l’ingestion publique des événements de consentement n’a pas de quota cumulatif par propriété ou global. Les limites de débit et la purge à échéance ne bornent pas le volume conservé avant expiration ; ajouter des quotas, une réponse de saturation bornée, des alertes et une validation sous charge avant tout pilote exposé.
 - Le numéro de version est calculé par `MAX(version)+1` sous verrou transactionnel de la propriété (`BEGIN IMMEDIATE` SQLite, verrou de ligne PostgreSQL) et chaque propriété a une unicité `(property_id, version)`. La publication verrouille la même propriété ; PostgreSQL l’adosse à un index unique partiel, maintenant aussi présent dans SQLite. Restent les contrôles multi-organisation au niveau applicatif et la validation des parcours contre une instance PostgreSQL réelle.
 - Le mode production déclenche toujours une erreur explicite au chargement du module. L’API n’est pas déployable en banque dans son état courant.
+- La tête de branche publiée est `4da0bba` sur `codex/alamane-b2b-readiness`. Elle comprend les évolutions du SDK Web et de la persistance des choix React Native ; aucun résultat CI ni test local n’a été vérifié sur cette révision. La CI réussie référencée dans le dossier fournisseur porte sur `08eb815` et ne doit pas être présentée comme une validation de `4da0bba`.
 - Les cookies de session et CSRF portent `Secure` dans tous les environnements hors `development`. La démo locale HTTP reste possible ; une préproduction HTTPS ne dépend pas du nom de l’environnement pour protéger ses cookies.
 - Une propriété étiquetée `production` impose désormais la publication à deux personnes, même si l’organisation a désactivé cette option ailleurs : l’auteur de la dernière modification du brouillon ne peut pas le publier. Cette règle protège le workflow; elle ne fournit ni isolation d’environnement, ni approbation juridique, ni aptitude de production.
 - Un adaptateur PostgreSQL de préproduction est maintenant sélectionné par `AMAN_DATABASE_URL`, avec pool borné, exigence `sslmode=verify-full` pour les hôtes distants, migrations versionnées et index unique de politique publiée. Les limites de connexion, événements et invitations utilisent des buckets transactionnels partagés ; PostgreSQL exige un `AMAN_RATE_LIMIT_HASH_KEY` commun entre instances. `AMAN_MIGRATION_DATABASE_URL` permet une connexion opérateur directe distincte ; sur un hôte distant, les rôles explicites doivent différer et cibler la même base. Aucun service PostgreSQL externe n’a encore été configuré ou validé.
