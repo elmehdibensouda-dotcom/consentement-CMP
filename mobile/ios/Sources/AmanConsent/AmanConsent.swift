@@ -122,6 +122,44 @@ public enum AmanConsentAPIError: Error {
     case decisionUploadRejected(Int)
 }
 
+public enum AmanPurposeHandlerRegistrationError: Error {
+    case invalidPurposeId
+}
+
+public struct AmanPurposeHandlerContext: Equatable, Sendable {
+    public let propertyId: String
+    public let policyVersion: String
+    public let channel: String
+}
+
+public enum AmanPurposeHandlerPhase: String, Sendable {
+    case start
+    case stop
+}
+
+public typealias AmanPurposeHandlerStart = @MainActor (AmanPurposeHandlerContext) throws -> (@MainActor () throws -> Void)?
+public typealias AmanPurposeHandlerErrorListener = @MainActor (Error, AmanPurposeHandlerPhase) -> Void
+
+@MainActor
+private final class AmanPurposeHandlerRegistration {
+    let purposeId: String
+    let start: AmanPurposeHandlerStart
+    let onError: AmanPurposeHandlerErrorListener?
+    var enabled: Bool?
+    var cleanup: (@MainActor () throws -> Void)?
+    var context: AmanPurposeHandlerContext?
+
+    init(purposeId: String, start: @escaping AmanPurposeHandlerStart,
+         onError: AmanPurposeHandlerErrorListener?) {
+        self.purposeId = purposeId
+        self.start = start
+        self.onError = onError
+        self.enabled = nil
+        self.cleanup = nil
+        self.context = nil
+    }
+}
+
 /// Fetches the public, published policy for one app property and keeps the last
 /// valid response on-device for offline startup. Decision uploads require an
 /// explicit call to `recordDecision` by the integrating application.
@@ -312,6 +350,7 @@ public final class AmanConsentManager: ObservableObject {
     private let defaults: UserDefaults
     private let now: () -> Date
     private var expiryTimer: Timer?
+    private var purposeHandlers: [UUID: AmanPurposeHandlerRegistration] = [:]
     private var storageKey: String { "aman.consent.\(policy.propertyId)" }
     public var activePurposes: [AmanPurpose] {
         guard policy.status == "published" else { return [] }
@@ -324,6 +363,30 @@ public final class AmanConsentManager: ObservableObject {
     public var onConsentChanged: ((AmanConsentDecision) -> Void)?
     /// Fires when effective states change because of a saved choice or policy update. This is not a consent event.
     public var onEffectivePurposeStatesChanged: (([String: Bool]) -> Void)?
+
+    @discardableResult
+    public func registerPurposeHandler(
+        _ purposeId: String,
+        start: @escaping AmanPurposeHandlerStart,
+        onError: AmanPurposeHandlerErrorListener? = nil
+    ) throws -> UUID {
+        guard purposeId.range(of: "^[a-z][a-z0-9_-]{1,63}$", options: .regularExpression) != nil else {
+            throw AmanPurposeHandlerRegistrationError.invalidPurposeId
+        }
+        let registrationID = UUID()
+        purposeHandlers[registrationID] = AmanPurposeHandlerRegistration(
+            purposeId: purposeId,
+            start: start,
+            onError: onError
+        )
+        reconcilePurposeHandlers()
+        return registrationID
+    }
+
+    public func unregisterPurposeHandler(_ registrationID: UUID) {
+        guard let registration = purposeHandlers.removeValue(forKey: registrationID) else { return }
+        if registration.enabled == true { stopPurposeHandler(registration) }
+    }
 
     public init(policy: AmanConsentPolicy, defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
         self.policy = policy
@@ -348,7 +411,7 @@ public final class AmanConsentManager: ObservableObject {
             restoreDecision()
         }
         scheduleExpiryRefresh()
-        onEffectivePurposeStatesChanged?(effectivePurposeStates)
+        notifyEffectivePurposeStatesChanged()
     }
 
     public func isAllowed(_ purposeId: String) -> Bool {
@@ -397,7 +460,7 @@ public final class AmanConsentManager: ObservableObject {
         if let data = try? JSONEncoder().encode(updated) { defaults.set(data, forKey: storageKey) }
         scheduleExpiryRefresh()
         onConsentChanged?(updated)
-        onEffectivePurposeStatesChanged?(effectivePurposeStates)
+        notifyEffectivePurposeStatesChanged()
     }
 
     /// Reconciles an expired local choice with host SDKs. This is a state update, not a new user decision.
@@ -412,7 +475,7 @@ public final class AmanConsentManager: ObservableObject {
         expiryTimer = nil
         defaults.removeObject(forKey: storageKey)
         decision = nil
-        onEffectivePurposeStatesChanged?(effectivePurposeStates)
+        notifyEffectivePurposeStatesChanged()
         return true
     }
 
@@ -423,7 +486,58 @@ public final class AmanConsentManager: ObservableObject {
         expiryTimer = nil
         defaults.removeObject(forKey: storageKey)
         decision = nil
+        notifyEffectivePurposeStatesChanged()
+    }
+
+    private func notifyEffectivePurposeStatesChanged() {
+        reconcilePurposeHandlers()
         onEffectivePurposeStatesChanged?(effectivePurposeStates)
+    }
+
+    private func reconcilePurposeHandlers() {
+        let context = AmanPurposeHandlerContext(
+            propertyId: policy.propertyId,
+            policyVersion: policy.policyVersion,
+            channel: "ios"
+        )
+        for (registrationID, registration) in Array(purposeHandlers) {
+            guard purposeHandlers[registrationID] === registration else { continue }
+            let enabled = isAllowed(registration.purposeId)
+            guard registration.enabled != enabled || (enabled && registration.context != context) else { continue }
+            guard enabled else {
+                stopPurposeHandler(registration)
+                continue
+            }
+            if registration.enabled == true { stopPurposeHandler(registration) }
+            registration.enabled = true
+            do {
+                let cleanup = try registration.start(context)
+                guard purposeHandlers[registrationID] === registration else {
+                    do { try cleanup?() }
+                    catch { registration.onError?(error, .stop) }
+                    continue
+                }
+                registration.cleanup = cleanup
+                registration.context = context
+            } catch {
+                registration.enabled = nil
+                registration.context = nil
+                registration.onError?(error, .start)
+            }
+        }
+    }
+
+    private func stopPurposeHandler(_ registration: AmanPurposeHandlerRegistration) {
+        let cleanup = registration.cleanup
+        registration.cleanup = nil
+        registration.enabled = false
+        registration.context = nil
+        guard let cleanup else { return }
+        do {
+            try cleanup()
+        } catch {
+            registration.onError?(error, .stop)
+        }
     }
 
     private func scheduleExpiryRefresh() {

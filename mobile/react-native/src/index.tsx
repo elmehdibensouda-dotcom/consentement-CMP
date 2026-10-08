@@ -69,6 +69,22 @@ export type AmanConsentClientOptions = {
   requestTimeoutMs?: number;
 };
 
+export type AmanPurposeHandlerContext = {
+  propertyId: string;
+  policyVersion: string;
+  channel: AmanChannel;
+};
+export type AmanPurposeHandlerErrorPhase = 'start' | 'stop';
+export type AmanPurposeHandlerStart = (context: AmanPurposeHandlerContext) => void | (() => void);
+export type AmanPurposeHandlerErrorListener = (error: unknown, phase: AmanPurposeHandlerErrorPhase) => void;
+type AmanPurposeHandlerRegistration = {
+  start: AmanPurposeHandlerStart;
+  onError?: AmanPurposeHandlerErrorListener;
+  cleanup: (() => void) | null;
+  enabled: boolean | null;
+  context: AmanPurposeHandlerContext | null;
+};
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 async function withNetworkTimeout<T>(
@@ -271,6 +287,7 @@ export class AmanConsentClient {
   private decisionStoredDurablyValue = true;
   private listeners = new Set<() => void>();
   private decisionListeners = new Set<(decision: AmanDecision) => void>();
+  private purposeHandlers = new Map<string, Set<AmanPurposeHandlerRegistration>>();
 
   constructor(options: AmanConsentClientOptions) {
     this.baseUrl = validateBaseUrl(options.baseUrl);
@@ -299,7 +316,111 @@ export class AmanConsentClient {
     return () => this.decisionListeners.delete(listener);
   }
 
-  private notify() { this.listeners.forEach((listener) => listener()); }
+  private notify() {
+    this.reconcilePurposeHandlers();
+    this.listeners.forEach((listener) => listener());
+  }
+
+  /** Starts an optional host SDK only while its purpose is effective and calls its cleanup on withdrawal. */
+  registerPurposeHandler(
+    purposeId: string,
+    start: AmanPurposeHandlerStart,
+    onError?: AmanPurposeHandlerErrorListener,
+  ): () => void {
+    if (!/^[a-z][a-z0-9_-]{1,63}$/.test(purposeId) || typeof start !== 'function') {
+      throw new Error('Aman purpose handler requires a valid purpose ID and a start function.');
+    }
+    let registrations = this.purposeHandlers.get(purposeId);
+    if (!registrations) {
+      registrations = new Set();
+      this.purposeHandlers.set(purposeId, registrations);
+    }
+    const registration: AmanPurposeHandlerRegistration = {
+      start,
+      onError,
+      cleanup: null,
+      enabled: null,
+      context: null,
+    };
+    registrations.add(registration);
+    this.reconcilePurposeHandlers();
+    return () => {
+      if (!registrations.has(registration)) return;
+      if (registration.enabled === true) this.stopPurposeHandler(purposeId, registration);
+      registrations.delete(registration);
+      if (registrations.size === 0) this.purposeHandlers.delete(purposeId);
+    };
+  }
+
+  private reportPurposeHandlerError(
+    registration: AmanPurposeHandlerRegistration,
+    error: unknown,
+    phase: AmanPurposeHandlerErrorPhase,
+  ) {
+    try { registration.onError?.(error, phase); } catch { /* Host error reporting must not interrupt consent updates. */ }
+  }
+
+  private stopPurposeHandler(purposeId: string, registration: AmanPurposeHandlerRegistration) {
+    const cleanup = registration.cleanup;
+    registration.cleanup = null;
+    registration.enabled = false;
+    registration.context = null;
+    if (!cleanup) return;
+    try { cleanup(); } catch (error) { this.reportPurposeHandlerError(registration, error, 'stop'); }
+  }
+
+  private reconcilePurposeHandlers() {
+    const policy = this.policyValue;
+    if (!policy) {
+      Array.from(this.purposeHandlers.entries()).forEach(([purposeId, registrations]) => {
+        if (this.purposeHandlers.get(purposeId) !== registrations) return;
+        Array.from(registrations).forEach((registration) => {
+          if (!registrations.has(registration)) return;
+          if (registration.enabled !== false) this.stopPurposeHandler(purposeId, registration);
+        });
+      });
+      return;
+    }
+    const context: AmanPurposeHandlerContext = {
+      propertyId: policy.propertyId,
+      policyVersion: policy.policyVersion,
+      channel: this.channel,
+    };
+    Array.from(this.purposeHandlers.entries()).forEach(([purposeId, registrations]) => {
+      if (this.purposeHandlers.get(purposeId) !== registrations) return;
+      const enabled = policy.purposes.some((purpose) =>
+        purpose.id === purposeId && purpose.channels.includes(this.channel)) && this.isAllowed(purposeId);
+      Array.from(registrations).forEach((registration) => {
+        if (!registrations.has(registration)) return;
+        const sameContext = registration.context !== null &&
+          registration.context.propertyId === context.propertyId &&
+          registration.context.policyVersion === context.policyVersion &&
+          registration.context.channel === context.channel;
+        if (registration.enabled === enabled && (!enabled || sameContext)) return;
+        if (!enabled) {
+          this.stopPurposeHandler(purposeId, registration);
+          return;
+        }
+        if (registration.enabled === true) this.stopPurposeHandler(purposeId, registration);
+        registration.enabled = true;
+        try {
+          const cleanup = registration.start(context);
+          if (!registrations.has(registration)) {
+            if (typeof cleanup === 'function') {
+              try { cleanup(); } catch (error) { this.reportPurposeHandlerError(registration, error, 'stop'); }
+            }
+            return;
+          }
+          registration.cleanup = typeof cleanup === 'function' ? cleanup : null;
+          registration.context = context;
+        } catch (error) {
+          registration.enabled = null;
+          registration.context = null;
+          this.reportPurposeHandlerError(registration, error, 'start');
+        }
+      });
+    });
+  }
   private get policyKey() { return `aman.policy.v1.${this.channel}.${this.propertyId}`; }
   private get decisionKey() { return `aman.choice.v1.${this.channel}.${this.propertyId}`; }
 

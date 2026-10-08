@@ -23,6 +23,7 @@ if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) e
 fi
 
 if ! python3 - 8000 8001 <<'PY'
+import errno
 import socket
 import sys
 
@@ -31,8 +32,15 @@ for value in sys.argv[1:]:
     with socket.socket() as listener:
         try:
             listener.bind(("127.0.0.1", port))
-        except OSError:
-            print(f"Port {port} on 127.0.0.1 is unavailable; stop the service using it, then retry.", file=sys.stderr)
+        except OSError as exc:
+            if exc.errno in {errno.EACCES, errno.EPERM}:
+                print(
+                    f"Cannot check port {port} on 127.0.0.1 because this environment blocks local network access; "
+                    "run the demo from a local terminal with permission to bind loopback ports.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"Port {port} on 127.0.0.1 is unavailable; stop the service using it, then retry.", file=sys.stderr)
             raise SystemExit(1)
 PY
 then
@@ -100,7 +108,7 @@ fi
 
 seed_output=$("$PYTHON" backend/seed_demo.py --owner-email "$owner_email")
 printf '%s\n' "$seed_output"
-property_id=$(printf '%s\n' "$seed_output" | sed -n 's/^Development property ID: //p')
+property_id=$(printf '%s\n' "$seed_output" | sed -n 's/^web property ID: //p')
 if [[ -z "$property_id" ]]; then
   echo "Could not read the demo property ID from the seed command." >&2
   exit 1

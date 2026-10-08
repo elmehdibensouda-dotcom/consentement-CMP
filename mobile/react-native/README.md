@@ -80,11 +80,30 @@ export function AppConsent() {
 
 Dans la console, choisis « React Native » dans le sélecteur de type d’intégration pour obtenir un extrait adapté à la propriété courante. Répète l’opération pour les propriétés iOS et Android et remplace les deux valeurs `PROPERTY_ID_*` ci-dessus par leurs identifiants respectifs. Cela permet à chaque binaire de charger la politique du canal natif correspondant ; les choix restent enregistrés localement par propriété et ne sont pas synchronisés entre iOS et Android.
 
+Un composant d’intégration plus complet, avec propriétés distinctes, affichage du statut et gestionnaire de finalité, est disponible dans [`example/ConsentIntegration.tsx`](./example/ConsentIntegration.tsx). Il est prévu pour être copié dans une application React Native cliente après installation du SDK et de `@react-native-async-storage/async-storage`. Les fonctions du fournisseur restent à raccorder et l’auto-initialisation de ses SDK doit être désactivée.
+
 L’identifiant de propriété est une référence publique de configuration, pas un secret. Le client accepte HTTPS; HTTP est limité aux hôtes loopback pour le développement. Appeler `aman.loadPolicy()` au démarrage si l’application doit piloter elle-même le chargement. Le panneau charge la politique à son montage et utilise la politique valide en cache si le réseau échoue.
 
 ## Relier les finalités aux SDK de l’application
 
 Le panneau enregistre le choix sur l’appareil et ne démarre aucun SDK tiers. Avant d’intégrer le composant, désactive l’auto-initialisation et l’auto-collecte des SDK facultatifs dans leur configuration native. Un `useEffect` intervient après le montage React : l’application ne doit donc pas compter sur un appel d’arrêt tardif pour empêcher leur premier envoi. Initialise chaque SDK uniquement depuis `startAnalyticsIfNotStarted()` lorsque `isAllowed()` vaut `true`; `stopAnalyticsIfSupported()` sert à appliquer un refus ou un retrait après coup. L’application hôte réconcilie les états après chargement ou changement de politique :
+
+Le client fournit également `registerPurposeHandler(id, start, onError?)`. Le démarrage est appelé lorsque la finalité devient active ; la fonction de nettoyage renvoyée est appelée lorsqu’elle devient inactive ou lorsque l’inscription est retirée. Si la propriété ou la version de politique change alors que la finalité reste active, l’ancien contexte est nettoyé puis `start` est rappelé. L’inscription avant le chargement de la politique est prise en compte dès qu’une politique valide est disponible :
+
+```tsx
+useEffect(() => aman.registerPurposeHandler(
+  'analytics',
+  () => {
+    startAnalyticsIfNotStarted();
+    return () => stopAnalyticsIfSupported();
+  },
+  (_error, phase) => reportConsentSdkLifecycleIssue('analytics', phase),
+), []);
+```
+
+`start` et le nettoyage sont synchrones ; si un SDK est asynchrone, son application doit gérer elle-même l’annulation et éviter une initialisation tardive après retrait. Si `start` échoue après une initialisation partielle, il doit annuler ses effets partiels avant de lever l’erreur. La callback d’erreur optionnelle reçoit l’erreur côté application et la phase `start` ou `stop`; ALAMANE ne la journalise pas. Ne raccorde pas deux fois le même SDK à la fois par ce mécanisme et par un autre listener.
+
+Pour une orchestration personnalisée, le client expose aussi `isAllowed()` et `subscribe()` ; c’est une alternative au gestionnaire ci-dessus pour une finalité donnée :
 
 ```tsx
 useEffect(() => {

@@ -133,6 +133,22 @@ Les champs de notice traduits se trouvent dans `noticeTranslations.fr` et `notic
 
 `onEffectivePurposeStatesChanged` signale l’état effectif après un choix enregistré et après `updatePolicy(_:)`. Quand une nouvelle politique invalide un ancien choix, le callback transmet les valeurs de départ de la nouvelle version afin que l’application puisse arrêter ou démarrer ses SDK en conséquence. Il ne représente pas un nouveau choix du visiteur et ne doit pas être envoyé comme événement de consentement. L’application doit aussi appliquer une première fois `isAllowed(_:)` après avoir créé le gestionnaire.
 
+Pour raccorder un SDK par finalité, le gestionnaire expose aussi `registerPurposeHandler(_:start:onError:)`. Il appelle `start` lorsque la finalité devient active, puis la fonction de nettoyage renvoyée lorsqu’elle devient inactive. Si la propriété ou la version de politique change alors que la finalité reste active, il nettoie l’ancien contexte et rappelle `start`. Conserver l’identifiant et appeler `unregisterPurposeHandler(_:)` quand l’application n’a plus besoin du raccordement. Utiliser ce mécanisme ou `onEffectivePurposeStatesChanged` pour un SDK donné, pas les deux :
+
+```swift
+let analyticsHandlerID = try manager.registerPurposeHandler("analytics", start: { _ in
+    self.startAnalyticsIfNeeded()
+    return { self.stopAnalyticsIfSupported() }
+}, onError: { _, phase in
+    // Consigner uniquement l’échec technique et sa phase.
+})
+
+// Lorsque l’application retire ce raccordement :
+manager.unregisterPurposeHandler(analyticsHandlerID)
+```
+
+Les callbacks sont synchrones et exécutés sur l’acteur principal. Si l’initialisation échoue après un effet partiel, la fonction `start` doit annuler cet effet avant de lever l’erreur. L’application reste responsable de l’arrêt fourni par chaque SDK ; un état de refus ne peut pas annuler une donnée déjà transmise.
+
 Si `fetchPolicy` échoue, aucune politique exploitable n’est disponible : appeler `markPolicyUnavailable()` sur le gestionnaire existant et désactiver les finalités optionnelles. Cette méthode efface le choix enregistré et fait renvoyer `false` par `isAllowed(_:)` pour les finalités optionnelles, jusqu’à ce que `updatePolicy(_:)` reçoive une politique valide. `AmanConsentSheet` affiche alors un message et désactive ses contrôles. Les pannes réseau et réponses temporaires avec un cache valide sont déjà retournées comme une politique valide par le client.
 
 ### Remontée facultative des décisions

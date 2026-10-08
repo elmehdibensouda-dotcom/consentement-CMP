@@ -15,6 +15,8 @@
   const POLICY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
   const POLICY_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
   const MANAGED_TAG_SELECTOR = 'script[type="text/plain"][data-aman-src]';
+  const PURPOSE_HANDLERS = new Map();
+  let currentConsentContext = null;
   const DEFAULTS = {
     version: '1',
     locale: 'fr',
@@ -415,6 +417,8 @@
       hasUserChoice: !!choice,
       purposes
     };
+    currentConsentContext = detail;
+    syncPurposeHandlers(detail);
     document.dispatchEvent(new CustomEvent('aman:consent-update', { detail }));
     try {
       if (typeof window.dataLayer === 'undefined') window.dataLayer = [];
@@ -422,6 +426,80 @@
         window.dataLayer.push({ event: 'aman_consent_update', aman: detail });
       }
     } catch (_) {}
+  }
+  function emitPurposeHandlerError(purposeId, phase) {
+    document.dispatchEvent(new CustomEvent('aman:purpose-handler-error', {
+      detail: { purposeId: purposeId, phase: phase }
+    }));
+  }
+  function stopPurposeHandler(purposeId, entry) {
+    const cleanup = entry.cleanup;
+    entry.cleanup = null;
+    entry.enabled = false;
+    entry.context = null;
+    if (typeof cleanup !== 'function') return;
+    try { cleanup(); }
+    catch (_) { emitPurposeHandlerError(purposeId, 'stop'); }
+  }
+  function syncPurposeHandlers(detail) {
+    const context = {
+      propertyId: detail.propertyId,
+      policyVersion: detail.policyVersion,
+      channel: detail.channel
+    };
+    Array.from(PURPOSE_HANDLERS.entries()).forEach(function (pair) {
+      const purposeId = pair[0];
+      const entries = pair[1];
+      if (PURPOSE_HANDLERS.get(purposeId) !== entries) return;
+      const enabled = detail.purposes[purposeId] === true;
+      Array.from(entries).forEach(function (entry) {
+        if (!entries.has(entry)) return;
+        const sameContext = entry.context && entry.context.propertyId === context.propertyId &&
+          entry.context.policyVersion === context.policyVersion && entry.context.channel === context.channel;
+        if (entry.enabled === enabled && (!enabled || sameContext)) return;
+        if (!enabled) {
+          stopPurposeHandler(purposeId, entry);
+          return;
+        }
+        if (entry.enabled === true) stopPurposeHandler(purposeId, entry);
+        entry.enabled = true;
+        try {
+          const cleanup = entry.start(detail);
+          if (!entries.has(entry)) {
+            if (typeof cleanup === 'function') {
+              try { cleanup(); }
+              catch (_) { emitPurposeHandlerError(purposeId, 'stop'); }
+            }
+            return;
+          }
+          entry.cleanup = typeof cleanup === 'function' ? cleanup : null;
+          entry.context = context;
+        } catch (_) {
+          entry.enabled = null;
+          entry.context = null;
+          emitPurposeHandlerError(purposeId, 'start');
+        }
+      });
+    });
+  }
+  function registerPurposeHandler(purposeId, start) {
+    if (typeof purposeId !== 'string' || !/^[a-z][a-z0-9_-]{1,63}$/.test(purposeId) || typeof start !== 'function') {
+      throw new Error('Aman purpose handler requires a valid purpose ID and a start function.');
+    }
+    let entries = PURPOSE_HANDLERS.get(purposeId);
+    if (!entries) {
+      entries = new Set();
+      PURPOSE_HANDLERS.set(purposeId, entries);
+    }
+    const entry = { start: start, cleanup: null, enabled: null, context: null };
+    entries.add(entry);
+    if (currentConsentContext) syncPurposeHandlers(currentConsentContext);
+    return function unregisterPurposeHandler() {
+      if (!entries.has(entry)) return;
+      if (entry.enabled === true) stopPurposeHandler(purposeId, entry);
+      entries.delete(entry);
+      if (entries.size === 0) PURPOSE_HANDLERS.delete(purposeId);
+    };
   }
   function applyTags(cfg, choice) {
     document.querySelectorAll(MANAGED_TAG_SELECTOR).forEach(function (placeholder) {
@@ -826,7 +904,8 @@
   window.AmanCMP = Object.assign(window.AmanCMP || {}, {
     setConfig: function (value) { return write(STORAGE_CONFIG, value); },
     getConfig: config,
-    clearDemoData: clearDemoData
+    clearDemoData: clearDemoData,
+    registerPurposeHandler: registerPurposeHandler
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });

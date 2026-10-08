@@ -139,6 +139,26 @@ enum class AmanConsentAction(val wireValue: String) {
     CUSTOM("custom")
 }
 
+data class AmanPurposeHandlerContext(
+    val propertyId: String,
+    val policyVersion: String,
+    val channel: String
+)
+
+enum class AmanPurposeHandlerPhase { START, STOP }
+typealias AmanPurposeHandlerStart = (AmanPurposeHandlerContext) -> (() -> Unit)?
+typealias AmanPurposeHandlerErrorListener = (Throwable, AmanPurposeHandlerPhase) -> Unit
+
+private class AmanPurposeHandlerRegistration(
+    val purposeId: String,
+    val start: AmanPurposeHandlerStart,
+    val onError: AmanPurposeHandlerErrorListener?
+) {
+    var enabled: Boolean? = null
+    var cleanup: (() -> Unit)? = null
+    var context: AmanPurposeHandlerContext? = null
+}
+
 private fun JSONObject.toLocalizedText() = AmanLocalizedText(getString("fr"), getString("ar"))
 private fun JSONArray.strings(): List<String> = (0 until length()).map { getString(it) }
 
@@ -153,6 +173,7 @@ class AmanConsentManager(
     @Volatile private var activeConsentDialog: AlertDialog? = null
     private val listeners = CopyOnWriteArrayList<(AmanConsentDecision) -> Unit>()
     private val effectivePurposeListeners = CopyOnWriteArrayList<(Map<String, Boolean>) -> Unit>()
+    private val purposeHandlers = mutableMapOf<java.util.UUID, AmanPurposeHandlerRegistration>()
     var policy: AmanConsentPolicy = policy
         private set
     var decision: AmanConsentDecision? = null
@@ -182,7 +203,7 @@ class AmanConsentManager(
             decision = null
         } else restore()
         scheduleExpiryRefresh()
-        effectivePurposeListeners.forEach { it(effectivePurposeStates) }
+        notifyEffectivePurposeStatesChanged()
     }
 
     private fun dismissActiveConsentDialog() {
@@ -246,7 +267,7 @@ class AmanConsentManager(
         preferences.edit().putString(storageKey, encoded.toString()).apply()
         scheduleExpiryRefresh()
         listeners.forEach { it(updated) }
-        effectivePurposeListeners.forEach { it(effectivePurposeStates) }
+        notifyEffectivePurposeStatesChanged()
     }
 
     /** Reconciles expired local choices with host SDKs. This is a state update, not a new user decision. */
@@ -260,7 +281,7 @@ class AmanConsentManager(
         preferences.edit().remove(storageKey).apply()
         decision = null
         scheduleExpiryRefresh()
-        effectivePurposeListeners.forEach { it(effectivePurposeStates) }
+        notifyEffectivePurposeStatesChanged()
         return true
     }
 
@@ -274,7 +295,7 @@ class AmanConsentManager(
         preferences.edit().remove(storageKey).apply()
         decision = null
         scheduleExpiryRefresh()
-        effectivePurposeListeners.forEach { it(effectivePurposeStates) }
+        notifyEffectivePurposeStatesChanged()
     }
 
     fun addConsentChangedListener(listener: (AmanConsentDecision) -> Unit) { listeners.add(listener) }
@@ -285,6 +306,91 @@ class AmanConsentManager(
     }
     fun removeEffectivePurposeStatesChangedListener(listener: (Map<String, Boolean>) -> Unit) {
         effectivePurposeListeners.remove(listener)
+    }
+
+    /** Starts a host SDK while its purpose is effective and returns its registration ID. */
+    @Synchronized
+    fun registerPurposeHandler(
+        purposeId: String,
+        start: AmanPurposeHandlerStart,
+        onError: AmanPurposeHandlerErrorListener? = null
+    ): java.util.UUID {
+        require(Regex("^[a-z][a-z0-9_-]{1,63}$").matches(purposeId)) {
+            "Aman purpose handler requires a valid purpose ID."
+        }
+        val registrationId = java.util.UUID.randomUUID()
+        purposeHandlers[registrationId] = AmanPurposeHandlerRegistration(purposeId, start, onError)
+        reconcilePurposeHandlers()
+        return registrationId
+    }
+
+    @Synchronized
+    fun unregisterPurposeHandler(registrationId: java.util.UUID) {
+        val registration = purposeHandlers.remove(registrationId) ?: return
+        if (registration.enabled == true) stopPurposeHandler(registration)
+    }
+
+    private fun notifyEffectivePurposeStatesChanged() {
+        reconcilePurposeHandlers()
+        effectivePurposeListeners.forEach { it(effectivePurposeStates) }
+    }
+
+    private fun reconcilePurposeHandlers() {
+        val context = AmanPurposeHandlerContext(policy.propertyId, policy.policyVersion, "android")
+        purposeHandlers.toMap().forEach { (registrationId, registration) ->
+            if (purposeHandlers[registrationId] !== registration) return@forEach
+            val enabled = activePurposes.any { it.id == registration.purposeId } &&
+                isAllowed(registration.purposeId)
+            if (registration.enabled == enabled && (!enabled || registration.context == context)) return@forEach
+            if (!enabled) {
+                stopPurposeHandler(registration)
+                return@forEach
+            }
+            if (registration.enabled == true) stopPurposeHandler(registration)
+            registration.enabled = true
+            try {
+                val cleanup = registration.start(context)
+                if (purposeHandlers[registrationId] !== registration) {
+                    try {
+                        cleanup?.invoke()
+                    } catch (error: Throwable) {
+                        reportPurposeHandlerError(registration, error, AmanPurposeHandlerPhase.STOP)
+                    }
+                    return@forEach
+                }
+                registration.cleanup = cleanup
+                registration.context = context
+            } catch (error: Throwable) {
+                registration.enabled = null
+                registration.context = null
+                reportPurposeHandlerError(registration, error, AmanPurposeHandlerPhase.START)
+            }
+        }
+    }
+
+    private fun stopPurposeHandler(registration: AmanPurposeHandlerRegistration) {
+        val cleanup = registration.cleanup
+        registration.cleanup = null
+        registration.enabled = false
+        registration.context = null
+        if (cleanup == null) return
+        try {
+            cleanup()
+        } catch (error: Throwable) {
+            reportPurposeHandlerError(registration, error, AmanPurposeHandlerPhase.STOP)
+        }
+    }
+
+    private fun reportPurposeHandlerError(
+        registration: AmanPurposeHandlerRegistration,
+        error: Throwable,
+        phase: AmanPurposeHandlerPhase
+    ) {
+        try {
+            registration.onError?.invoke(error, phase)
+        } catch (_: Throwable) {
+            // Host error reporting must not interrupt consent state updates.
+        }
     }
 
     fun showConsentDialog(activity: Activity, language: String? = null) {

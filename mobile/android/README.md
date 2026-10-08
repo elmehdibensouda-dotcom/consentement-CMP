@@ -90,6 +90,27 @@ Translated notice content is read from `noticeTranslations.fr` and `noticeTransl
 
 `addEffectivePurposeStatesChangedListener` receives the effective state after a saved choice and after `updatePolicy`. If a newly fetched policy invalidates the saved choice, it sends the new policy defaults so the host can stop or start SDKs accordingly. This state callback is not a user decision and must not be uploaded as one. Apply `isAllowed(...)` once after manager creation because listener registration does not immediately invoke the listener.
 
+For a per-purpose lifecycle, `registerPurposeHandler` starts the host SDK when the purpose becomes active and invokes the returned cleanup when it becomes inactive. If the property or policy version changes while the purpose remains active, it cleans up the previous context and calls `start` again. Keep the registration ID and call `unregisterPurposeHandler` when the host no longer owns that integration. Use this mechanism or `addEffectivePurposeStatesChangedListener` for a given SDK, not both:
+
+```kotlin
+val analyticsHandlerId = manager.registerPurposeHandler(
+    purposeId = "analytics",
+    start = { _ ->
+        startAnalyticsIfNotStarted()
+        val cleanup: () -> Unit = { stopAnalyticsIfSupported() }
+        cleanup
+    },
+    onError = { _, phase ->
+        // Report only the technical failure phase, never purpose choices.
+    }
+)
+
+// When the host removes this integration:
+manager.unregisterPurposeHandler(analyticsHandlerId)
+```
+
+Callbacks run on the thread that registers or changes state; dispatch UI work to the main thread. If startup partially succeeds and then fails, the start callback must undo its partial effects before throwing. The host remains responsible for each vendor's stop API; a refusal cannot undo data already transmitted.
+
 The manager schedules an effective-state update when a saved choice expires while the process is active. Also refresh it when the app returns to the foreground so an expiry during suspension is applied before the host resumes optional SDKs:
 
 ```kotlin

@@ -33,7 +33,16 @@ Remplacer `cmp.example.ma`, `PROPERTY_ID` et les ressources d’exemple. L’URL
 
 Les scripts facultatifs doivent être configurés pour ne pas démarrer avant le choix applicable. Pour le chargement géré par ALAMANE, utiliser un élément `type="text/plain"`, `data-aman-src` et l’identifiant de finalité dans `data-aman-category`. Vérifier les déclencheurs de GTM séparément : un déclencheur `Page View` peut partir avant l’événement de consentement.
 
-Raccorder aussi chaque finalité à son mécanisme de démarrage et d’arrêt fournisseur. Le SDK peut charger une ressource gérée après autorisation, mais ne peut pas décharger une bibliothèque déjà exécutée ni annuler une donnée déjà transmise.
+Raccorder aussi chaque finalité à son mécanisme de démarrage et d’arrêt fournisseur. Pour une intégration JavaScript directe, `AmanCMP.registerPurposeHandler` reçoit l’état initial puis les changements applicables. La fonction `start` n’est appelée que lorsque la finalité est active ; elle peut renvoyer une fonction de nettoyage exécutée quand elle devient inactive, quand l’inscription est retirée ou quand le contexte de politique (propriété/version/canal) change alors que la finalité reste active :
+
+```js
+const unregisterAnalytics = window.AmanCMP.registerPurposeHandler('analytics', () => {
+  startAnalyticsIfNotStarted();
+  return () => stopAnalyticsIfSupported();
+});
+```
+
+Enregistrer ce raccordement depuis le code de l’application après le chargement de `aman-cmp.js`. Le démarrage et le nettoyage sont synchrones ; le nettoyage doit appeler le mécanisme d’arrêt prévu par le fournisseur. Si `start` échoue après une initialisation partielle, il doit annuler ses effets partiels avant de lever l’erreur. Pour GTM, utiliser ses déclencheurs et l’événement `aman:consent-update` avec une seule voie de raccordement par finalité afin d’éviter un double démarrage. Le SDK ne peut pas décharger une bibliothèque déjà exécutée, annuler une donnée déjà transmise, ni garantir que l’API d’arrêt d’un fournisseur efface ses données locales ; vérifier ce comportement pour chaque technologie. Une erreur du callback émet `aman:purpose-handler-error` avec la finalité et la phase (`start` ou `stop`), sans inclure de choix ni de données visiteur.
 
 ## 4. Langue, politique et réseau
 
