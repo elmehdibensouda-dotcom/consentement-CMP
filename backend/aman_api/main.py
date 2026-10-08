@@ -45,7 +45,10 @@ from .database import (
     prune_rate_limit_buckets,
     record_login_failure,
 )
-from .consent_metrics_repository import load_consent_metric_sources
+from .consent_metrics_repository import (
+    load_consent_metric_sources,
+    load_organization_consent_metric_sources,
+)
 from .consent_event_repository import (
     count_events_for_export,
     count_organization_events_for_export,
@@ -1700,6 +1703,76 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
         ],
         "firstRecordedAt": rows[-1]["recorded_at"] if rows else None,
         "lastRecordedAt": rows[0]["recorded_at"] if rows else None,
+    }
+
+
+@app.get("/v1/organizations/{org_id}/consent-metrics")
+def organization_consent_metrics(org_id: str, request: Request,
+                                 days: int = Query(default=30, ge=1, le=180)):
+    """Return cross-property aggregates while preserving each property's policy labels."""
+    context = current_session(request)
+    now = utc_now()
+    since = now - days * 86_400
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        properties, events, labels, active_counts = load_organization_consent_metric_sources(
+            conn, org_id, since, now
+        )
+
+    action_names = ("accept_all", "reject_all", "custom")
+    by_property: Dict[str, Dict[str, Any]] = {}
+    for prop in properties:
+        by_property[prop["id"]] = {
+            "propertyId": prop["id"],
+            "propertyName": prop["name"],
+            "channel": prop["channel"],
+            "decisionCount": 0,
+            "activeEventCount": active_counts.get(prop["id"], 0),
+            "activeEventLimit": CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT,
+            "actions": {name: 0 for name in action_names},
+            "purposes": {},
+            "firstRecordedAt": None,
+            "lastRecordedAt": None,
+        }
+    total_actions = {name: 0 for name in action_names}
+    for row in events:
+        item = by_property.get(row["property_id"])
+        if item is None:
+            continue
+        item["decisionCount"] += 1
+        item["actions"][row["action"]] = item["actions"].get(row["action"], 0) + 1
+        total_actions[row["action"]] = total_actions.get(row["action"], 0) + 1
+        item["lastRecordedAt"] = item["lastRecordedAt"] or row["recorded_at"]
+        item["firstRecordedAt"] = row["recorded_at"]
+        for purpose_id, allowed in json.loads(row["purposes"]).items():
+            key = (str(row["policy_version"]), purpose_id)
+            counts = item["purposes"].setdefault(key, {"allowed": 0, "declined": 0})
+            counts["allowed" if allowed else "declined"] += 1
+
+    output_properties = []
+    for item in by_property.values():
+        property_id = item["propertyId"]
+        property_labels = labels.get(property_id, {})
+        purposes = []
+        for (version, purpose_id), counts in sorted(item["purposes"].items()):
+            label = property_labels.get(version, {}).get(purpose_id, {})
+            purposes.append({
+                "policyVersion": version,
+                "purposeId": purpose_id,
+                "purposeLabelFr": label.get("fr"),
+                "purposeLabelAr": label.get("ar"),
+                **counts,
+            })
+        item["purposes"] = purposes
+        output_properties.append(item)
+    return {
+        "organizationId": org_id,
+        "periodDays": days,
+        "decisionCount": len(events),
+        "activeEventCount": sum(active_counts.values()),
+        "activeEventLimit": CONSENT_EVENT_ACTIVE_TOTAL_LIMIT,
+        "actions": total_actions,
+        "properties": output_properties,
     }
 
 
