@@ -61,6 +61,7 @@ from .scan_report_repository import (
     insert_scan_report,
     list_scan_reports as list_scan_report_rows,
 )
+from .published_policy_repository import get_published_policy as load_published_policy
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1542,11 +1543,7 @@ def export_audit(
 @app.get("/v1/public/properties/{property_id}/policy")
 def get_published_policy(property_id: str, request: Request, if_none_match: Optional[str] = Header(default=None)):
     with connection() as conn:
-        row = conn.execute(
-            "SELECT p.id,p.version,p.body,p.published_at FROM policies p "
-            "JOIN properties pr ON pr.id=p.property_id WHERE pr.id=? AND p.status='published'",
-            (property_id,),
-        ).fetchone()
+        row = load_published_policy(conn, property_id)
     if not row:
         raise HTTPException(status_code=404, detail="No published policy")
     etag = '"' + digest(row["body"])[:32] + '"'
