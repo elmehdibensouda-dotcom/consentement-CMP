@@ -94,12 +94,18 @@ from .auth_repository import (
     list_auth_user_organizations,
 )
 from .invitation_repository import (
+    add_invited_member,
+    create_invited_user,
     create_invitation,
+    get_invitation_for_acceptance,
+    get_invitation_preview,
     get_invitation_for_revocation,
+    get_invited_user_account,
     get_user_for_invitation,
     has_active_invitation,
     is_organization_member,
     list_organization_invitations,
+    mark_invitation_accepted,
     revoke_invitation as persist_invitation_revocation,
 )
 from .ownership_transfer_repository import (
@@ -804,12 +810,7 @@ def preview_invitation(body: InvitationPreviewBody, request: Request):
     enforce_invitation_rate_limit(request, "preview", INVITATION_PREVIEW_LIMIT)
     now = utc_now()
     with connection() as conn:
-        invite = conn.execute(
-            "SELECT i.email,i.role,i.expires_at,o.name AS organization_name "
-            "FROM invitations i JOIN organizations o ON o.id=i.org_id "
-            "WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.expires_at>?",
-            (digest(body.token), now),
-        ).fetchone()
+        invite = get_invitation_preview(conn, digest(body.token), now)
     if not invite:
         raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
     email_local, email_domain = invite["email"].rsplit("@", 1)
@@ -828,14 +829,10 @@ def accept_invitation(body: AcceptInviteBody, request: Request):
     now = utc_now()
     token_hash = digest(body.token)
     with transaction() as conn:
-        invite = conn.execute(
-            "SELECT id,org_id,email,role,expires_at,accepted_at FROM invitations WHERE token_hash=?", (token_hash,)
-        ).fetchone()
+        invite = get_invitation_for_acceptance(conn, token_hash)
         if not invite or invite["accepted_at"] or invite["expires_at"] <= now:
             raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
-        existing_user = conn.execute(
-            "SELECT id,password_hash,disabled FROM users WHERE email=?", (invite["email"],)
-        ).fetchone()
+        existing_user = get_invited_user_account(conn, invite["email"])
         if existing_user:
             if existing_user["disabled"]:
                 raise HTTPException(status_code=403, detail="This Aman account is disabled")
@@ -845,15 +842,12 @@ def accept_invitation(body: AcceptInviteBody, request: Request):
             account_created = False
         else:
             user_id = secrets.token_hex(16)
-            conn.execute("INSERT INTO users(id,email,password_hash,created_at) VALUES(?,?,?,?)",
-                         (user_id, invite["email"], hash_password(body.password), now))
+            create_invited_user(conn, user_id, invite["email"], hash_password(body.password), now)
             account_created = True
-        if conn.execute("SELECT 1 FROM memberships WHERE org_id=? AND user_id=?",
-                        (invite["org_id"], user_id)).fetchone():
+        if is_organization_member(conn, invite["org_id"], user_id):
             raise HTTPException(status_code=409, detail="This account is already a member of the organization")
-        conn.execute("INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)",
-                     (invite["org_id"], user_id, invite["role"], now))
-        conn.execute("UPDATE invitations SET accepted_at=? WHERE id=?", (now, invite["id"]))
+        add_invited_member(conn, invite["org_id"], user_id, invite["role"], now)
+        mark_invitation_accepted(conn, invite["id"], now)
         audit(conn, invite["org_id"], user_id, "member.joined", "user", user_id, {"role": invite["role"]})
     return {"ok": True, "accountCreated": account_created}
 
