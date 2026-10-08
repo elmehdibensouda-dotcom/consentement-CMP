@@ -300,9 +300,9 @@
       }
     }
     function defaultPurposeDrafts(){return[
-      {id:'essential',label:{fr:'Fonctionnement essentiel',ar:'الوظائف الأساسية'},description:{fr:'Fonctions nécessaires au service.',ar:'الوظائف الضرورية للخدمة.'},required:true,consentRequired:false,vendors:[]},
-      {id:'analytics',label:{fr:'Mesure d’audience',ar:'قياس الجمهور'},description:{fr:'Mesure de fréquentation configurée par le client.',ar:'قياس الزيارات وفق إعدادات العميل.'},required:false,consentRequired:true,vendors:[]},
-      {id:'marketing',label:{fr:'Publicité personnalisée',ar:'الإعلانات المخصصة'},description:{fr:'Technologies de personnalisation publicitaire.',ar:'تقنيات تخصيص الإعلانات.'},required:false,consentRequired:true,vendors:[]}
+      {id:'essential',label:{fr:'Fonctionnement essentiel',ar:'الوظائف الأساسية'},description:{fr:'Fonctions nécessaires au service.',ar:'الوظائف الضرورية للخدمة.'},required:true,consentRequired:false,initiallyEnabled:true,vendors:[]},
+      {id:'analytics',label:{fr:'Mesure d’audience',ar:'قياس الجمهور'},description:{fr:'Mesure de fréquentation configurée par le client.',ar:'قياس الزيارات وفق إعدادات العميل.'},required:false,consentRequired:true,initiallyEnabled:false,vendors:[]},
+      {id:'marketing',label:{fr:'Publicité personnalisée',ar:'الإعلانات المخصصة'},description:{fr:'Technologies de personnalisation publicitaire.',ar:'تقنيات تخصيص الإعلانات.'},required:false,consentRequired:true,initiallyEnabled:false,vendors:[]}
     ]}
     function readPurposeDrafts(){return Array.from($('purposeEditor').querySelectorAll('.purpose-editor-card')).map(card=>({
       id:card.querySelector('.purpose-id').value,
@@ -310,6 +310,7 @@
       description:{fr:card.querySelector('.purpose-description-fr').value,ar:card.querySelector('.purpose-description-ar').value},
       required:card.querySelector('.purpose-required').checked,
       consentRequired:card.querySelector('.purpose-consent-required').checked,
+      initiallyEnabled:card.querySelector('.purpose-initially-enabled').checked,
       vendors:lines(card.querySelector('.purpose-vendors').value)
     }))}
     function renderPurposeEditor(purposes=defaultPurposeDrafts()){
@@ -328,8 +329,10 @@
         card.append(grid);
         const flags=node('div',undefined,'purpose-flags');
         const requiredLabel=node('label');const requiredInput=node('input');requiredInput.type='checkbox';requiredInput.className='purpose-required';requiredInput.checked=purpose.required===true;requiredLabel.append(requiredInput,document.createTextNode(' Toujours actif (classé nécessaire par le client)'));
-        const consentLabel=node('label');const consentInput=node('input');consentInput.type='checkbox';consentInput.className='purpose-consent-required';consentInput.checked=purpose.required===true?false:purpose.consentRequired!==false;consentInput.disabled=requiredInput.checked;consentLabel.append(consentInput,document.createTextNode(' Arrêté jusqu’à un choix positif'));
-        requiredInput.addEventListener('change',()=>{consentInput.disabled=requiredInput.checked;if(requiredInput.checked)consentInput.checked=false});flags.append(requiredLabel,consentLabel);card.append(flags);target.append(card);
+        const consentLabel=node('label');const consentInput=node('input');consentInput.type='checkbox';consentInput.className='purpose-consent-required';consentInput.checked=purpose.required===true?false:purpose.consentRequired!==false;consentInput.disabled=requiredInput.checked;consentLabel.append(consentInput,document.createTextNode(' Un choix positif est requis avant activation'));
+        const initialLabel=node('label');const initialInput=node('input');initialInput.type='checkbox';initialInput.className='purpose-initially-enabled';initialInput.checked=purpose.required===true||purpose.initiallyEnabled===true;initialInput.disabled=requiredInput.checked||consentInput.checked;initialLabel.append(initialInput,document.createTextNode(' Activée avant le premier choix (réglage explicite à valider)'));
+        requiredInput.addEventListener('change',()=>{consentInput.disabled=requiredInput.checked;initialInput.disabled=requiredInput.checked||consentInput.checked;if(requiredInput.checked){consentInput.checked=false;initialInput.checked=true}else{initialInput.checked=false}});
+        consentInput.addEventListener('change',()=>{initialInput.disabled=requiredInput.checked||consentInput.checked;if(consentInput.checked)initialInput.checked=false});flags.append(requiredLabel,consentLabel,initialLabel);card.append(flags);target.append(card);
       });
     }
     function policyStatusLabel(status){return({draft:'Brouillon',published:'Publiée',retired:'Retirée'})[status]||status}
@@ -351,7 +354,7 @@
         (policy.purposes||[]).forEach(purpose=>{
           const item=node('div',undefined,'choice');
           item.append(node('b',`${purpose.label?.fr||purpose.id} · ${purpose.label?.ar||''}`));
-          item.append(node('small',`${purpose.id} · ${purpose.required?'Toujours actif selon la configuration':purpose.consentRequired?'Inactif jusqu’au choix':'Actif par défaut, révocable'} · ${(purpose.channels||[]).join(', ')}`));
+          item.append(node('small',`${purpose.id} · ${purpose.required?'Toujours actif selon la configuration':purpose.consentRequired?'Un choix positif est requis avant activation':`État initial : ${purpose.initiallyEnabled===true?'activé':'désactivé'}`} · ${(purpose.channels||[]).join(', ')}`));
           const vendors=purpose.vendors?.length?` | Fournisseurs indicatifs : ${purpose.vendors.join(', ')}`:'';
           item.append(node('small',`FR : ${purpose.description?.fr||''} | AR : ${purpose.description?.ar||''}${vendors}`));
           purposes.append(item);
@@ -439,7 +442,8 @@
         if(!label.fr||!label.ar||!description.fr||!description.ar)throw new Error(`Finalité ${index+1} : renseigne les libellés et descriptions français et arabes.`);
         const vendors=item.vendors.map(vendor=>vendor.trim()).filter(Boolean);
         if(vendors.some(vendor=>vendor.length>128))throw new Error(`Finalité ${index+1} : chaque fournisseur doit faire 128 caractères maximum.`);
-        return{id,label,description,required:item.required,consentRequired:item.required?false:item.consentRequired,channels:[property.channel],...(vendors.length?{vendors}:{})};
+        if(!item.required&&item.consentRequired&&item.initiallyEnabled)throw new Error(`Finalité ${index+1} : une finalité qui exige un choix positif ne peut pas démarrer activée.`);
+        return{id,label,description,required:item.required,consentRequired:item.required?false:item.consentRequired,initiallyEnabled:item.required||item.initiallyEnabled,channels:[property.channel],...(vendors.length?{vendors}:{})};
       });
     }
     function noticeFromForm(suffix){return{controllerName:$(`controller${suffix}`).value.trim(),contact:$(`contact${suffix}`).value.trim(),processingReference:$(`reference${suffix}`).value.trim(),dataCategories:lines($(`dataCategories${suffix}`).value),recipients:lines($(`recipients${suffix}`).value),transfers:lines($(`transfers${suffix}`).value)}}
@@ -474,13 +478,13 @@
           title:'تفضيلاتك',message:property.channel==='web'?'اختر فئات ملفات تعريف الارتباط التي ترغب في السماح بها.':'اختر الفئات التي تسمح بها.',
           accept:'قبول الكل',reject:'رفض الكل',customize:'تخصيص',save:'حفظ اختياراتي',back:'العودة إلى الملخص',details:'معلومات حول المعالجة',
           responsible:'المسؤول عن المعالجة',contact:'جهة الاتصال',reference:'مرجع CNDP',categories:'فئات البيانات',recipients:'الجهات المستفيدة',transfers:'التحويلات إلى الخارج',
-          required:'ضروري حسب إعدادات العميل',active:'نشط افتراضيًا وقابل للرفض',choice:'يتطلب اختيارًا إيجابيًا حسب إعدادات العميل',
+          required:'ضروري حسب إعدادات العميل',active:'الحالة الأولية محددة من طرف المسؤول',choice:'يتطلب اختيارًا إيجابيًا قبل التفعيل',
           simulation:'محاكاة فقط — لن يتم حفظ أي اختيار أو إرساله.'
         }:{
           title:'Vos préférences',message:property.channel==='web'?'Choisissez les catégories de cookies que vous souhaitez autoriser.':'Choisissez les catégories que vous autorisez.',
           accept:'Tout accepter',reject:'Tout refuser',customize:'Personnaliser',save:'Enregistrer mes choix',back:'Retour au résumé',details:'Informations sur le traitement',
           responsible:'Responsable de traitement',contact:'Contact',reference:'Référence CNDP',categories:'Catégories de données',recipients:'Destinataires',transfers:'Transferts à l’étranger',
-          required:'Nécessaire selon le réglage du client',active:'Actif par défaut et révocable',choice:'Inactif jusqu’au choix positif selon le réglage du client',
+          required:'Nécessaire selon le réglage du client',active:'État initial configuré par le responsable',choice:'Un choix positif est requis avant activation',
           simulation:'Simulation uniquement — le choix ne sera ni enregistré ni envoyé.'
         };
         stage.className=`preview-stage${device==='mobile'?' mobile':''}`;stage.lang=language;stage.dir=arabic?'rtl':'ltr';stage.replaceChildren();
@@ -490,9 +494,10 @@
         if(customizing){
           policy.purposes.filter(purpose=>purpose.channels.includes(property.channel)).forEach(purpose=>{
             const row=node('label',undefined,'preview-purpose');const text=node('span',purpose.label[language]);
-            const description=node('small',`${purpose.description[language]} · ${purpose.required?copy.required:purpose.consentRequired?copy.choice:copy.active}`);
-            const toggle=node('input');toggle.type='checkbox';toggle.checked=simulated?.[purpose.id]??(purpose.required||!purpose.consentRequired);toggle.disabled=purpose.required;
-            toggle.setAttribute('aria-label',purpose.label[language]);toggle.addEventListener('change',()=>{if(!simulated)simulated=Object.fromEntries(policy.purposes.map(item=>[item.id,item.required||!item.consentRequired]));simulated[purpose.id]=toggle.checked});
+            const initialState=purpose.initiallyEnabled?(arabic?'مفعّل':'activé'):(arabic?'معطّل':'désactivé');
+            const description=node('small',`${purpose.description[language]} · ${purpose.required?copy.required:purpose.consentRequired?copy.choice:`${copy.active} : ${initialState}`}`);
+            const toggle=node('input');toggle.type='checkbox';toggle.checked=simulated?.[purpose.id]??(purpose.required||purpose.initiallyEnabled===true);toggle.disabled=purpose.required;
+            toggle.setAttribute('aria-label',purpose.label[language]);toggle.addEventListener('change',()=>{if(!simulated)simulated=Object.fromEntries(policy.purposes.map(item=>[item.id,item.required||item.initiallyEnabled===true]));simulated[purpose.id]=toggle.checked});
             row.append(text,description,toggle);card.append(row);
           });
           const disclosure=node('details',undefined,'preview-notice');disclosure.append(node('summary',copy.details));
@@ -515,7 +520,7 @@
           actions.append(back,reject,save);
         }else{
           const reject=node('button',copy.reject,'btn');reject.type='button';reject.addEventListener('click',()=>simulate('reject_all'));
-          const customize=node('button',copy.customize,'btn');customize.type='button';customize.addEventListener('click',()=>{customizing=true;simulated=Object.fromEntries(policy.purposes.map(purpose=>[purpose.id,purpose.required||!purpose.consentRequired]));status.textContent='';render()});
+          const customize=node('button',copy.customize,'btn');customize.type='button';customize.addEventListener('click',()=>{customizing=true;simulated=Object.fromEntries(policy.purposes.map(purpose=>[purpose.id,purpose.required||purpose.initiallyEnabled===true]));status.textContent='';render()});
           const accept=node('button',copy.accept,'btn primary preview-accept');accept.type='button';accept.addEventListener('click',()=>simulate('accept_all'));
           actions.append(reject,customize,accept);
         }

@@ -1,7 +1,7 @@
 /*
  * Aman Consent — proof-of-concept browser SDK.
  * This is a local demo foundation, not a production CMP or legal compliance guarantee.
- * Cookie purposes and consentRequired values must be reviewed for each controller.
+ * Purpose classifications, consentRequired, and initiallyEnabled values must be reviewed for each controller.
  */
 (function (window, document) {
   'use strict';
@@ -21,9 +21,9 @@
     message: 'Choisissez les catégories de cookies que vous souhaitez autoriser.',
     color: '#176447',
     categories: [
-      { id: 'essential', label: 'Essentiels', description: 'Nécessaires au fonctionnement du site.', required: true, consentRequired: false },
-      { id: 'analytics', label: 'Mesure d’audience', description: 'Aide à comprendre la fréquentation du site.', required: false, consentRequired: true },
-      { id: 'marketing', label: 'Publicité personnalisée', description: 'Permet de mesurer ou personnaliser des campagnes.', required: false, consentRequired: true }
+      { id: 'essential', label: 'Essentiels', description: 'Nécessaires au fonctionnement du site.', required: true, consentRequired: false, initiallyEnabled: true },
+      { id: 'analytics', label: 'Mesure d’audience', description: 'Aide à comprendre la fréquentation du site.', required: false, consentRequired: true, initiallyEnabled: false },
+      { id: 'marketing', label: 'Publicité personnalisée', description: 'Permet de mesurer ou personnaliser des campagnes.', required: false, consentRequired: true, initiallyEnabled: false }
     ]
   };
   const LABELS = {
@@ -166,7 +166,7 @@
     const ids = new Set();
     const supportedChannels = ['web', 'ios', 'android'];
     policy.purposes.forEach(function (purpose) {
-      if (!hasOnlyKeys(purpose, ['id', 'label', 'description', 'required', 'consentRequired', 'channels', 'vendors']) ||
+      if (!hasOnlyKeys(purpose, ['id', 'label', 'description', 'required', 'consentRequired', 'initiallyEnabled', 'channels', 'vendors']) ||
           typeof purpose.id !== 'string' || !/^[a-z][a-z0-9_-]{1,63}$/.test(purpose.id) || ids.has(purpose.id) ||
           !hasOnlyKeys(purpose.label, ['fr', 'ar']) ||
           !validText(purpose.label.fr, 120) || !validText(purpose.label.ar, 120) ||
@@ -174,6 +174,9 @@
           !validText(purpose.description.fr, 600) || !validText(purpose.description.ar, 600) ||
           typeof purpose.required !== 'boolean' || typeof purpose.consentRequired !== 'boolean' ||
           (purpose.required && purpose.consentRequired) ||
+          (purpose.initiallyEnabled !== undefined && typeof purpose.initiallyEnabled !== 'boolean') ||
+          (purpose.consentRequired && purpose.initiallyEnabled === true && !purpose.required) ||
+          (purpose.required && purpose.initiallyEnabled === false) ||
           !Array.isArray(purpose.channels) || purpose.channels.length === 0 ||
           new Set(purpose.channels).size !== purpose.channels.length ||
           !purpose.channels.every(function (channel) { return supportedChannels.includes(channel); }) ||
@@ -283,7 +286,8 @@
         description: typeof purpose.description === 'string' ? purpose.description : (purpose.description[locale] || purpose.description.fr),
         vendors: Array.isArray(purpose.vendors) ? purpose.vendors : [],
         required: purpose.required === true,
-        consentRequired: purpose.consentRequired === true
+        consentRequired: purpose.consentRequired === true,
+        initiallyEnabled: purpose.initiallyEnabled === true
       };
     });
     return Object.assign({}, cfg, {
@@ -359,7 +363,7 @@
     if (choice && choice.purposes && Object.prototype.hasOwnProperty.call(choice.purposes, category.id)) {
       return choice.purposes[category.id] === true;
     }
-    return category.consentRequired === false;
+    return category.initiallyEnabled === true;
   }
   function emitConsentUpdate(cfg, choice) {
     const purposes = {};
@@ -495,7 +499,7 @@
     const normalized = {};
     cfg.categories.forEach(function (category) {
       normalized[category.id] = category.required ? true :
-        (Object.prototype.hasOwnProperty.call(purposes, category.id) ? purposes[category.id] === true : category.consentRequired === false);
+        (Object.prototype.hasOwnProperty.call(purposes, category.id) ? purposes[category.id] === true : category.initiallyEnabled === true);
     });
     const value = { version: cfg.version, savedAt: Date.now(), purposes: normalized };
     const storedDurably = write(choiceKey(cfg), value);
@@ -561,7 +565,7 @@
     const choices = Object.assign({}, choice ? choice.purposes : {});
     cfg.categories.forEach(function (category) {
       if (!Object.prototype.hasOwnProperty.call(choices, category.id)) {
-        choices[category.id] = category.required || category.consentRequired === false;
+        choices[category.id] = category.required || category.initiallyEnabled === true;
       }
       const row = make('label', 'aman-option');
       const copy = make('span', 'aman-option-copy');

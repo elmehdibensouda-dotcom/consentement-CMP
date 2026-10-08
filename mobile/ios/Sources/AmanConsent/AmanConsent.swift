@@ -30,16 +30,19 @@ public struct AmanPurpose: Codable, Equatable, Identifiable {
     public let description: AmanLocalizedText
     public let required: Bool
     public let consentRequired: Bool
+    public let initiallyEnabled: Bool?
     public let channels: [String]
     public let vendors: [String]?
 
     public init(id: String, label: AmanLocalizedText, description: AmanLocalizedText,
-                required: Bool, consentRequired: Bool, channels: [String], vendors: [String]? = nil) {
+                required: Bool, consentRequired: Bool, initiallyEnabled: Bool? = nil,
+                channels: [String], vendors: [String]? = nil) {
         self.id = id
         self.label = label
         self.description = description
         self.required = required
         self.consentRequired = consentRequired
+        self.initiallyEnabled = initiallyEnabled
         self.channels = channels
         self.vendors = vendors
     }
@@ -265,6 +268,8 @@ public final class AmanConsentAPIClient {
                       && !purpose.channels.isEmpty
                       && purpose.channels.allSatisfy({ ["web", "ios", "android"].contains($0) })
                       && !(purpose.required && purpose.consentRequired)
+                      && !(purpose.consentRequired && purpose.initiallyEnabled == true && !purpose.required)
+                      && !(purpose.required && purpose.initiallyEnabled == false)
               }) else { throw AmanConsentAPIError.invalidResponse }
         guard policy.purposes.contains(where: { $0.channels.contains(channel) }) else {
             throw AmanConsentAPIError.unsupportedChannel
@@ -351,9 +356,9 @@ public final class AmanConsentManager: ObservableObject {
         guard policyAvailable else { return false }
         guard let decision, decision.propertyId == policy.propertyId, decision.channel == "ios",
               decision.policyVersion == policy.policyVersion, decision.expiresAt > now() else {
-            return !purpose.consentRequired
+            return purpose.initiallyEnabled == true
         }
-        return decision.purposes[purposeId] ?? !purpose.consentRequired
+        return decision.purposes[purposeId] ?? (purpose.initiallyEnabled == true)
     }
 
     public func acceptAll() { saveChoices(Dictionary(uniqueKeysWithValues: activePurposes.map { ($0.id, true) }), action: .acceptAll) }
@@ -364,7 +369,7 @@ public final class AmanConsentManager: ObservableObject {
     public func saveChoices(_ requested: [String: Bool], action: AmanConsentAction = .custom) {
         guard policyAvailable else { return }
         let choices = Dictionary(uniqueKeysWithValues: activePurposes.map { purpose in
-            (purpose.id, purpose.required || (requested[purpose.id] ?? !purpose.consentRequired))
+            (purpose.id, purpose.required || (requested[purpose.id] ?? (purpose.initiallyEnabled == true)))
         })
         let optionalPurposes = activePurposes.filter { !$0.required }
         let recordedAction: AmanConsentAction

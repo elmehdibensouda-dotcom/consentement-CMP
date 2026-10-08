@@ -32,6 +32,7 @@ export type AmanPurpose = {
   description: LocalizedText;
   required: boolean;
   consentRequired: boolean;
+  initiallyEnabled?: boolean;
   channels: AmanChannel[];
   vendors?: string[];
 };
@@ -85,7 +86,8 @@ const strings = {
     transfers: 'Transferts à l’étranger',
     necessary: 'Nécessaire selon le réglage du client',
     choice: 'Inactif jusqu’au choix positif selon le réglage du client',
-    active: 'État initial défini par le responsable',
+    activeOn: 'Actif avant votre choix selon le réglage du responsable',
+    activeOff: 'Inactif avant votre choix selon le réglage du responsable',
     loading: 'Chargement des préférences…',
     retry: 'Réessayer',
     storageWarning: 'Votre choix est appliqué dans cette session, mais le stockage local est indisponible. Il pourra être redemandé après la fermeture de l’application.',
@@ -107,7 +109,8 @@ const strings = {
     transfers: 'التحويلات إلى الخارج',
     necessary: 'ضروري حسب إعدادات العميل',
     choice: 'يتطلب اختيارًا إيجابيًا حسب إعدادات العميل',
-    active: 'الحالة الأولية التي يحددها المسؤول',
+    activeOn: 'نشط قبل اختيارك وفق إعدادات المسؤول',
+    activeOff: 'غير نشط قبل اختيارك وفق إعدادات المسؤول',
     loading: 'جارٍ تحميل التفضيلات…',
     retry: 'إعادة المحاولة',
     storageWarning: 'تم تطبيق اختيارك خلال هذه الجلسة، لكن التخزين المحلي غير متاح. قد يُطلب منك الاختيار مجددًا بعد إغلاق التطبيق.',
@@ -175,7 +178,10 @@ function validatePolicy(value: unknown, propertyId: string, channel: AmanChannel
         !isText(entry.label.fr, 120) || !isText(entry.label.ar, 120) ||
         !isText(entry.description.fr, 600) || !isText(entry.description.ar, 600) ||
         typeof entry.required !== 'boolean' || typeof entry.consentRequired !== 'boolean' ||
-        (entry.required && entry.consentRequired) || !Array.isArray(entry.channels) ||
+        (entry.required && entry.consentRequired) ||
+        (entry.initiallyEnabled !== undefined && typeof entry.initiallyEnabled !== 'boolean') ||
+        (entry.consentRequired && entry.initiallyEnabled === true && !entry.required) ||
+        (entry.required && entry.initiallyEnabled === false) || !Array.isArray(entry.channels) ||
         entry.channels.length === 0 || entry.channels.length > 3 ||
         new Set(entry.channels).size !== entry.channels.length || !entry.channels.includes(channel) ||
         entry.channels.some((item) => !['web', 'ios', 'android'].includes(String(item))) ||
@@ -418,8 +424,8 @@ export class AmanConsentClient {
     if (!purpose) return false;
     if (purpose.required) return true;
     const decision = this.decisionValue;
-    if (!decision || decision.expiresAt <= Date.now()) return !purpose.consentRequired;
-    return decision.purposes[purposeId] ?? !purpose.consentRequired;
+    if (!decision || decision.expiresAt <= Date.now()) return purpose.initiallyEnabled === true;
+    return decision.purposes[purposeId] ?? purpose.initiallyEnabled === true;
   }
 
   effectivePurposeStates(): Record<string, boolean> {
@@ -454,7 +460,7 @@ export class AmanConsentClient {
     const policy = this.policyValue;
     if (!policy) throw new Error('Load the published Aman policy before saving a choice.');
     const purposes = Object.fromEntries(policy.purposes.filter((purpose) => purpose.channels.includes(this.channel)).map((purpose) => [
-      purpose.id, purpose.required || (typeof choices[purpose.id] === 'boolean' ? choices[purpose.id] : !purpose.consentRequired),
+      purpose.id, purpose.required || (typeof choices[purpose.id] === 'boolean' ? choices[purpose.id] : purpose.initiallyEnabled === true),
     ]));
     const optionalPurposes = policy.purposes.filter((purpose) =>
       purpose.channels.includes(this.channel) && !purpose.required);
@@ -614,7 +620,7 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
           <View style={styles.purposeCopy}>
             <Text style={[styles.label, rtl && styles.textRtl]}>{purpose.label[lang]}</Text>
             <Text style={[styles.description, rtl && styles.textRtl]}>{purpose.description[lang]}</Text>
-            <Text style={[styles.hint, rtl && styles.textRtl]}>{purpose.required ? t.necessary : purpose.consentRequired ? t.choice : t.active}</Text>
+            <Text style={[styles.hint, rtl && styles.textRtl]}>{purpose.required ? t.necessary : purpose.consentRequired ? t.choice : purpose.initiallyEnabled === true ? t.activeOn : t.activeOff}</Text>
           </View>
           <Pressable
             accessibilityRole="switch"

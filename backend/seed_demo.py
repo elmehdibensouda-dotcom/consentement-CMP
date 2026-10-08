@@ -43,6 +43,7 @@ def demo_policy(property_id: str) -> dict:
                 },
                 "required": True,
                 "consentRequired": False,
+                "initiallyEnabled": True,
                 "channels": ["web"],
             },
             {
@@ -54,6 +55,7 @@ def demo_policy(property_id: str) -> dict:
                 },
                 "required": False,
                 "consentRequired": True,
+                "initiallyEnabled": False,
                 "channels": ["web"],
             },
             {
@@ -65,6 +67,7 @@ def demo_policy(property_id: str) -> dict:
                 },
                 "required": False,
                 "consentRequired": True,
+                "initiallyEnabled": False,
                 "channels": ["web"],
             },
         ],

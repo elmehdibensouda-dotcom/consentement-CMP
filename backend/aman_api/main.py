@@ -551,6 +551,10 @@ def validate_policy(body: Dict[str, Any], property_id: str, channel: str) -> dic
     for purpose in body["purposes"]:
         if purpose["required"] and purpose["consentRequired"]:
             raise HTTPException(status_code=422, detail="Required purposes cannot require an optional consent choice")
+        if purpose.get("initiallyEnabled", False) and purpose["consentRequired"] and not purpose["required"]:
+            raise HTTPException(status_code=422, detail="A purpose requiring a positive choice cannot start enabled")
+        if purpose["required"] and purpose.get("initiallyEnabled", True) is False:
+            raise HTTPException(status_code=422, detail="Required purposes must start enabled")
     return body
 
 

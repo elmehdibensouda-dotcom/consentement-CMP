@@ -28,6 +28,7 @@ data class AmanPurpose(
     val required: Boolean,
     val consentRequired: Boolean,
     val channels: List<String>,
+    val initiallyEnabled: Boolean = false,
     val vendors: List<String> = emptyList()
 )
 
@@ -83,6 +84,9 @@ data class AmanConsentPolicy(
             val purposesJson = root.getJSONArray("purposes")
             val purposes = (0 until purposesJson.length()).map { index ->
                 val item = purposesJson.getJSONObject(index)
+                require(!item.has("initiallyEnabled") || item.opt("initiallyEnabled") is Boolean) {
+                    "Aman purpose initiallyEnabled must be a boolean"
+                }
                 val vendors = item.optJSONArray("vendors")?.strings().orEmpty()
                 AmanPurpose(
                     id = item.getString("id"),
@@ -90,6 +94,7 @@ data class AmanConsentPolicy(
                     description = item.getJSONObject("description").toLocalizedText(),
                     required = item.getBoolean("required"),
                     consentRequired = item.getBoolean("consentRequired"),
+                    initiallyEnabled = item.optBoolean("initiallyEnabled", item.getBoolean("required")),
                     channels = item.getJSONArray("channels").strings(),
                     vendors = vendors
                 )
@@ -193,9 +198,9 @@ class AmanConsentManager(
         val current = decision
         if (current == null || current.propertyId != policy.propertyId || current.channel != "android" ||
             current.policyVersion != policy.policyVersion || current.expiresAtMillis <= clockMillis()) {
-            return !purpose.consentRequired
+            return purpose.initiallyEnabled
         }
-        return current.purposes[purposeId] ?: !purpose.consentRequired
+        return current.purposes[purposeId] ?: purpose.initiallyEnabled
     }
 
     fun acceptAll() = saveChoices(activePurposes.associate { it.id to true }, AmanConsentAction.ACCEPT_ALL)
@@ -209,7 +214,7 @@ class AmanConsentManager(
         if (!policyAvailable) return
         val capturedAt = clockMillis()
         val normalized = activePurposes.associate { purpose ->
-            purpose.id to (purpose.required || (requested[purpose.id] ?: !purpose.consentRequired))
+            purpose.id to (purpose.required || (requested[purpose.id] ?: purpose.initiallyEnabled))
         }
         val optionalPurposes = activePurposes.filterNot { it.required }
         val recordedAction = when (action) {
@@ -334,7 +339,7 @@ class AmanConsentManager(
             val json = JSONObject(raw)
             val purposesJson = json.getJSONObject("purposes")
             val purposes = policy.purposes.associate { purpose ->
-                purpose.id to purposesJson.optBoolean(purpose.id, !purpose.consentRequired)
+                purpose.id to purposesJson.optBoolean(purpose.id, purpose.initiallyEnabled)
             }
             val stored = AmanConsentDecision(
                 propertyId = json.getString("propertyId"),
@@ -573,7 +578,9 @@ class AmanConsentAPIClient(
         require(policy.retentionDays in 1..3650 && policy.purposes.all { purpose ->
             purpose.id.matches(Regex("[a-z][a-z0-9_-]{1,63}")) && purpose.channels.isNotEmpty() &&
                 purpose.channels.all { it in setOf("web", "ios", "android") } &&
-                !(purpose.required && purpose.consentRequired)
+                !(purpose.required && purpose.consentRequired) &&
+                !(purpose.consentRequired && purpose.initiallyEnabled && !purpose.required) &&
+                !(purpose.required && !purpose.initiallyEnabled)
         }) { "Aman policy does not match the supported policy schema" }
         require(policy.purposes.any { channel in it.channels }) { "Aman policy has no purpose for $channel" }
     }
