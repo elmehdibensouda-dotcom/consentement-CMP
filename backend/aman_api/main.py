@@ -84,6 +84,15 @@ from .organization_repository import (
     remove_member as persist_member_removal,
     update_member_role as persist_member_role_update,
 )
+from .auth_repository import (
+    create_session as persist_session_creation,
+    delete_expired_sessions,
+    delete_session,
+    get_session_csrf_hash,
+    get_session_user,
+    get_user_credentials,
+    list_auth_user_organizations,
+)
 from .invitation_repository import (
     create_invitation,
     get_invitation_for_revocation,
@@ -483,7 +492,7 @@ def require_csrf(request: Request, context: SessionContext, x_aman_csrf: Optiona
     if not cookie_value or not x_aman_csrf or not hmac.compare_digest(cookie_value, x_aman_csrf):
         raise HTTPException(status_code=403, detail="CSRF validation failed")
     with connection() as conn:
-        row = conn.execute("SELECT csrf_hash FROM sessions WHERE token_hash=?", (context.session_hash,)).fetchone()
+        row = get_session_csrf_hash(conn, context.session_hash)
     if not row or not hmac.compare_digest(digest(cookie_value), row["csrf_hash"]):
         raise HTTPException(status_code=403, detail="CSRF validation failed")
 
@@ -494,12 +503,9 @@ def current_session(request: Request) -> SessionContext:
         raise HTTPException(status_code=401, detail="Authentication required")
     token_hash = digest(token)
     with connection() as conn:
-        row = conn.execute(
-            "SELECT s.user_id,s.expires_at,u.email,u.disabled FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?",
-            (token_hash,),
-        ).fetchone()
+        row = get_session_user(conn, token_hash)
         if not row or row["expires_at"] <= utc_now() or row["disabled"]:
-            conn.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
+            delete_session(conn, token_hash)
             raise HTTPException(status_code=401, detail="Session expired")
     return SessionContext(user_id=row["user_id"], email=row["email"], session_hash=token_hash)
 
@@ -682,7 +688,7 @@ def login(body: LoginBody, request: Request, response: Response):
     enforce_login_rate_limit(client_key)
     email = str(body.email).strip().lower()
     with connection() as conn:
-        user = conn.execute("SELECT id,password_hash,disabled FROM users WHERE email=?", (email,)).fetchone()
+        user = get_user_credentials(conn, email)
     password_hash = (
         user["password_hash"]
         if user and not user["disabled"]
@@ -705,10 +711,9 @@ def login(body: LoginBody, request: Request, response: Response):
     csrf_token = secrets.token_urlsafe(32)
     now = utc_now()
     with transaction() as conn:
-        conn.execute("DELETE FROM sessions WHERE expires_at<=?", (now,))
-        conn.execute(
-            "INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,created_at) VALUES(?,?,?,?,?)",
-            (digest(token), digest(csrf_token), user["id"], now + SESSION_TTL_SECONDS, now),
+        delete_expired_sessions(conn, now)
+        persist_session_creation(
+            conn, digest(token), digest(csrf_token), user["id"], now + SESSION_TTL_SECONDS, now,
         )
     response.set_cookie(SESSION_COOKIE, token, httponly=True, secure=COOKIE_SECURE,
                         samesite="strict", max_age=SESSION_TTL_SECONDS, path="/")
@@ -722,7 +727,7 @@ def logout(request: Request, response: Response, x_aman_csrf: Optional[str] = He
     context = current_session(request)
     require_csrf(request, context, x_aman_csrf)
     with transaction() as conn:
-        conn.execute("DELETE FROM sessions WHERE token_hash=?", (context.session_hash,))
+        delete_session(conn, context.session_hash)
     response.delete_cookie(SESSION_COOKIE, path="/", samesite="strict")
     response.delete_cookie(CSRF_COOKIE, path="/", samesite="strict")
     return {"ok": True}
@@ -733,13 +738,8 @@ def who_am_i(request: Request):
     context = current_session(request)
     csrf_token = request.cookies.get(CSRF_COOKIE)
     with connection() as conn:
-        session = conn.execute(
-            "SELECT csrf_hash FROM sessions WHERE token_hash=?", (context.session_hash,)
-        ).fetchone()
-        orgs = conn.execute(
-            "SELECT o.id,o.name,m.role FROM organizations o JOIN memberships m ON m.org_id=o.id "
-            "WHERE m.user_id=? ORDER BY o.name", (context.user_id,),
-        ).fetchall()
+        session = get_session_csrf_hash(conn, context.session_hash)
+        orgs = list_auth_user_organizations(conn, context.user_id)
     if not session or not csrf_token or not hmac.compare_digest(digest(csrf_token), session["csrf_hash"]):
         raise HTTPException(status_code=403, detail="CSRF token unavailable; sign in again")
     return {"userId": context.user_id, "email": context.email,
