@@ -181,6 +181,7 @@ Les brouillons d’approche et le tableau de suivi sont dans [SEQUENCE_PROSPECTI
 
 - Sous-segment premier : banque, assurance ou grand groupe ; taille et exigences de sécurité diffèrent sensiblement.
 - Hébergement au Maroc ou à l’étranger : aucune promesse avant avis CNDP sur les transferts et confirmation du fournisseur.
+- Distribution des SDK au pilote : préparer par défaut un bundle versionné pour le dépôt d’artefacts approuvé par le client ; confirmer avec sa sécurité les signatures, SBOM, attestations de provenance et durées de conservation. Les aperçus GitHub Actions actuels ne durent que 14 jours et le dépôt source reste privé.
 - Prix de la POC et du contrat annuel ; SLA, support et facturation.
 - Nom « ALAMANE » : revue d’antériorité encore à faire ; voir les vérifications préalables à la diffusion publique.
 - Niveau de prise en charge arabe et darija, après tests avec utilisateurs et traductions humaines.

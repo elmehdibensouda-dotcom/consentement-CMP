@@ -15,6 +15,10 @@ Les trois aperçus destinés à une évaluation sont disponibles dans le [lancem
 
 Les SDK mobiles sont des bases de pilote. Aucun n’a encore été intégré et validé dans une application cliente. La compilation ou l’emballage en CI ne constitue pas une validation sur les appareils et versions du client.
 
+### Distribution envisagée pour un pilote entreprise
+
+Hypothèse à confirmer avec l’acheteur : après revue et gel d’une version, remettre un bundle horodaté avec commit source, manifeste d’empreintes et inventaire de composants pour import dans le dépôt d’artefacts approuvé par le client. Ce dépôt GitHub est privé et les aperçus CI actuels expirent après 14 jours ; ils ne constituent pas une distribution client durable. Aucun accès client au dépôt ALAMANE, aucune release publique et aucune publication npm/Maven n’ont été mis en place. Les empreintes détectent une altération après création du bundle, mais ne remplacent ni une signature de release ni une attestation de provenance. Les exigences de signature, SBOM, approbation et conservation sont à convenir avec la sécurité du client avant transfert.
+
 ## Préparer la propriété dans la console
 
 1. Créer ou sélectionner l’organisation du pilote, puis une propriété avec le canal correspondant (`web`, `ios` ou `android`). Pour une application React Native multiplateforme, créer une propriété iOS et une propriété Android ; le SDK choisit l’identifiant et la politique du canal natif correspondant. L’étiquette d’environnement sert à la gouvernance ; elle ne sépare pas les données ni les déploiements.
