@@ -13,6 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  staging-container:
+    name: Staging container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Build staging API and console image
+        run: docker build --file Dockerfile --tag alamane-api:staging .
+
   backend-and-web:
     name: Backend and web SDK
     if: github.event_name != 'workflow_dispatch'
