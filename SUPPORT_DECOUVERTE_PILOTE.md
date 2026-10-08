@@ -56,10 +56,25 @@ Proposer, uniquement si le prospect confirme l’intérêt et après revue des �
 - **Données :** aucune donnée bancaire, identifiant de compte, donnée réelle de visiteur ou secret de production ; politiques et événements de démonstration fictifs ;
 - **Travail conjoint :** établir l’inventaire accepté, configurer les finalités, intégrer les scripts autorisés, puis vérifier les comportements accepter/refuser/modifier et les changements publiés ;
 - **Livrables à définir au contrat :** périmètre et responsabilités, compte rendu des écarts, résultats des vérifications convenues, effort d’intégration, exigences restant à satisfaire et recommandation de suite ;
-- **Réussite :** critères écrits à l’avance, par exemple le comportement observé pour chaque technologie du périmètre, le temps de revue par les équipes et la capacité à exporter l’historique administratif ;
+- **Réussite :** critères écrits et acceptés par les deux parties avant le démarrage. La grille ci-dessous est une base de discussion, pas une promesse de résultat ; les seuils et moyens de preuve doivent être fixés selon le périmètre et l’environnement effectivement autorisés ;
 - **Prix et achat :** prix fixe à chiffrer après qualification du périmètre, de l’hébergement, du support, des exigences de sécurité et des achats du client.
 
 Ne pas démarrer sur une application de production ou avec des données personnelles tant que l’architecture, les responsabilités, le traitement, l’hébergement, les formalités et le contrat n’ont pas reçu les validations nécessaires.
+
+### Grille de critères à convenir avant une POC
+
+| Domaine | Mesure ou démonstration proposée | Preuve à conserver | Validation attendue |
+| --- | --- | --- | --- |
+| Périmètre et accès | Domaine, pages, environnements, rôles et technologies explicitement autorisés | Fiche de périmètre approuvée par le sponsor et les responsables techniques | Aucun système ou domaine hors périmètre n’est raccordé |
+| Configuration et gouvernance | Création d’une politique, modification versionnée, approbation et publication par les personnes convenues | Révisions et entrées du journal d’administration exportées | Les étapes et responsabilités correspondent au processus validé par le client |
+| Comportement des technologies | Pour chaque technologie de l’échantillon, vérifier démarrage, maintien et retrait selon les règles approuvées par le client | Matrice technologie × finalité × état, avec résultats observés et écarts | Chaque cas convenu a un résultat constaté et accepté par le responsable technique ; les exceptions sont consignées |
+| Parcours visiteur | Afficher les parcours de choix et de modification dans les langues, navigateurs et tailles d’écran retenus | Fiche de vérification signée par les représentants désignés | Le client valide les textes et le comportement fonctionnel ; cette validation ne constitue pas un avis juridique |
+| Intégration et effort | Mesurer le temps passé par les équipes et recenser les dépendances, changements et incidents d’intégration | Journal d’effort et liste d’obstacles | Les deux parties s’accordent sur les tâches et coûts restant à prévoir |
+| Traçabilité technique | Montrer les versions publiées et l’historique administratif correspondant au scénario | Export de démonstration sur données fictives ou explicitement approuvées | Les informations nécessaires au processus interne du client sont présentes ; la trace ne prouve pas seule l’identité ou l’action du visiteur |
+| Sécurité et exploitation | Vérifier les prérequis convenus dans l’environnement isolé et consigner tout écart ; aucun contrôle non exécuté n’est réputé réussi | Compte rendu daté des contrôles réellement effectués | Aucune donnée réelle n’est utilisée et aucun écart bloquant ne reste sans décision écrite |
+| Décision de suite | Évaluer critères atteints, écarts, coûts, exigences fournisseurs et prochaines étapes | Décision conjointe de clôture ou plan de remédiation | Le sponsor confirme explicitement la suite, l’arrêt ou les conditions à remplir |
+
+Avant signature, remplacer les formulations générales par des valeurs observables : versions de navigateur/appareil, technologies exactes, nombre de scénarios, rôles nommés, durée, responsables, seuils, exclusions et personne habilitée à accepter les résultats. Tout critère dépendant d’un service hébergé ou d’une intégration mobile est suspendu tant que cet environnement n’existe pas et n’a pas été autorisé.
 
 ## État produit à exprimer sans ambiguïté
 
