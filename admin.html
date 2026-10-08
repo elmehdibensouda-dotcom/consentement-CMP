@@ -893,7 +893,7 @@ class ConsentActivity : Activity() {
         });
         const expiry=new Date(result.expiresAt*1000).toLocaleString();
         const emailLink=node('a','Préparer un e-mail','btn');emailLink.href=`mailto:${encodeURIComponent(inviteEmail)}?${new URLSearchParams({subject:`Invitation ALAMANE · ${state.org.name}`,body:`Bonjour,\n\nVous êtes invité(e) à rejoindre l’organisation « ${state.org.name} » avec le rôle « ${inviteRoleLabel} ».\n\nOuvrez ce lien pour examiner et accepter l’invitation :\n${invitationUrl.href}\n\nLe lien expire le ${expiry}.\n\nALAMANE`})}`;
-        $('inviteResult').append(node('div',`Transmets ce lien au destinataire par un canal approuvé. Il expire le ${expiry}.`,'success'),copyButton,emailLink,node('code',result.invitationToken,'inline-token'));
+        $('inviteResult').append(node('div',`Transmets ce lien au destinataire par un canal approuvé. Le jeton à usage unique est inclus dans le lien et expire le ${expiry}.`,'success'),copyButton,emailLink);
         $('memberEmail').value='';await loadMembers();await loadAudit();
       }catch(err){error('memberError',err.message)}
     });
