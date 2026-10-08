@@ -1,6 +1,6 @@
 # Image conteneur de préproduction ALAMANE
 
-Cette image fournit un runtime de préproduction pour l’API. Elle refuse SQLite, exige PostgreSQL et une clé HMAC explicite, fonctionne avec l’utilisateur système `aman` et n’accepte que `AMAN_ENVIRONMENT=staging`. Le mode `production` reste refusé par l’application. Cette image n’est ni un déploiement hébergé ni une release approuvée pour des données réelles.
+Cette image fournit un runtime de préproduction pour l’API et sert les fichiers statiques de la console sous `/console/`. Elle refuse SQLite, exige PostgreSQL et une clé HMAC explicite, fonctionne avec l’utilisateur système `aman` et n’accepte que `AMAN_ENVIRONMENT=staging`. Le mode `production` reste refusé par l’application. Cette image n’est ni un déploiement hébergé ni une release approuvée pour des données réelles.
 
 ## Construire l’image
 
@@ -10,7 +10,7 @@ Depuis la racine du dépôt :
 docker build -t alamane-api:staging .
 ```
 
-Ne pas transmettre de mot de passe ou d’URL de base dans un argument `--build-arg` : les secrets ne doivent pas être intégrés à l’image. L’image contient uniquement l’API, ses exigences Python et le schéma de politique ; la console Web est servie séparément.
+Ne pas transmettre de mot de passe ou d’URL de base dans un argument `--build-arg` : les secrets ne doivent pas être intégrés à l’image. L’image contient l’API, ses exigences Python, le schéma de politique et les fichiers statiques de la console. Après démarrage, la console est disponible sur `/console/` et l’API reste exposée sur les routes `/v1/` et `/health/ready`. En hébergement distant, la console utilise la même origine pour l’API ; place l’ensemble derrière un proxy TLS et configure une URL HTTPS côté intégration.
 
 ## Préparer une préproduction
 
@@ -44,7 +44,7 @@ Pour créer le premier administrateur, lancer une commande ponctuelle `create-ad
 
 - Aucun choix de fournisseur cloud, région, résidence, transfert ou modèle dédié/mutualisé.
 - Aucun certificat TLS, reverse proxy, pare-feu applicatif, chiffrement de stockage, sauvegarde, restauration, supervision, alerting, SLA ou réponse aux incidents.
-- Aucune console Web empaquetée, aucun SSO/MFA, aucune release SDK signée et aucune validation PostgreSQL en conditions réelles.
+- Aucun proxy TLS, SSO/MFA, release SDK signée ou validation PostgreSQL en conditions réelles. Le chemin `/console/` n’a pas encore été construit ou exercé dans un déploiement cible.
 - Aucun feu vert pour enlever le refus `AMAN_ENVIRONMENT=production` ou traiter des données client.
 
 Le contrôle `/health/ready` passe au vert seulement si PostgreSQL répond et que son schéma est à jour. Il ne prouve pas l’aptitude opérationnelle ou juridique du service. Revoir les rôles de base et appliquer le modèle de privilèges [`ops/postgres-runtime-privileges.sql`](../postgres-runtime-privileges.sql) avec le DBA avant toute préproduction.

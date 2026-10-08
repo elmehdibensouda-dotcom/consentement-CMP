@@ -27,6 +27,7 @@ from urllib.parse import urlsplit
 from fastapi import Body, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, constr
 
@@ -636,6 +637,13 @@ async def purge_expired_consent_events() -> None:
 
 
 app = FastAPI(title="Aman Consent API", version="0.1.0", lifespan=lifespan)
+STATIC_CONSOLE_DIR = ROOT / "console"
+if STATIC_CONSOLE_DIR.is_dir():
+    app.mount(
+        "/console",
+        StaticFiles(directory=STATIC_CONSOLE_DIR, html=True),
+        name="console",
+    )
 app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,

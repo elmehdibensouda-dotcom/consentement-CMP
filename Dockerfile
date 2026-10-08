@@ -16,6 +16,8 @@ RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt
 
 COPY --chown=aman:aman backend/ /app/backend/
 COPY --chown=aman:aman schemas/ /app/schemas/
+COPY --chown=aman:aman admin.html index.html aman-cmp.js aman-scanner.js demo-site.html scanner-tool.html /app/console/
+COPY --chown=aman:aman demo-tags/ /app/console/demo-tags/
 COPY --chown=aman:aman ops/container/entrypoint.sh /usr/local/bin/aman-entrypoint
 
 RUN chmod 0555 /usr/local/bin/aman-entrypoint
