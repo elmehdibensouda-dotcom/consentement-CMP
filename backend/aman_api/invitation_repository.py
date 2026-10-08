@@ -102,5 +102,28 @@ def get_invitation_for_revocation(conn: Connection, org_id: str, invitation_id: 
     ).fetchone()
 
 
+def get_invitation_for_resend(conn: Connection, org_id: str, invitation_id: str) -> Any:
+    return conn.execute(
+        "SELECT email,role,accepted_at,expires_at FROM invitations WHERE id=? AND org_id=?",
+        (invitation_id, org_id),
+    ).fetchone()
+
+
+def rotate_invitation_token(
+    conn: Connection,
+    org_id: str,
+    invitation_id: str,
+    token_hash: str,
+    invited_by: str,
+    expires_at: int,
+) -> bool:
+    cursor = conn.execute(
+        "UPDATE invitations SET token_hash=?,invited_by=?,expires_at=? "
+        "WHERE id=? AND org_id=? AND accepted_at IS NULL",
+        (token_hash, invited_by, expires_at, invitation_id, org_id),
+    )
+    return cursor.rowcount == 1
+
+
 def revoke_invitation(conn: Connection, org_id: str, invitation_id: str) -> None:
     conn.execute("DELETE FROM invitations WHERE id=? AND org_id=?", (invitation_id, org_id))

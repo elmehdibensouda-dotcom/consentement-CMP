@@ -129,6 +129,9 @@ class PostgreSQLConnection:
     def lock_property(self, property_id: str) -> None:
         self.execute("SELECT id FROM properties WHERE id=? FOR UPDATE", (property_id,))
 
+    def lock_invitation(self, invitation_id: str) -> None:
+        self.execute("SELECT id FROM invitations WHERE id=? FOR UPDATE", (invitation_id,))
+
     def lock_rate_limit_scope(self, scope: str) -> None:
         self.execute("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", ("aman-rate-limit:" + scope,))
 

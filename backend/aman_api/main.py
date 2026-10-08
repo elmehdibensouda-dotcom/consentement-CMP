@@ -113,6 +113,7 @@ from .invitation_repository import (
     get_invitation_for_acceptance,
     get_invitation_preview,
     get_invitation_for_revocation,
+    get_invitation_for_resend,
     get_invited_user_account,
     get_user_for_invitation,
     has_active_invitation,
@@ -120,6 +121,7 @@ from .invitation_repository import (
     list_organization_invitations,
     mark_invitation_accepted,
     revoke_invitation as persist_invitation_revocation,
+    rotate_invitation_token,
 )
 from .invitation_delivery import (
     InvitationEmailConfigurationError,
@@ -175,6 +177,8 @@ INVITATION_PREVIEW_LIMIT = 120
 INVITATION_ACCEPT_LIMIT = 20
 INVITATION_RATE_WINDOW_SECONDS = 60
 INVITATION_RATE_MAX_BUCKETS = 20000
+INVITATION_CREATE_LIMIT = 10
+INVITATION_RESEND_LIMIT = 5
 SCAN_REPORT_MAX_BYTES = 1_048_576
 API_REQUEST_MAX_BYTES = 1_048_576
 POLICY_MAX_BYTES = 524_288
@@ -390,12 +394,17 @@ def enforce_consent_event_rate_limit(
                             headers={"Retry-After": str(retry_after)})
 
 
-def enforce_invitation_rate_limit(request: Request, operation: str, limit: int) -> None:
-    """Atomically bound public invitation attempts per socket peer across replicas."""
+def enforce_invitation_rate_limit(
+    request: Request,
+    operation: str,
+    limit: int,
+    identity: Optional[str] = None,
+) -> None:
+    """Atomically bound invitation attempts by socket peer or HMAC-scoped actor."""
     now = utc_now()
     remote_ip = request.client.host if request.client else "unknown"
     scope = "invitation_" + operation
-    limits = ((scope, rate_limit_hash(scope, remote_ip), limit),)
+    limits = ((scope, rate_limit_hash(scope, identity or remote_ip), limit),)
     retry_after, capacity_limited = consume_rate_limits(
         DATABASE_PATH, LOGGER, limits, now, INVITATION_RATE_WINDOW_SECONDS, INVITATION_RATE_MAX_BUCKETS
     )
@@ -873,6 +882,9 @@ def accept_invitation(body: AcceptInviteBody, request: Request):
     token_hash = digest(body.token)
     with transaction() as conn:
         invite = get_invitation_for_acceptance(conn, token_hash)
+        if invite:
+            conn.lock_invitation(invite["id"])
+            invite = get_invitation_for_acceptance(conn, token_hash)
         if not invite or invite["accepted_at"] or invite["expires_at"] <= now:
             raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
         existing_user = get_invited_user_account(conn, invite["email"])
@@ -984,6 +996,9 @@ def invite_member(org_id: str, body: InviteBody, request: Request,
     with connection() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
+    enforce_invitation_rate_limit(
+        request, "admin_create", INVITATION_CREATE_LIMIT, f"{org_id}:{context.user_id}"
+    )
     try:
         email_config = load_invitation_email_config()
     except InvitationEmailConfigurationError as exc:
@@ -1034,6 +1049,68 @@ def invite_member(org_id: str, body: InviteBody, request: Request,
     return result
 
 
+@app.post("/v1/organizations/{org_id}/invitations/{invitation_id}/resend")
+def resend_invitation(org_id: str, invitation_id: str, request: Request,
+                      x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with connection() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+    enforce_invitation_rate_limit(
+        request, "admin_resend", INVITATION_RESEND_LIMIT, f"{org_id}:{context.user_id}"
+    )
+    try:
+        email_config = load_invitation_email_config()
+    except InvitationEmailConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="Invitation email delivery is misconfigured") from exc
+    token = secrets.token_urlsafe(40)
+    now = utc_now()
+    expires_at = now + INVITE_TTL_SECONDS
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        conn.lock_invitation(invitation_id)
+        invite = get_invitation_for_resend(conn, org_id, invitation_id)
+        if not invite:
+            raise HTTPException(status_code=404, detail="Invitation not found")
+        if invite["accepted_at"] is not None:
+            raise HTTPException(status_code=409, detail="Invitation has already been accepted")
+        existing_user = get_user_for_invitation(conn, invite["email"])
+        if existing_user and existing_user["disabled"]:
+            raise HTTPException(status_code=409, detail="This Aman account is disabled")
+        if existing_user and is_organization_member(conn, org_id, existing_user["id"]):
+            raise HTTPException(status_code=409, detail="This account is already a member of the organization")
+        org_row = conn.execute("SELECT name FROM organizations WHERE id=?", (org_id,)).fetchone()
+        if not org_row:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        org_name = org_row["name"]
+        if not rotate_invitation_token(conn, org_id, invitation_id, digest(token), context.user_id, expires_at):
+            raise HTTPException(status_code=409, detail="Invitation has already been accepted")
+        audit(conn, org_id, context.user_id, "member.invitation_resent", "invitation", invitation_id,
+              {"role": invite["role"], "deliveryMethod": "smtp" if email_config else "manual"})
+
+    delivery = "manual"
+    if email_config:
+        try:
+            send_invitation_email(email_config, invite["email"], org_name, invite["role"], token, expires_at)
+            delivery = "sent"
+        except Exception:
+            delivery = "failed"
+            LOGGER.warning("SMTP invitation resend failed for invitation_id=%s", invitation_id)
+        try:
+            with transaction() as conn:
+                audit(conn, org_id, context.user_id, "member.invitation_delivery_updated", "invitation",
+                      invitation_id, {"method": "smtp", "status": delivery, "resent": True})
+        except Exception:
+            LOGGER.exception("Could not record invitation resend status for invitation_id=%s", invitation_id)
+
+    result = {"invitationId": invitation_id, "expiresAt": expires_at, "delivery": delivery}
+    if delivery != "sent":
+        result["invitationToken"] = token
+    return result
+
+
 @app.get("/v1/organizations/{org_id}/invitations")
 def list_invitations(org_id: str, request: Request):
     context = current_session(request)
@@ -1057,6 +1134,7 @@ def revoke_invitation(org_id: str, invitation_id: str, request: Request,
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
+        conn.lock_invitation(invitation_id)
         invite = get_invitation_for_revocation(conn, org_id, invitation_id)
         if not invite:
             raise HTTPException(status_code=404, detail="Invitation not found")
