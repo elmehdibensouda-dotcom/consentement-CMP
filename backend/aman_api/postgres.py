@@ -126,6 +126,9 @@ class PostgreSQLConnection:
     def begin_write_transaction(self) -> None:
         self.execute("BEGIN")
 
+    def lock_organization(self, organization_id: str) -> None:
+        self.execute("SELECT id FROM organizations WHERE id=? FOR UPDATE", (organization_id,))
+
     def lock_property(self, property_id: str) -> None:
         self.execute("SELECT id FROM properties WHERE id=? FOR UPDATE", (property_id,))
 

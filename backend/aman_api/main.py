@@ -915,6 +915,10 @@ def accept_ownership_transfer(body: AcceptOwnershipTransferBody, request: Reques
     now = utc_now()
     with transaction() as conn:
         transfer = get_transfer_by_token_hash(conn, digest(body.token))
+        if not transfer:
+            raise HTTPException(status_code=400, detail="Ownership transfer is invalid or expired")
+        conn.lock_organization(transfer["org_id"])
+        transfer = get_transfer_by_token_hash(conn, digest(body.token))
         if not transfer or transfer["accepted_at"] is not None or transfer["revoked_at"] is not None \
                 or transfer["expires_at"] <= now:
             raise HTTPException(status_code=400, detail="Ownership transfer is invalid or expired")
@@ -1161,6 +1165,7 @@ def update_member_role(org_id: str, member_id: str, body: MemberRoleBody, reques
     context = current_session(request)
     require_csrf(request, context, x_aman_csrf)
     with transaction() as conn:
+        conn.lock_organization(org_id)
         actor_role = membership(conn, org_id, context.user_id)
         require_role(actor_role, {"owner", "admin"})
         target = get_member_role(conn, org_id, member_id)
@@ -1182,6 +1187,7 @@ def remove_member(org_id: str, member_id: str, request: Request,
     context = current_session(request)
     require_csrf(request, context, x_aman_csrf)
     with transaction() as conn:
+        conn.lock_organization(org_id)
         actor_role = membership(conn, org_id, context.user_id)
         require_role(actor_role, {"owner", "admin"})
         target = get_member_role(conn, org_id, member_id)
@@ -1203,6 +1209,7 @@ def create_ownership_transfer(org_id: str, body: OwnershipTransferBody, request:
     token = secrets.token_urlsafe(40)
     now = utc_now()
     with transaction() as conn:
+        conn.lock_organization(org_id)
         actor_role = membership(conn, org_id, context.user_id)
         require_role(actor_role, {"owner"})
         target = get_ownership_membership_role(conn, org_id, body.proposedOwnerId)
@@ -1238,6 +1245,7 @@ def revoke_pending_ownership_transfer(org_id: str, request: Request,
     require_csrf(request, context, x_aman_csrf)
     now = utc_now()
     with transaction() as conn:
+        conn.lock_organization(org_id)
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner"})
         rows = list_pending_transfers_for_revocation(conn, org_id, context.user_id, now)
