@@ -15,6 +15,7 @@ concurrency:
 jobs:
   staging-container:
     name: Staging container image
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -83,6 +84,7 @@ jobs:
 
   android-sdk:
     name: Android SDK and sample build
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -156,6 +158,7 @@ jobs:
 
   ios-sdk:
     name: iOS SDK compile
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     timeout-minutes: 30
     steps:
