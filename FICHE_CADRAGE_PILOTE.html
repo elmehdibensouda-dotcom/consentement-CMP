@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Fiche de cadrage pour discuter d’un pilote ALAMANE de gestion des préférences Web et mobiles au Maroc.">
+  <title>ALAMANE — Fiche de cadrage pilote</title>
+  <style>
+    :root{--ink:#172820;--muted:#5d6e65;--green:#155d43;--line:#dce5dc;--canvas:#f4f6f1;--paper:#fff;--soft:#edf4ed;--amber:#fff5dd;--amber-line:#e8cc81}
+    *{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:15px/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.sheet{width:min(900px,calc(100% - 32px));margin:32px auto;background:var(--paper);padding:48px 56px;box-shadow:0 12px 40px #19382b12;border:1px solid var(--line)}
+    .toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:25px}.toolbar button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 13px;font:inherit;font-size:13px;color:var(--ink);cursor:pointer}.brand{display:flex;align-items:center;gap:10px;color:var(--green);font-size:13px;font-weight:800;letter-spacing:.08em}.mark{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--green);color:#fff;font-size:17px;letter-spacing:0}.eyebrow{margin:25px 0 8px;color:var(--green);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}h1{font-size:clamp(32px,5vw,46px);line-height:1.1;letter-spacing:-.04em;margin:0 0 14px}.lead{max-width:710px;color:var(--muted);font-size:17px;margin:0 0 24px}.status{display:inline-block;border:1px solid var(--line);border-radius:100px;padding:5px 10px;background:var(--soft);color:var(--green);font-size:11px;font-weight:700}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:27px 0}.card{border:1px solid var(--line);border-radius:11px;padding:18px 19px;background:#fff;break-inside:avoid}.card h2{font-size:16px;line-height:1.3;margin:0 0 9px}.card p,.card li{font-size:13px;color:var(--muted)}.card p{margin:0}.card ul{margin:0;padding-inline-start:19px}.card li+li{margin-top:5px}.wide{grid-column:1/-1}.callout{margin:21px 0;padding:16px 18px;border:1px solid var(--amber-line);border-radius:10px;background:var(--amber);font-size:13px}.callout strong{display:block;margin-bottom:4px}.footer{padding-top:19px;border-top:1px solid var(--line);color:var(--muted);font-size:11px}.footer p{margin:5px 0}.footer a{color:var(--green)}html[dir="rtl"] body{text-align:right}html[dir="rtl"] h1{letter-spacing:0;line-height:1.35}html[dir="rtl"] .brand{letter-spacing:0}html[dir="rtl"] .eyebrow{letter-spacing:0}.ar-draft{display:block;margin-top:5px;font-size:11px;color:#7b6650}
+    @media(max-width:620px){.sheet{margin:12px auto;padding:25px 20px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.lead{font-size:15px}}
+    @media print{@page{size:A4;margin:14mm}body{background:#fff;font-size:12px}.sheet{width:auto;margin:0;padding:0;border:0;box-shadow:none}.toolbar{display:none}.card{padding:12px}.grid{gap:10px;margin:18px 0}.callout{margin:14px 0}a{color:inherit;text-decoration:none}}
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <div class="toolbar" aria-label="Actions du document">
+      <button id="languageToggle" type="button" aria-label="Afficher en arabe" aria-pressed="false">العربية</button>
+      <button type="button" onclick="window.print()" data-fr="Imprimer / enregistrer en PDF" data-ar="طباعة / حفظ بصيغة PDF">Imprimer / enregistrer en PDF</button>
+    </div>
+    <div class="brand"><span class="mark">A</span><span>ALAMANE · MAROC</span></div>
+    <p class="eyebrow" data-fr="Document de discussion · non contractuel" data-ar="وثيقة للنقاش · غير تعاقدية">Document de discussion · non contractuel</p>
+    <h1 data-fr="Cadrer un pilote de gestion du consentement" data-ar="تحديد نطاق تجربة أولية لإدارة الموافقة">Cadrer un pilote de gestion du consentement</h1>
+    <p class="lead" data-fr="Une première discussion entre équipes digitales, juridiques, sécurité et achats pour vérifier si le besoin, le périmètre et les conditions d’un pilote sont réunis." data-ar="نقاش أولي بين فرق الرقمنة والشؤون القانونية والأمن والمشتريات للتحقق من الحاجة والنطاق وشروط التجربة الأولية.">Une première discussion entre équipes digitales, juridiques, sécurité et achats pour vérifier si le besoin, le périmètre et les conditions d’un pilote sont réunis.</p>
+    <span class="status" data-fr="Prototype local en préparation commerciale" data-ar="نموذج أولي محلي قيد الإعداد التجاري">Prototype local en préparation commerciale</span>
+
+    <section class="grid" aria-label="Résumé du pilote">
+      <article class="card">
+        <h2 data-fr="Objectif de l’échange" data-ar="هدف النقاش">Objectif de l’échange</h2>
+        <p data-fr="Comprendre comment l’organisation inventorie ses technologies, approuve les finalités et changements, applique les choix sur le Web et le mobile, et traite les exigences d’achat et de sécurité." data-ar="فهم كيفية حصر المؤسسة للتقنيات واعتماد الأغراض والتغييرات وتطبيق الاختيارات على الويب والهاتف، ومعالجة متطلبات الشراء والأمن.">Comprendre comment l’organisation inventorie ses technologies, approuve les finalités et changements, applique les choix sur le Web et le mobile, et traite les exigences d’achat et de sécurité.</p>
+      </article>
+      <article class="card">
+        <h2 data-fr="Participants à réunir" data-ar="الفرق المشاركة">Participants à réunir</h2>
+        <ul><li data-fr="Sponsor digital, produit ou canaux" data-ar="مسؤول الرقمنة أو المنتج أو القنوات">Sponsor digital, produit ou canaux</li><li data-fr="DPO / juridique et sécurité / architecture" data-ar="مسؤول حماية البيانات / الشؤون القانونية والأمن / الهندسة المعمارية">DPO / juridique et sécurité / architecture</li><li data-fr="Équipes Web et mobile, achats fournisseurs" data-ar="فرق الويب والهاتف ومشتريات الموردين">Équipes Web et mobile, achats fournisseurs</li></ul>
+      </article>
+      <article class="card">
+        <h2 data-fr="Déroulé proposé · 30 minutes" data-ar="جدول مقترح · 30 دقيقة">Déroulé proposé · 30 minutes</h2>
+        <ul><li data-fr="Pratiques et irritants actuels" data-ar="الممارسات الحالية والصعوبات">Pratiques et irritants actuels</li><li data-fr="Exigences d’intégration, sécurité, hébergement et achat" data-ar="متطلبات التكامل والأمن والاستضافة والشراء">Exigences d’intégration, sécurité, hébergement et achat</li><li data-fr="Démonstration locale sur données fictives, si utile" data-ar="عرض محلي ببيانات افتراضية عند الحاجة">Démonstration locale sur données fictives, si utile</li><li data-fr="Prochaine étape et responsables à confirmer" data-ar="تحديد الخطوة التالية والمسؤولين">Prochaine étape et responsables à confirmer</li></ul>
+      </article>
+      <article class="card">
+        <h2 data-fr="Périmètre pilote à discuter" data-ar="نطاق التجربة المقترح للنقاش">Périmètre pilote à discuter</h2>
+        <ul><li data-fr="Hypothèse indicative : 6 à 10 semaines, à chiffrer et convenir après qualification" data-ar="افتراض أولي: من 6 إلى 10 أسابيع، ويُحدد السعر والمدة بعد التأهيل">Hypothèse indicative : 6 à 10 semaines, à chiffrer et convenir après qualification</li><li data-fr="Un domaine Web public non authentifié, isolé et autorisé" data-ar="نطاق ويب عام واحد غير مصادق عليه، ومعزول ومصرح به">Un domaine Web public non authentifié, isolé et autorisé</li><li data-fr="Technologies et scénarios définis par les deux parties" data-ar="تقنيات وسيناريوهات يحددها الطرفان">Technologies et scénarios définis par les deux parties</li></ul>
+      </article>
+      <article class="card wide">
+        <h2 data-fr="Critères de décision à définir avant tout démarrage" data-ar="معايير القرار التي ينبغي تحديدها قبل البدء">Critères de décision à définir avant tout démarrage</h2>
+        <ul><li data-fr="Vérifier les parcours accepter, refuser et modifier sur les technologies convenues." data-ar="التحقق من مسارات القبول والرفض والتعديل للتقنيات المتفق عليها.">Vérifier les parcours accepter, refuser et modifier sur les technologies convenues.</li><li data-fr="Évaluer les rôles, la révision des politiques, leur publication et la trace administrative dans le scénario retenu." data-ar="تقييم الأدوار ومراجعة السياسات ونشرها وسجل الإدارة ضمن السيناريو المحدد.">Évaluer les rôles, la révision des politiques, leur publication et la trace administrative dans le scénario retenu.</li><li data-fr="Mesurer l’effort d’intégration, les dépendances et les écarts de sécurité ou d’exploitation." data-ar="قياس جهد التكامل والتبعيات وفجوات الأمن أو التشغيل.">Mesurer l’effort d’intégration, les dépendances et les écarts de sécurité ou d’exploitation.</li><li data-fr="Convenir des preuves, des seuils, des responsables et d’une décision de suite ou d’arrêt." data-ar="الاتفاق على الأدلة والحدود والمسؤولين وقرار المتابعة أو التوقف.">Convenir des preuves, des seuils, des responsables et d’une décision de suite ou d’arrêt.</li></ul>
+      </article>
+      <article class="card">
+        <h2 data-fr="Pré requis de cadrage" data-ar="متطلبات تحديد النطاق">Pré requis de cadrage</h2>
+        <ul><li data-fr="Accord écrit sur le domaine, les pages, les technologies et les rôles autorisés." data-ar="اتفاق مكتوب بشأن النطاق والصفحات والتقنيات والأدوار المصرح بها.">Accord écrit sur le domaine, les pages, les technologies et les rôles autorisés.</li><li data-fr="Revue juridique, sécurité, hébergement, données, responsabilités et achats par les équipes concernées." data-ar="مراجعة الشؤون القانونية والأمن والاستضافة والبيانات والمسؤوليات والمشتريات من الفرق المعنية.">Revue juridique, sécurité, hébergement, données, responsabilités et achats par les équipes concernées.</li></ul>
+      </article>
+      <article class="card">
+        <h2 data-fr="Livrable de clôture à convenir" data-ar="مخرجات الإغلاق المتفق عليها">Livrable de clôture à convenir</h2>
+        <p data-fr="Un compte rendu des scénarios observés, écarts, efforts et exigences restantes, accompagné d’une recommandation de poursuivre, corriger ou arrêter. Les livrables et responsabilités devront être convenus avant la POC." data-ar="تقرير بالسيناريوهات التي تمت ملاحظتها والفجوات والجهود والمتطلبات المتبقية، مع توصية بالمتابعة أو التصحيح أو الإيقاف. ويجب الاتفاق على المخرجات والمسؤوليات قبل إثبات المفهوم.">Un compte rendu des scénarios observés, écarts, efforts et exigences restantes, accompagné d’une recommandation de poursuivre, corriger ou arrêter. Les livrables et responsabilités devront être convenus avant la POC.</p>
+      </article>
+    </section>
+
+    <aside class="callout"><strong data-fr="Limites à garder visibles" data-ar="حدود يجب توضيحها">Limites à garder visibles</strong><span data-fr="Le démonstrateur actuel fonctionne en local. Il ne doit recevoir aucune donnée bancaire, donnée réelle de visiteur ou secret de production. Aucun service hébergé de production ni release mobile signée n’est proposé aujourd’hui. ALAMANE ne garantit pas la conformité et ne remplace ni le responsable de traitement ni ses conseils." data-ar="العرض التوضيحي الحالي يعمل محلياً. لا ينبغي إدخال بيانات مصرفية أو بيانات حقيقية للزوار أو أسرار الإنتاج فيه. لا تتوفر حالياً خدمة إنتاج مستضافة أو إصدارات هاتف موقعة. لا تضمن ALAMANE الامتثال ولا تحل محل المسؤول عن المعالجة أو مستشاريه.">Le démonstrateur actuel fonctionne en local. Il ne doit recevoir aucune donnée bancaire, donnée réelle de visiteur ou secret de production. Aucun service hébergé de production ni release mobile signée n’est proposé aujourd’hui. ALAMANE ne garantit pas la conformité et ne remplace ni le responsable de traitement ni ses conseils.</span><span class="ar-draft" data-fr="La version arabe est une traduction de travail à faire relire par un arabophone avant diffusion externe." data-ar="النسخة العربية ترجمة أولية ينبغي مراجعتها من متحدث بالعربية قبل التوزيع الخارجي.">La version arabe est une traduction de travail à faire relire par un arabophone avant diffusion externe.</span></aside>
+
+    <footer class="footer"><p data-fr="Document de discussion, sans engagement commercial ni garantie de résultat. Le prix, la durée, les critères, les preuves et les responsabilités d’une POC sont à convenir par écrit après qualification." data-ar="وثيقة للنقاش دون التزام تجاري أو ضمان للنتائج. يجب الاتفاق كتابياً على السعر والمدة والمعايير والأدلة والمسؤوليات بعد التأهيل.">Document de discussion, sans engagement commercial ni garantie de résultat. Le prix, la durée, les critères, les preuves et les responsabilités d’une POC sont à convenir par écrit après qualification.</p></footer>
+  </main>
+  <script>
+    const toggle = document.getElementById('languageToggle');
+    toggle.addEventListener('click', () => {
+      const arabic = document.documentElement.lang !== 'ar';
+      document.documentElement.lang = arabic ? 'ar' : 'fr';
+      document.documentElement.dir = arabic ? 'rtl' : 'ltr';
+      document.title = arabic ? 'ALAMANE — تحديد نطاق تجربة أولية' : 'ALAMANE — Fiche de cadrage pilote';
+      document.querySelectorAll('[data-fr][data-ar]').forEach((element) => {
+        element.textContent = arabic ? element.dataset.ar : element.dataset.fr;
+      });
+      toggle.textContent = arabic ? 'Français' : 'العربية';
+      toggle.setAttribute('aria-label', arabic ? 'Afficher en français' : 'Afficher en arabe');
+      toggle.setAttribute('aria-pressed', String(arabic));
+    });
+  </script>
+</body>
+</html>

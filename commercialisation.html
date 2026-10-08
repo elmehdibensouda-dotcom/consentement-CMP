@@ -13,8 +13,6 @@
   <style>
     html[dir="rtl"] .hero h1,html[dir="rtl"] .section h2,html[dir="rtl"] .cta h2{letter-spacing:0;line-height:1.35}
     html[dir="rtl"] .bank h3{letter-spacing:0;line-height:1.35}
-    .cta .btn:disabled{cursor:not-allowed;opacity:.85;text-align:center;white-space:normal}
-    .cta .btn:disabled:hover{transform:none;box-shadow:none}
   </style>
 </head>
 <body>
@@ -50,7 +48,7 @@
 
     <section class="section wrap" id="approche"><div class="boundary"><div><span class="eyebrow">Une promesse mesurée</span><h2>La technologie outille vos décisions. Elle ne les remplace pas.</h2></div><div class="boundary-list"><div class="boundary-item"><span class="check">✓</span><div><b>Vous gardez la maîtrise des finalités et des fournisseurs.</b><p>Les équipes du client configurent et valident les règles et les notices applicables à chaque traitement.</p></div></div><div class="boundary-item"><span class="check">✓</span><div><b>Le produit est adapté au contexte marocain.</b><p>Les politiques prennent en charge des libellés français et arabes. La qualification juridique et les formalités restent à valider par le responsable de traitement et ses conseils.</p></div></div><div class="boundary-item"><span class="check">✓</span><div><b>La préparation sécurité fait partie du cadrage.</b><p>Le démonstrateur actuel est local et n’est pas prêt pour les données ou les sites de production d’une banque. Hébergement, sécurité, exploitation et contrats doivent être définis avant un pilote réel.</p></div></div></div></div></section>
 
-    <section class="wrap" id="contact"><div class="cta"><div><h2>Parlons de vos exigences avant de parler de déploiement.</h2><p>Un premier échange pour cadrer le périmètre, les intégrations et les conditions d’un pilote.</p></div><button class="btn" type="button" disabled>Adresse de contact à confirmer avant diffusion</button></div></section>
+    <section class="wrap" id="contact"><div class="cta"><div><h2>Consultez la fiche de cadrage du pilote.</h2><p>Elle résume le périmètre de discussion, les équipes à réunir et les limites actuelles du prototype.</p></div><a class="btn" href="FICHE_CADRAGE_PILOTE.html"><span data-fr="Consulter la fiche de cadrage" data-ar="عرض ورقة تحديد النطاق">Consulter la fiche de cadrage</span></a></div></section>
   </main>
   <footer class="wrap footer"><div class="footer-top"><a class="brand" href="#accueil"><span class="mark">A</span> ALAMANE</a><span data-fr="Gestion du consentement numérique · Maroc" data-ar="إدارة الموافقة الرقمية · المغرب">Gestion du consentement numérique · Maroc</span></div><small data-fr="ALAMANE est un prototype de plateforme en préparation commerciale. Il ne garantit pas la conformité et ne constitue pas un avis juridique. Le démonstrateur utilise un stockage local et ne doit pas recevoir de données réelles de visiteurs. Les SDK mobiles sont des bases source à évaluer et intégrer par le client ; ils ne sont pas distribués comme releases signées et leur état courant doit être revalidé en CI. Toute expérimentation client dépend d’un cadrage juridique, sécurité, hébergement et achats validé par les parties." data-ar="منصة ALAMANE نموذج أولي قيد الإعداد التجاري. لا تضمن الامتثال ولا تشكل استشارة قانونية. يستخدم العرض التوضيحي تخزيناً محلياً ولا ينبغي إدخال بيانات حقيقية للزوار فيه. حزم SDK للهواتف مصادر أولية على العميل تقييمها ودمجها؛ وهي غير موزعة كإصدارات رسمية موقعة، ويجب إعادة التحقق من حالتها الحالية في CI. ويخضع أي اختبار مع عميل لتحديد متفق عليه من الأطراف للجوانب القانونية والأمنية والاستضافة والمشتريات.">ALAMANE est un prototype de plateforme en préparation commerciale. Il ne garantit pas la conformité et ne constitue pas un avis juridique. Le démonstrateur utilise un stockage local et ne doit pas recevoir de données réelles de visiteurs. Les SDK mobiles sont des bases source à évaluer et intégrer par le client ; ils ne sont pas distribués comme releases signées et leur état courant doit être revalidé en CI. Toute expérimentation client dépend d’un cadrage juridique, sécurité, hébergement et achats validé par les parties.</small></footer>
   <script>
@@ -77,9 +75,9 @@
         '.boundary-item:nth-child(2) p': 'Les politiques prennent en charge des libellés français et arabes. La qualification juridique et les formalités restent à valider par le responsable de traitement et ses conseils.',
         '.boundary-item:nth-child(3) b': 'La préparation sécurité fait partie du cadrage.',
         '.boundary-item:nth-child(3) p': 'Le démonstrateur actuel est local et n’est pas prêt pour les données ou les sites de production d’une banque. Hébergement, sécurité, exploitation et contrats doivent être définis avant un pilote réel.',
-        '#contact .cta h2': 'Parlons de vos exigences avant de parler de déploiement.',
-        '#contact .cta p': 'Un premier échange pour cadrer le périmètre, les intégrations et les conditions d’un pilote.',
-        '#contact .cta .btn': 'Adresse de contact à confirmer avant diffusion',
+        '#contact .cta h2': 'Consultez la fiche de cadrage du pilote.',
+        '#contact .cta p': 'Elle résume le périmètre de discussion, les équipes à réunir et les limites actuelles du prototype.',
+        '#contact .cta .btn': 'Consulter la fiche de cadrage',
         '.footer-top > span': 'Gestion du consentement numérique · Maroc',
         '.footer small': 'ALAMANE est un prototype de plateforme en préparation commerciale. Il ne garantit pas la conformité et ne constitue pas un avis juridique. Le démonstrateur utilise un stockage local et ne doit pas recevoir de données réelles de visiteurs. Les SDK mobiles sont des bases source à évaluer et intégrer par le client ; ils ne sont pas distribués comme releases signées et leur état courant doit être revalidé en CI. Toute expérimentation client dépend d’un cadrage juridique, sécurité, hébergement et achats validé par les parties.'
       },
@@ -104,9 +102,9 @@
         '.boundary-item:nth-child(2) p': 'تدعم السياسات النصوص بالفرنسية والعربية. ويظل التكييف القانوني والإجراءات بحاجة إلى تحقق من المسؤول عن المعالجة ومستشاريه.',
         '.boundary-item:nth-child(3) b': 'الاستعداد الأمني جزء من تحديد النطاق.',
         '.boundary-item:nth-child(3) p': 'العرض الحالي محلي وغير جاهز لبيانات بنك أو مواقعه الإنتاجية. يجب تحديد الاستضافة والأمن والتشغيل والعقود قبل تجربة فعلية.',
-        '#contact .cta h2': 'لنتحدث عن متطلباتكم قبل مناقشة النشر.',
-        '#contact .cta p': 'تواصل أولي لتحديد النطاق والتكاملات وشروط التجربة.',
-        '#contact .cta .btn': 'يجب تأكيد عنوان التواصل قبل النشر',
+        '#contact .cta h2': 'اطّلعوا على ورقة تحديد نطاق التجربة الأولية.',
+        '#contact .cta p': 'تلخص الورقة نطاق النقاش والفرق الواجب إشراكها والحدود الحالية للنموذج الأولي.',
+        '#contact .cta .btn': 'عرض ورقة تحديد النطاق',
         '.footer-top > span': 'إدارة الموافقة الرقمية · المغرب',
         '.footer small': 'منصة ALAMANE نموذج أولي قيد الإعداد التجاري. لا تضمن الامتثال ولا تشكل استشارة قانونية. يستخدم العرض التوضيحي تخزيناً محلياً ولا ينبغي إدخال بيانات حقيقية للزوار فيه. حزم SDK للهواتف مصادر أولية على العميل تقييمها ودمجها؛ وهي غير موزعة كإصدارات رسمية موقعة، ويجب إعادة التحقق من حالتها الحالية في CI. ويخضع أي اختبار مع عميل لتحديد متفق عليه من الأطراف للجوانب القانونية والأمنية والاستضافة والمشتريات.'
       }
