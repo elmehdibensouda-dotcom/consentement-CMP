@@ -55,6 +55,12 @@ from .property_repository import (
     list_properties as list_property_rows,
     update_property_origin as persist_property_origin,
 )
+from .scan_report_repository import (
+    delete_scan_report as delete_scan_report_row,
+    get_scan_report as get_scan_report_row,
+    insert_scan_report,
+    list_scan_reports as list_scan_report_rows,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1247,16 +1253,9 @@ def import_scan_report(org_id: str, property_id: str, body: ScanReportBody, requ
             raise HTTPException(status_code=409, detail="Set this property's web origin before importing an inventory")
         if page_origin != prop["origin"]:
             raise HTTPException(status_code=422, detail="The scanned page origin does not match this web property")
-        conn.execute(
-            "INSERT INTO scan_reports(id,property_id,imported_by,scanned_at,imported_at,page_origin,resource_count,cookie_count,report_json) "
-            "VALUES(?,?,?,?,?,?,?,?,?)",
-            (report_id, property_id, context.user_id, scanned_at, now, page_origin,
-             len(report["resources"]), len(report["cookies"]), report_json),
-        )
-        conn.execute(
-            "DELETE FROM scan_reports WHERE property_id=? AND id NOT IN "
-            "(SELECT id FROM scan_reports WHERE property_id=? ORDER BY imported_at DESC,id DESC LIMIT ?)",
-            (property_id, property_id, SCAN_REPORTS_PER_PROPERTY),
+        insert_scan_report(
+            conn, report_id, property_id, context.user_id, scanned_at, now, page_origin,
+            len(report["resources"]), len(report["cookies"]), report_json, SCAN_REPORTS_PER_PROPERTY,
         )
         audit(conn, org_id, context.user_id, "scan.imported", "scan_report", report_id,
               {"resourceCount": len(report["resources"]), "cookieCount": len(report["cookies"]),
@@ -1277,11 +1276,7 @@ def list_scan_reports(org_id: str, property_id: str, request: Request,
         prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
-        rows = conn.execute(
-            "SELECT s.id,s.scanned_at,s.imported_at,s.page_origin,s.resource_count,s.cookie_count,u.email AS imported_by "
-            "FROM scan_reports s JOIN users u ON u.id=s.imported_by WHERE s.property_id=? "
-            "ORDER BY s.imported_at DESC,s.id DESC LIMIT ?", (property_id, limit),
-        ).fetchall()
+        rows = list_scan_report_rows(conn, property_id, limit)
     return {"reports": [dict(row) for row in rows], "retainedPerProperty": SCAN_REPORTS_PER_PROPERTY}
 
 
@@ -1290,11 +1285,7 @@ def get_scan_report(org_id: str, property_id: str, report_id: str, request: Requ
     context = current_session(request)
     with connection() as conn:
         membership(conn, org_id, context.user_id)
-        row = conn.execute(
-            "SELECT s.id,s.scanned_at,s.imported_at,s.page_origin,s.resource_count,s.cookie_count,s.report_json,u.email AS imported_by "
-            "FROM scan_reports s JOIN properties p ON p.id=s.property_id JOIN users u ON u.id=s.imported_by "
-            "WHERE s.id=? AND s.property_id=? AND p.org_id=?", (report_id, property_id, org_id),
-        ).fetchone()
+        row = get_scan_report_row(conn, org_id, property_id, report_id)
     if not row:
         raise HTTPException(status_code=404, detail="Scan report not found")
     result = dict(row)
@@ -1313,9 +1304,7 @@ def delete_scan_report(org_id: str, property_id: str, report_id: str, request: R
         prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
-        deleted = conn.execute(
-            "DELETE FROM scan_reports WHERE id=? AND property_id=?", (report_id, property_id)
-        ).rowcount
+        deleted = delete_scan_report_row(conn, property_id, report_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Scan report not found")
         audit(conn, org_id, context.user_id, "scan.deleted", "scan_report", report_id)
