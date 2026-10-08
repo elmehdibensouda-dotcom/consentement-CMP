@@ -63,6 +63,7 @@ L’entrée [index.html](http://localhost:8000/index.html) redirige vers la cons
 ## Architecture et intégrations
 
 - [Guide d’intégration pilote](./GUIDE_INTEGRATION_PILOTE.md) : choix du SDK, préparation de propriété, distribution actuelle par plateforme et règles communes d’intégration.
+- [Image conteneur de préproduction](./ops/container/README.md) : runtime API non-root configuré pour `staging` et PostgreSQL, migrations opérateur séparées et secrets montés en fichiers. Le conteneur refuse SQLite et le mode `production`; il ne constitue pas un hébergement prêt pour des données réelles.
 
 - [`backend/`](./backend/README.md) : API FastAPI locale, organisations, rôles, propriétés et politiques publiques versionnées. La console permet de définir plusieurs finalités FR/AR et d’associer des fournisseurs indicatifs à chacune ; ces noms sont affichés au visiteur et les tags Web doivent toujours être raccordés explicitement à l’identifiant de finalité.
 - [`schemas/consent-policy.schema.json`](./schemas/consent-policy.schema.json) : contrat de politique commun.

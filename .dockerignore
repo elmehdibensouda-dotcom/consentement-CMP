@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.venv-old
+.local
+__pycache__
+*.py[cod]
+node_modules
+**/node_modules
+**/build
+**/.gradle
+**/.build
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+.DS_Store
