@@ -398,18 +398,34 @@ class ConsentActivity : Activity() {
         });
       }catch(err){const message=node('p',err.message,'error');message.classList.add('show');target.replaceChildren(message)}
     }
-    async function importScanFile(property,file,statusNode,target){
-      if(!file)return;
+    async function importScanFiles(property,files,statusNode,target){
+      const selected=Array.from(files||[]);if(!selected.length)return;
+      if(selected.length>20){statusNode.textContent='Sélectionne au maximum 20 rapports à la fois.';return}
       statusNode.textContent='';
-      if(file.size>1_048_576){statusNode.textContent='Le fichier dépasse la limite de 1 Mio.';return}
-      try{
-        const report=JSON.parse(await file.text());
-        if(report.schema!=='aman-local-inventory-v1')throw new Error('Format de rapport ALAMANE inconnu.');
-        const path=`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/scans`;
-        const saved=await api(path,{method:'POST',body:report});
-        statusNode.textContent=`Inventaire importé : ${saved.resourceCount} ressources, ${saved.cookieCount} cookies.`;
-        await loadScanReports(property,target);await loadAudit();
-      }catch(err){statusNode.textContent=err instanceof SyntaxError?'Le fichier JSON est invalide.':err.message}
+      const path=`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/scans`;
+      if(selected.length){
+        try{
+          const existing=await api(path).then(data=>data.reports.length);
+          if(existing+selected.length>20&&!window.confirm('La propriété conserve seulement ses 20 rapports les plus récents. Cet import peut supprimer définitivement les rapports les plus anciens. Continuer ?'))return;
+        }catch(err){statusNode.textContent=err.message;return}
+      }
+      const outcomes=[];let imported=0;
+      statusNode.textContent=`Import de ${selected.length} rapport(s)…`;
+      for(const file of selected){
+        try{
+          if(file.size>1_048_576)throw new Error('fichier supérieur à 1 Mio');
+          const report=JSON.parse(await file.text());
+          if(report.schema!=='aman-local-inventory-v1')throw new Error('format ALAMANE inconnu');
+          const saved=await api(path,{method:'POST',body:report});
+          imported+=1;outcomes.push(`${file.name}: ${saved.resourceCount} ressources`);
+        }catch(err){
+          const reason=err instanceof SyntaxError?'JSON invalide':err.message;
+          outcomes.push(`${file.name}: ${reason}`);
+        }
+      }
+      const details=outcomes.slice(0,5).join(' · ')+(outcomes.length>5?` · et ${outcomes.length-5} autre(s)`:'' );
+      statusNode.textContent=`${imported}/${selected.length} rapport(s) importé(s). ${details}`;
+      if(imported){await loadScanReports(property,target);await loadAudit()}
     }
     async function savePropertyOrigin(property,input,statusNode){
       statusNode.textContent='';
@@ -453,10 +469,10 @@ class ConsentActivity : Activity() {
         integrationCell.append(detailsButton);row.append(integrationCell);
         const scanCell=node('td');const scanEnabled=property.channel==='web'&&!!property.origin;const scanButton=node('button',property.channel!=='web'?'Web seulement':scanEnabled?'Inventaires':'Origine requise','btn');scanButton.type='button';scanButton.disabled=!scanEnabled;scanButton.setAttribute('aria-expanded','false');
         const scanRow=node('tr');const scanCellDetails=node('td');scanCellDetails.colSpan=8;scanRow.hidden=true;
-        const scanPanel=node('div',undefined,'integration-snippet');const scanIntro=node('p','Importe le JSON produit par l’outil local. L’API compare l’origine déclarée du rapport à celle de cette propriété ; cette association ne prouve pas le contrôle du domaine. Les données restent dans le stockage local de démonstration.');
-        const uploadTools=node('div',undefined,'row wrap');const upload=node('button','Importer un rapport JSON','btn primary');upload.type='button';upload.disabled=!canEditPolicies()||!scanEnabled;
-        const file=node('input');file.type='file';file.accept='application/json,.json';file.hidden=true;const uploadStatus=node('span','');uploadStatus.className='copy-state';
-        const reports=node('div');reports.className='scan-report-list';upload.addEventListener('click',()=>file.click());file.addEventListener('change',()=>{importScanFile(property,file.files?.[0],uploadStatus,reports);file.value=''});
+        const scanPanel=node('div',undefined,'integration-snippet');const scanIntro=node('p','Importe un ou plusieurs rapports mono-page produits par l’outil local. Chaque page doit provenir d’un domaine que ton organisation est autorisée à examiner et chaque origine doit correspondre à celle de cette propriété. Les rapports restent séparés ; les 20 plus récents sont conservés. Cette association ne prouve pas le contrôle du domaine. Les données restent dans le stockage local de démonstration.');
+        const uploadTools=node('div',undefined,'row wrap');const upload=node('button','Importer des rapports JSON','btn primary');upload.type='button';upload.disabled=!canEditPolicies()||!scanEnabled;
+        const file=node('input');file.type='file';file.accept='application/json,.json';file.multiple=true;file.hidden=true;const uploadStatus=node('span','');uploadStatus.className='copy-state';
+        const reports=node('div');reports.className='scan-report-list';upload.addEventListener('click',()=>file.click());file.addEventListener('change',()=>{importScanFiles(property,file.files,uploadStatus,reports);file.value=''});
         uploadTools.append(upload,file,uploadStatus);scanPanel.append(scanIntro,uploadTools,reports);scanCellDetails.append(scanPanel);scanRow.append(scanCellDetails);
         scanButton.addEventListener('click',async()=>{scanRow.hidden=!scanRow.hidden;scanButton.setAttribute('aria-expanded',String(!scanRow.hidden));scanButton.textContent=scanRow.hidden?'Inventaires':'Masquer';if(!scanRow.hidden)await loadScanReports(property,reports)});
         scanCell.append(scanButton);row.append(scanCell);table.append(row);if(originRow)table.append(originRow);table.append(integrationRow,scanRow);
