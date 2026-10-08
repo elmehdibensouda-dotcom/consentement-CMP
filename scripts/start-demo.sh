@@ -22,6 +22,23 @@ if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) e
   exit 1
 fi
 
+if ! python3 - 8000 8001 <<'PY'
+import socket
+import sys
+
+for value in sys.argv[1:]:
+    port = int(value)
+    with socket.socket() as listener:
+        try:
+            listener.bind(("127.0.0.1", port))
+        except OSError:
+            print(f"Port {port} on 127.0.0.1 is unavailable; stop the service using it, then retry.", file=sys.stderr)
+            raise SystemExit(1)
+PY
+then
+  exit 1
+fi
+
 if [[ ! -x "$PYTHON" ]]; then
   python3 -m venv "$VENV_DIR"
 fi
@@ -102,9 +119,32 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-sleep 2
-if ! kill -0 "$api_pid" 2>/dev/null || ! kill -0 "$web_pid" 2>/dev/null; then
-  echo "A local server did not start. Check whether ports 8000 or 8001 are already in use." >&2
+ready=0
+for attempt in {1..40}; do
+  if ! kill -0 "$api_pid" 2>/dev/null || ! kill -0 "$web_pid" 2>/dev/null; then
+    break
+  fi
+if "$PYTHON" - <<'PY' >/dev/null 2>&1
+from urllib.request import ProxyHandler, build_opener
+
+opener = build_opener(ProxyHandler({}))
+
+for url in (
+    "http://127.0.0.1:8001/health/ready",
+    "http://127.0.0.1:8000/index.html",
+):
+    with opener.open(url, timeout=1) as response:
+        if response.status != 200:
+            raise SystemExit(1)
+PY
+  then
+    ready=1
+    break
+  fi
+  sleep 0.25
+done
+if [[ "$ready" != "1" ]]; then
+  echo "The local API or website did not become ready. The script will stop both servers." >&2
   exit 1
 fi
 

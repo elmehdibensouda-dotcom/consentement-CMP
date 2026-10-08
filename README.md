@@ -12,7 +12,7 @@ Sur macOS, lance le parcours de démonstration complet avec une seule commande :
 bash scripts/start-demo.sh
 ```
 
-Le script utilise une base SQLite locale distincte dans `.local/`, crée le premier compte si nécessaire en demandant l’adresse et un mot de passe saisi sans affichage, prépare l’organisation et la propriété fictives, démarre l’API et le site, puis ouvre la console. Les deux serveurs restent dans le terminal jusqu’à `Ctrl+C`. Si plusieurs comptes sont présents, le script demande lequel détiendra l’organisation fictive. Aucune donnée réelle de banque ou de visiteur ne doit être saisie.
+Le script vérifie d’abord que les ports locaux 8000 et 8001 sont libres, utilise une base SQLite distincte dans `.local/`, crée le premier compte si nécessaire en demandant l’adresse et un mot de passe saisi sans affichage, prépare l’organisation et la propriété fictives, démarre l’API et le site, attend leurs réponses de disponibilité, puis ouvre la console. Les deux serveurs restent dans le terminal jusqu’à `Ctrl+C`. Si plusieurs comptes sont présents, le script demande lequel détiendra l’organisation fictive. Aucune donnée réelle de banque ou de visiteur ne doit être saisie.
 
 ### Démarrage manuel
 
