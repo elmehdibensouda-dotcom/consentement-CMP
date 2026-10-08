@@ -44,9 +44,9 @@ Un contrat `Connection` commun, le cycle de vie des transactions et la traductio
 
 Les opérations SQL des propriétés, rapports de scan, politiques publiées et brouillons, organisations, invitations et transferts de propriété sont isolées dans des dépôts dédiés et validées par CI sur SQLite, sans validation PostgreSQL. La consultation et la création des sessions sont extraites dans `backend/aman_api/auth_repository.py` ; la CI les a validées dans `3c02a85` (run `37719131144`). L’acceptation et la prévisualisation des invitations ont été ajoutées au dépôt et validées dans `77d3feb` (run `37719540545`). Les routes gardent les contrôles d’accès, les transactions et les entrées d’audit.
 
-Les routes réutilisent maintenant les dépôts pour résoudre le rôle du membre et vérifier qu’une propriété appartient à l’organisation pendant les parcours de scan et de politique. La CI de cette tranche reste à effectuer.
+Les routes réutilisent maintenant les dépôts pour résoudre le rôle du membre et vérifier qu’une propriété appartient à l’organisation pendant les parcours de scan et de politique. La suite de régression CI a validé cette tranche sur SQLite dans le workflow Product validation `37724658205`, sans validation PostgreSQL.
 
-Les recherches de propriété utilisées par CORS public et par les écrans de métriques/export sont aussi déléguées à `property_repository.py`, ce qui garde les prédicats d’organisation dans le dépôt. CI de cette tranche en attente.
+Les recherches de propriété utilisées par CORS public et par les écrans de métriques/export sont aussi déléguées à `property_repository.py`, ce qui garde les prédicats d’organisation dans le dépôt. La suite de régression CI les a validées sur SQLite dans le workflow Product validation `37724658205`, sans validation PostgreSQL.
 
 Le comptage audité et la lecture ordonnée du CSV de décisions sont isolés dans `backend/aman_api/consent_event_repository.py`; la route parcourt le curseur sans appeler `fetchall`, tandis que le mode de mise en mémoire interne dépend de l’adaptateur. Cette extraction ne modifie pas l’ingestion publique; la CI l’a validée sur SQLite dans `1f5c937` (run `37721204334`), sans validation PostgreSQL.
 
