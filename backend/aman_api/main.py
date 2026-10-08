@@ -48,6 +48,13 @@ from .database import (
 from .consent_metrics_repository import load_consent_metric_sources
 from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
+from .property_repository import (
+    create_property as persist_property,
+    get_property_for_origin_update,
+    has_scan_reports,
+    list_properties as list_property_rows,
+    update_property_origin as persist_property_origin,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1113,8 +1120,8 @@ def create_property(org_id: str, body: PropertyBody, request: Request,
         with transaction() as conn:
             role = membership(conn, org_id, context.user_id)
             require_role(role, {"owner", "admin", "editor"})
-            conn.execute("INSERT INTO properties(id,org_id,name,channel,environment,origin,created_at) VALUES(?,?,?,?,?,?,?)",
-                         (property_id, org_id, body.name.strip(), body.channel, body.environment, origin, now))
+            persist_property(conn, property_id, org_id, body.name.strip(), body.channel,
+                             body.environment, origin, now)
             audit(conn, org_id, context.user_id, "property.created", "property", property_id,
                   {"channel": body.channel, "environment": body.environment, "origin": origin})
     except IntegrityError:
@@ -1128,11 +1135,7 @@ def list_properties(org_id: str, request: Request):
     context = current_session(request)
     with connection() as conn:
         membership(conn, org_id, context.user_id)
-        rows = conn.execute(
-            "SELECT p.id,p.name,p.channel,p.environment,p.origin,p.created_at,(SELECT version FROM policies x WHERE x.property_id=p.id "
-            "AND x.status='published' ORDER BY version DESC LIMIT 1) AS published_version "
-            "FROM properties p WHERE p.org_id=? ORDER BY p.name", (org_id,),
-        ).fetchall()
+        rows = list_property_rows(conn, org_id)
     return {"properties": [dict(row) for row in rows]}
 
 
@@ -1162,21 +1165,16 @@ def update_property_origin(org_id: str, property_id: str, body: PropertyOriginBo
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor"})
-        prop = conn.execute(
-            "SELECT id,channel,environment,origin FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
-        ).fetchone()
+        prop = get_property_for_origin_update(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         if prop["channel"] != "web":
             raise HTTPException(status_code=422, detail="Only web properties can have a browser origin")
         origin = canonical_property_origin(body.origin, allow_loopback_http=prop["environment"] == "development")
         if prop["origin"] != origin:
-            existing_reports = conn.execute(
-                "SELECT 1 FROM scan_reports WHERE property_id=? LIMIT 1", (property_id,)
-            ).fetchone()
-            if existing_reports:
+            if has_scan_reports(conn, property_id):
                 raise HTTPException(status_code=409, detail="Delete this property's inventory reports before changing its origin")
-            conn.execute("UPDATE properties SET origin=? WHERE id=?", (origin, property_id))
+            persist_property_origin(conn, property_id, origin)
             audit(conn, org_id, context.user_id, "property.origin_updated", "property", property_id,
                   {"previousOrigin": prop["origin"], "origin": origin})
     return {"id": property_id, "origin": origin}
