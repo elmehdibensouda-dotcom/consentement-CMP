@@ -377,6 +377,46 @@ class ConsentActivity : Activity() {
       ]));
       renderTable(`Cookies accessibles (${cookies.length})`,['Nom','Classement'],cookies.map(item=>[item.name,item.classification]));
     }
+    async function renderScanSynthesis(property,reportRows,target,statusNode){
+      statusNode.textContent='Chargement des rapports pour la synthèse locale…';
+      try{
+        const base=`/v1/organizations/${encodeURIComponent(state.org.id)}/properties/${encodeURIComponent(property.id)}/scans`;
+        const records=await Promise.all(reportRows.map(report=>api(`${base}/${encodeURIComponent(report.id)}`)));
+        const resources=new Map();const cookies=new Map();const pages=new Set();
+        for(const record of records){
+          const report=record.report||{};const page=typeof report.page==='string'?report.page:'';if(page)pages.add(page);
+          for(const item of report.resources||[]){
+            const key=JSON.stringify([item.kind,item.url]);let entry=resources.get(key);
+            if(!entry){entry={kind:item.kind,url:item.url,pages:new Set(),controls:new Set(),classifications:new Set()};resources.set(key,entry)}
+            if(page)entry.pages.add(page);entry.controls.add(item.amanControl||'not_evaluated');entry.classifications.add(item.classification||'à examiner');
+          }
+          for(const item of report.cookies||[]){
+            let entry=cookies.get(item.name);
+            if(!entry){entry={name:item.name,pages:new Set(),classifications:new Set()};cookies.set(item.name,entry)}
+            if(page)entry.pages.add(page);entry.classifications.add(item.classification||'à examiner');
+          }
+        }
+        target.replaceChildren();
+        target.append(node('p',`Synthèse calculée localement à partir de ${pages.size} page(s) et ${records.length} rapport(s). Les rapports source restent séparés ; aucune nouvelle page n’a été visitée.`,'help'));
+        const renderRows=(title,headers,rows,total)=>{
+          const section=node('section');section.append(node('h3',`${title} (${total})`));
+          if(!rows.length){section.append(node('p','Aucun élément dans les rapports sélectionnés.','help'));target.append(section);return}
+          const table=node('table');table.className='table';const head=node('tr');headers.forEach(label=>head.append(node('th',label)));table.append(head);
+          rows.slice(0,100).forEach(values=>{const row=node('tr');values.forEach(value=>row.append(node('td',String(value??''))));table.append(row)});
+          section.append(table);if(total>100)section.append(node('p',`Affichage limité aux 100 premiers éléments sur ${total}.`,'help'));target.append(section);
+        };
+        const resourceRows=Array.from(resources.values()).sort((a,b)=>b.pages.size-a.pages.size||a.url.localeCompare(b.url)).map(item=>[
+          item.kind,item.url,`${item.pages.size} · ${Array.from(item.pages).join(', ')}`,
+          Array.from(item.controls).sort().join(', '),Array.from(item.classifications).sort().join(', ')
+        ]);
+        const cookieRows=Array.from(cookies.values()).sort((a,b)=>b.pages.size-a.pages.size||a.name.localeCompare(b.name)).map(item=>[
+          item.name,`${item.pages.size} · ${Array.from(item.pages).join(', ')}`,Array.from(item.classifications).sort().join(', ')
+        ]);
+        renderRows('Ressources distinctes',['Type','Adresse','Pages observées','Signaux ALAMANE','Classements relevés'],resourceRows,resources.size);
+        renderRows('Noms de cookies distincts',['Nom','Pages observées','Classements relevés'],cookieRows,cookies.size);
+        statusNode.textContent='Synthèse locale prête. Les classements restent à examiner par une personne.';
+      }catch(err){const message=node('p',err.message||'Erreur inconnue.','error');message.classList.add('show');target.replaceChildren(message);statusNode.textContent='Impossible de charger les rapports.'}
+    }
     async function loadScanReports(property,target){
       target.replaceChildren(node('p','Chargement des inventaires…','help'));
       try{
@@ -385,6 +425,9 @@ class ConsentActivity : Activity() {
         target.replaceChildren();
         target.append(node('p',`URL à vérifier manuellement : chaque rapport doit correspondre à cette propriété. ${data.retainedPerProperty} rapports récents maximum sont conservés.`,'help'));
         if(!data.reports.length){target.append(node('p','Aucun rapport importé pour cette propriété.','empty'));return}
+        const synthesisTools=node('div',undefined,'row wrap');const synthesisButton=node('button','Afficher la synthèse locale','btn');synthesisButton.type='button';const synthesisStatus=node('span','');synthesisStatus.className='copy-state';const synthesis=node('div');synthesis.hidden=true;
+        synthesisButton.addEventListener('click',async()=>{synthesis.hidden=false;synthesisButton.disabled=true;await renderScanSynthesis(property,data.reports,synthesis,synthesisStatus);synthesisButton.disabled=false});
+        synthesisTools.append(synthesisButton,synthesisStatus);target.append(synthesisTools,synthesis);
         data.reports.forEach(report=>{
           const row=node('div',undefined,'row wrap');row.style.cssText='justify-content:space-between;border-top:1px solid #edf0ec;padding:10px 0';
           const summary=node('span',`${report.page_origin} · ${new Date(report.scanned_at*1000).toLocaleString()} · ${report.resource_count} ressources · ${report.cookie_count} cookies · par ${report.imported_by}`,'help');
@@ -469,7 +512,7 @@ class ConsentActivity : Activity() {
         integrationCell.append(detailsButton);row.append(integrationCell);
         const scanCell=node('td');const scanEnabled=property.channel==='web'&&!!property.origin;const scanButton=node('button',property.channel!=='web'?'Web seulement':scanEnabled?'Inventaires':'Origine requise','btn');scanButton.type='button';scanButton.disabled=!scanEnabled;scanButton.setAttribute('aria-expanded','false');
         const scanRow=node('tr');const scanCellDetails=node('td');scanCellDetails.colSpan=8;scanRow.hidden=true;
-        const scanPanel=node('div',undefined,'integration-snippet');const scanIntro=node('p','Importe un ou plusieurs rapports mono-page produits par l’outil local. Chaque page doit provenir d’un domaine que ton organisation est autorisée à examiner et chaque origine doit correspondre à celle de cette propriété. Les rapports restent séparés ; les 20 plus récents sont conservés. Cette association ne prouve pas le contrôle du domaine. Les données restent dans le stockage local de démonstration.');
+        const scanPanel=node('div',undefined,'integration-snippet');const scanIntro=node('p','Importe un ou plusieurs rapports mono-page produits par l’outil local. Chaque page doit provenir d’un domaine que ton organisation est autorisée à examiner et chaque origine doit correspondre à celle de cette propriété. La synthèse locale rapproche les ressources et noms de cookies des 20 rapports récents, sans visiter de nouvelle page ni modifier les classements. Cette association ne prouve pas le contrôle du domaine. Les données restent dans le stockage local de démonstration.');
         const uploadTools=node('div',undefined,'row wrap');const upload=node('button','Importer des rapports JSON','btn primary');upload.type='button';upload.disabled=!canEditPolicies()||!scanEnabled;
         const file=node('input');file.type='file';file.accept='application/json,.json';file.multiple=true;file.hidden=true;const uploadStatus=node('span','');uploadStatus.className='copy-state';
         const reports=node('div');reports.className='scan-report-list';upload.addEventListener('click',()=>file.click());file.addEventListener('change',()=>{importScanFiles(property,file.files,uploadStatus,reports);file.value=''});
