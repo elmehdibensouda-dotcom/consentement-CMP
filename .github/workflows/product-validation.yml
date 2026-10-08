@@ -53,14 +53,15 @@ jobs:
         run: |
           bundle="$RUNNER_TEMP/alamane-web-preview"
           mkdir -p "$bundle"
-          cp aman-cmp.js README.md "$bundle/"
+          cp aman-cmp.js "$bundle/"
+          cp SDK_WEB.md "$bundle/WEB-INTEGRATION.md"
           {
             echo "source_commit=$SOURCE_COMMIT"
             echo "workflow_run=$WORKFLOW_RUN_URL"
             echo "artifact_type=Web SDK source preview; not a signed or production release"
           } > "$bundle/BUILD-INFO.txt"
           cd "$bundle"
-          sha256sum aman-cmp.js README.md > SHA256SUMS
+          sha256sum aman-cmp.js WEB-INTEGRATION.md > SHA256SUMS
       - name: Attach Web source preview for manual runs
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7.0.1
