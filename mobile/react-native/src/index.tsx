@@ -346,13 +346,24 @@ export class AmanConsentClient {
   }
 
   private async restoreDecision(policy: AmanPolicy) {
-    let raw: string | null;
-    try { raw = await this.storage.getItem(this.decisionKey); } catch {
-      this.decisionValue = null;
+    const inMemoryDecision = this.decisionValue;
+    if (inMemoryDecision && !this.decisionStoredDurablyValue) {
+      this.restoreInMemoryDecision(inMemoryDecision, policy);
       this.decisionStoredDurablyValue = false;
       return;
     }
-    if (!raw) { this.decisionValue = null; return; }
+    let raw: string | null;
+    try { raw = await this.storage.getItem(this.decisionKey); } catch {
+      this.restoreInMemoryDecision(inMemoryDecision, policy);
+      this.decisionStoredDurablyValue = false;
+      return;
+    }
+    if (!raw) {
+      this.decisionValue = null;
+      this.decisionStoredDurablyValue = true;
+      return;
+    }
+    this.decisionStoredDurablyValue = true;
     try {
       const saved = validateDecision(JSON.parse(raw), policy, this.channel);
       if (saved.expiresAt <= Date.now()) throw new Error('stale choice');
@@ -361,6 +372,20 @@ export class AmanConsentClient {
     } catch {
       this.decisionValue = null;
       try { await this.storage.removeItem(this.decisionKey); } catch { /* Invalid choices are not used in memory. */ }
+    }
+  }
+
+  private restoreInMemoryDecision(decision: AmanDecision | null, policy: AmanPolicy): void {
+    if (!decision) {
+      this.decisionValue = null;
+      return;
+    }
+    try {
+      const validated = validateDecision(decision, policy, this.channel);
+      if (validated.expiresAt <= Date.now()) throw new Error('stale choice');
+      this.decisionValue = validated;
+    } catch {
+      this.decisionValue = null;
     }
   }
 
@@ -382,7 +407,13 @@ export class AmanConsentClient {
   async refreshExpiredDecision(): Promise<boolean> {
     if (!this.decisionValue || this.decisionValue.expiresAt > Date.now()) return false;
     this.decisionValue = null;
-    try { await this.storage.removeItem(this.decisionKey); } catch { /* Expired choices stay inactive in memory. */ }
+    try {
+      await this.storage.removeItem(this.decisionKey);
+      this.decisionStoredDurablyValue = true;
+    } catch {
+      this.decisionStoredDurablyValue = false;
+      /* Expired choices stay inactive in memory. */
+    }
     this.notify();
     return true;
   }
@@ -543,18 +574,18 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
   const notice = policy.noticeTranslations?.[lang] ?? policy.notice;
   return (
     <ScrollView style={styles.card} contentContainerStyle={styles.content} accessibilityLabel={t.title}>
-      {!client.decisionStoredDurably && <View style={styles.storageWarning} accessibilityRole="alert"><Text style={styles.storageWarningText}>{t.storageWarning}</Text></View>}
-      <View style={[styles.copy, rtl && styles.rtl]}>
-        <Text style={styles.title}>{t.title}</Text>
-        <Text style={styles.body}>{t.intro}</Text>
+      {client.decision && !client.decisionStoredDurably && <View style={styles.storageWarning} accessibilityRole="alert"><Text style={styles.storageWarningText}>{t.storageWarning}</Text></View>}
+      <View style={styles.copy}>
+        <Text style={[styles.title, rtl && styles.textRtl]}>{t.title}</Text>
+        <Text style={[styles.body, rtl && styles.textRtl]}>{t.intro}</Text>
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       </View>
       {editing && activePurposes.map((purpose) => (
         <View key={purpose.id} style={[styles.purpose, rtl && styles.rtl]}>
           <View style={styles.purposeCopy}>
-            <Text style={styles.label}>{purpose.label[lang]}</Text>
-            <Text style={styles.description}>{purpose.description[lang]}</Text>
-            <Text style={styles.hint}>{purpose.required ? t.necessary : purpose.consentRequired ? t.choice : t.active}</Text>
+            <Text style={[styles.label, rtl && styles.textRtl]}>{purpose.label[lang]}</Text>
+            <Text style={[styles.description, rtl && styles.textRtl]}>{purpose.description[lang]}</Text>
+            <Text style={[styles.hint, rtl && styles.textRtl]}>{purpose.required ? t.necessary : purpose.consentRequired ? t.choice : t.active}</Text>
           </View>
           <Pressable
             accessibilityRole="switch"
@@ -567,7 +598,7 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
         </View>
       ))}
       <View style={styles.notice}>
-        <Text style={styles.label}>{t.details}</Text>
+        <Text style={[styles.label, rtl && styles.textRtl]}>{t.details}</Text>
         {[[t.controller, notice.controllerName], [t.contact, notice.contact], [t.reference, notice.processingReference],
           [t.categories, notice.dataCategories.join(' · ')], [t.recipients, notice.recipients.join(' · ')],
           [t.transfers, notice.transfers.join(' · ')]]

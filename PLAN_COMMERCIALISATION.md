@@ -1,6 +1,6 @@
 # ALAMANE — plan de commercialisation au Maroc
 
-**Version de travail · 5 octobre 2026**
+**Version de travail · 8 octobre 2026**
 **Décision de départ :** valider une preuve de concept avec une grande entreprise ou une banque au Maroc. Les PME e-commerce et agences deviennent un segment d’expansion possible, pas le premier marché.
 
 ## 1. Le produit
@@ -48,7 +48,7 @@ Points à intégrer au parcours produit, après revue par un conseil marocain sp
 
 **Conséquence produit :** ne pas coder une règle universelle « tout cookie non essentiel bloqué jusqu’à acceptation » comme conseil légal marocain. Le produit doit documenter la finalité et le réglage choisi, demander les informations de traitement manquantes et appliquer la règle configurée. Une revue juridique doit confirmer la classification des cas, les textes à jour et la responsabilité d’ALAMANE comme sous-traitant éventuel.
 
-**Vérification des sources :** références officielles consultées le 5 octobre 2026. La [délibération D-939-2025](https://www.cndp.ma/wp-content/uploads/2025/12/Deliberation-N%C2%B0-D-939-2025-du-28112025-relative-au-modele-de-declaration-simplifiee-relative-au-traitement-des-donnees-a-caractere-personnel-de-cookies-sur-un-terminal.pdf) précise son champ par finalité, la durée maximale de six mois pour les données visées et le choix exprimé, l’information préalable, la déclaration correspondante et les transferts soumis à autorisation CNDP. La CNDP recense aussi la [procédure de notification relative à la gestion des cookies](https://www.cndp.ma/procedures-de-notification-process/) et sa page sur les [transferts de données à l’étranger](https://www.cndp.ma/transfert-de-donnees-a-letranger/). Ce relevé facilite la traçabilité du cadrage produit ; il ne constitue pas un avis juridique et doit être revu avant toute offre ou configuration client.
+**Vérification des sources :** références officielles consultées le 8 octobre 2026. La [délibération D-939-2025](https://www.cndp.ma/wp-content/uploads/2025/12/Deliberation-N%C2%B0-D-939-2025-du-28112025-relative-au-modele-de-declaration-simplifiee-relative-au-traitement-des-donnees-a-caractere-personnel-de-cookies-sur-un-terminal.pdf) précise son champ par finalité, la durée maximale de six mois pour les données visées et le choix exprimé, l’information préalable, la déclaration correspondante et les transferts soumis à autorisation CNDP. Sur sa [page de procédure de notification](https://www.cndp.ma/procedures-de-notification-process/), la CNDP classe actuellement la gestion des cookies pour site Web sous le formulaire F-214 « déclaration normale conformément à une décision » et mentionne notamment le document de collecte ou autre base légale, la notice d’information, le contrat de sous-traitance le cas échéant et le pouvoir du signataire. Cette indication pratique de formulaire devra être vérifiée par le client et son conseil au moment du dépôt. Voir aussi la page CNDP sur les [transferts de données à l’étranger](https://www.cndp.ma/transfert-de-donnees-a-letranger/). Ce relevé facilite la traçabilité du cadrage produit ; il ne constitue pas un avis juridique et doit être revu avant toute offre ou configuration client.
 
 ## 4. MVP vendable et périmètre final web + mobile
 
@@ -58,14 +58,14 @@ L’architecture du produit et le format commun des politiques sont décrits dan
 
 ### Pour l’administrateur
 
-1. Créer une organisation, des environnements et des domaines ; gérer les rôles d’administrateur, d’éditeur et de lecteur.
+1. Créer une organisation, des propriétés étiquetées par environnement et des appartenances ; gérer les rôles owner, admin, editor et viewer. Le prototype possède déjà ces parcours, mais les étiquettes d’environnement ne séparent pas les données ni les déploiements.
 2. Renseigner identité du responsable de traitement, contact, finalités et notice FR/AR, règles d’activation, fournisseurs associés, catégories de données, destinataires et références CNDP. Le client fournit et fait relire les contenus dans les langues qu’il propose. Les fournisseurs sont affichés à titre indicatif dans l’interface visiteur ; le client doit raccorder et vérifier chaque script ou SDK à l’identifiant de finalité correspondant.
-3. Détecter les cookies et scripts présents, proposer une classification modifiable et dater les scans. Chaque résultat doit être revu par le client avant activation.
-4. Concevoir une bannière FR / AR, avec affichage RTL vérifié sur appareil mobile. Ajouter darija après validation de traduction et compréhension utilisateur.
-5. Afficher des choix compréhensibles, permettre la personnalisation et rouvrir le centre de préférences.
-6. Appliquer les choix aux scripts configurés et produire une preuve minimale, horodatée, versionnée et exportable.
-7. Voir l’historique, le dernier scan, la configuration publiée et la durée de conservation.
-8. Ajouter une intégration contrôlée à Google Tag Manager / dataLayer, après validation de l’architecture du groupe. Les connecteurs CMS restent secondaires pour cette cible.
+3. Utiliser le scanner local existant pour relever les ressources visibles sur une page ouverte, classer les résultats à la main et importer explicitement un rapport JSON sur une propriété Web. Le scanner n’explore pas un site entier et son marqueur DOM ne prouve pas que tous les déclenchements sont contrôlés ; les scans multi-page et leur vérification restent à construire.
+4. Configurer la bannière et le centre de préférences Web existants en français ou arabe standard, puis faire vérifier l’affichage RTL, l’accessibilité et les traductions sur les appareils et navigateurs retenus. Le RTL existe dans les SDK ; sa validation auprès d’utilisateurs reste à faire. Ajouter darija seulement après validation linguistique.
+5. Montrer accepter, refuser, personnaliser et rouvrir le centre de préférences sur le prototype. Vérifier la compréhension et les comportements attendus avec le client avant une POC.
+6. Raccorder explicitement chaque script pris en charge à sa finalité. Le SDK Web applique les choix aux balises ALAMANE configurées, mais un script déjà exécuté n’est pas déchargé automatiquement ; le retrait doit aussi être raccordé à l’API du fournisseur.
+7. Utiliser la console existante pour consulter organisations, propriétés, politiques, historique administratif, agrégats des événements reçus et exports CSV. Les événements de choix sont facultatifs et client-déclarés ; ils ne constituent pas une preuve de rendu, d’identité ou d’action réelle.
+8. Configurer le pont `dataLayer` / Google Tag Manager déjà présent avec des déclencheurs qui attendent l’événement et la finalité applicable. Le conteneur, ses balises et le retrait propre à chaque fournisseur restent à configurer et vérifier par le client. Les connecteurs CMS restent secondaires pour cette cible.
 
 ### Pour le visiteur du site
 
@@ -75,8 +75,8 @@ L’architecture du produit et le format commun des politiques sont décrits dan
 
 ### Dérouler les canaux en étapes
 
-- **Tranche web POC :** politique versionnée, SDK web, bannière, état enregistré, contrôle de scripts pris en charge, et test sur domaine public non authentifié.
-- **Tranche mobile :** SDK iOS et Android qui exposent un état local/hors-ligne, un UI natif accessible et des callbacks d’état effectif après choix ou changement de politique ; documenter l’ATT iOS et les déclarations Google Play séparément. Le SDK informe les intégrateurs et ne peut pas décharger magiquement un SDK tiers déjà initialisé.
+- **Prototype Web présent :** politique versionnée, SDK, bannière et centre de préférences FR/AR, choix local, blocage des balises explicitement raccordées, pont GTM et événement de choix facultatif. La politique est revalidée toutes les cinq minutes et au retour de l’onglet au premier plan ; une nouvelle version invalide le choix précédent. Le retrait d’un script tiers déjà exécuté reste à raccorder. Restent l’intégration et la validation sur un domaine autorisé par un acheteur, l’accessibilité, les navigateurs retenus, les scripts réels du périmètre et les règles de retrait de chaque fournisseur.
+- **SDK mobiles de démarrage présents :** clients natifs iOS/Android et React Native avec UI FR/AR, choix local, chargement de politique et synchronisation d’état vers les SDK tiers par l’application hôte. React Native recharge la politique au retour au premier plan ; les exemples natifs demandent à l’application hôte de recharger puis appeler `updatePolicy(...)`. La CI compile ou emballe les sources, mais aucune intégration dans une application cliente, validation sur appareil réel, matrice de compatibilité ou release signée n’est démontrée. Avant une POC mobile, intégrer dans une application de test autorisée, vérifier les versions/appareils, accessibilité, stockage, hors-ligne, révocation et cycle de vie des SDK tiers ; documenter séparément ATT iOS et déclarations Google Play.
 - **Extension entreprise :** SSO, audit centralisé, environnements contrôlés et options de déploiement après les exigences de sécurité et d’hébergement du premier acheteur.
 
 Garder hors première offre les CGV/CGU, conformité multi-pays automatisée, classification IA autonome, A/B testing, certification publicitaire IAB / Google et conseil juridique. Ne pas vendre à une banque tant que son exigence principale (SaaS, cloud privé ou on-premise) n’est pas techniquement et économiquement faisable.
@@ -106,12 +106,15 @@ Valider le budget auprès de l’acheteur économique, pas uniquement de l’éq
 
 ### Semaines 4–8 · tranche produit démontrable
 
-- Compléter le socle local déjà réalisé (organisations, rôles, propriétés, politiques versionnées, API de diffusion et journal administratif) par une persistance et une exploitation adaptées au pilote après choix de déploiement et revue des exigences acheteur.
-- Implémenter la bannière et le centre de préférences, le respect des choix par les tags pris en charge, le journal de preuve, la suppression / anonymisation selon les durées retenues.
-- Créer un script d’installation et un parcours guidé pour les informations CNDP.
-- Préparer un dossier fournisseur : architecture, flux et sous-traitants, hébergement/transferts, contrôle d’accès, chiffrement, sauvegardes, réponse aux incidents, SLA, tests de sécurité et continuité.
+- Obtenir les exigences d’hébergement, d’identité, d’exploitation et de sécurité d’au moins un acheteur ; valider le choix entre service dédié, SaaS mutualisé, cloud privé ou installation contrôlée avant de construire la cible.
+- Avant toute exposition de l’API à un pilote, traiter le constat de revue statique du 8 octobre sur l’ingestion d’événements : quotas cumulés par propriété et globaux, réponse de saturation bornée, alertes de capacité, puis validation sous charge sur le déploiement retenu. Les limites de débit et la purge ne suffisent pas à borner le stockage conservé avant échéance.
+- Valider l’adaptateur PostgreSQL et les migrations sur une instance cible, avec deux organisations concurrentes, les rôles applicatifs prévus, les permissions DML minimales, TLS, secrets externalisés, sauvegardes/restauration et supervision ; le prototype refuse encore `AMAN_ENVIRONMENT=production`.
+- Fermer les écarts de distribution Web/mobile après les exigences du premier acheteur : releases versionnées et signées, provenance vérifiable, matrice de compatibilité et procédure de mise à jour/retour arrière. Les artefacts actuels sont des previews ; l’APK Android est debug.
+- Transformer les parcours existants en kit pilote : guide d’installation, jeux de données fictifs, propriété démo, scripts d’exemple, et consignes de test sur une page ou application appartenant au client. Le scanner existant est local et mono-page.
+- Finaliser le parcours d’inventaire des informations CNDP ; le produit ne dépose aucune formalité au nom du client et ne fournit pas d’avis juridique.
+- Maintenir le dossier fournisseur comme inventaire interne : architecture, flux et sous-traitants, hébergement/transferts, contrôle d’accès, chiffrement, sauvegardes, réponse aux incidents, SLA, tests de sécurité et continuité. Ne le transmettre qu’après revue interne et adaptation aux faits vérifiables.
 - Préparer politique de confidentialité ALAMANE, conditions SaaS, accord de sous-traitance et support. Validation juridique nécessaire avant usage commercial.
-- Figer le contrat de politique partagé entre le tableau de bord, le SDK web et les SDK mobiles ; une règle n’est pas supposée identique entre une catégorie de cookies et une permission native.
+- Le contrat partagé de politique et les trois intégrations SDK existent déjà ; garder leurs validations de schéma synchronisées et documenter séparément les règles de cookies, les permissions système et les SDK tiers.
 
 ### Semaines 9–12 · preuve de concept encadrée
 
@@ -141,7 +144,7 @@ Les brouillons d’approche et le tableau de suivi sont dans [SEQUENCE_PROSPECTI
 
 ### Vérifications avant toute diffusion publique
 
-- **Nom de travail « ALAMANE » :** la politique de cookies d’[Aman.com](https://www.aman.com/cookie-policy) appelle le mécanisme de ce site « Aman Cookie Consent tool » ; elle ne désigne pas le produit comme « ALAMANE ». Cette proximité de nom justifie une vérification, mais ne prouve ni un conflit juridique ni l’existence d’une marque enregistrée au Maroc. La recherche d’antériorité OMPIC n’a pas été effectuée. Le guide officiel OMPIC recommande de rechercher dans les bases des marques nationales et des enregistrements internationaux désignant le Maroc ([guide du dépôt de marque](https://marque.directompic.ma/assets/documents/guide.pdf)). Rechercher « ALAMANE », « AL AMANE », « AMAN » et les variantes pertinentes pour les classes et services envisagés, puis demander une revue de marque au Maroc et dans les marchés visés avant campagne, contrat ou investissement important. Ne pas lancer publiquement le nom avant cette vérification.
+- **Nom de travail « ALAMANE » :** la politique de cookies d’[Aman.com](https://www.aman.com/cookie-policy) appelle le mécanisme de ce site « Aman Cookie Consent tool » ; elle ne désigne pas le produit comme « ALAMANE ». Cette proximité justifie une vérification, sans prouver un conflit juridique. Au 8 octobre 2026, la recherche publique initiale n’a pas permis de conclure sur la disponibilité : les occurrences indexées de variantes « AL AMANE » ne suffisent pas à distinguer une marque, un nom commercial ou une adresse, et l’interrogation directe des bases OMPIC n’a pas abouti. Le [guide officiel OMPIC](https://marque.directompic.ma/assets/documents/guide.pdf) recommande de rechercher les marques nationales et les enregistrements internationaux désignant le Maroc ; le [catalogue officiel](https://www.ompic.ma/fr/content/catalogue-officiel-des-marques) publie les demandes marocaines. La [base mondiale de l’OMPI](https://branddb.wipo.int/) est un complément, pas une confirmation complète pour le Maroc. Faire une recherche exacte et par variantes (« ALAMANE », « AL AMANE », « AMAN »), vérifier les classes et services retenus avec un conseil en propriété industrielle, puis obtenir son avis avant campagne, contrat ou investissement important. Le nom reste provisoire et ne doit pas être présenté comme disponible ou protégé.
 - **Contact commercial :** l’adresse `bonjour@aman.ma` n’a pas été vérifiée. Le bouton de la page [commercialisation.html](./commercialisation.html) est désactivé et indique que l’adresse doit être confirmée. Vérifier le domaine, la boîte et la réception d’un message de bout en bout, ou remplacer par un contact validé, avant de diffuser la page.
 - **Présence en ligne :** vérifier disponibilité et droits d’usage des domaines et identifiants sociaux retenus après décision sur le nom. Ne pas interpréter la présence d’un domaine comme une autorisation d’utiliser une marque.
 

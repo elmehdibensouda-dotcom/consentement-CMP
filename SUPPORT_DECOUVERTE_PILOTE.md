@@ -1,8 +1,10 @@
 # ALAMANE — support de découverte et de démonstration
 
-**Version de travail · 7 octobre 2026**
+**Version de travail · 8 octobre 2026**
 **Cible initiale :** banques et grandes entreprises au Maroc  
 **Usage :** préparer un entretien exploratoire et une démonstration sur données fictives. Ce document n’est ni une offre contractuelle ni une déclaration de conformité ou de sécurité.
+
+Pour les questions d’installation et de distribution des SDK, voir le [guide d’intégration pilote](./GUIDE_INTEGRATION_PILOTE.md). Le guide décrit l’état du prototype ; il ne représente pas une procédure de mise en production.
 
 ## Présentation en 30 secondes
 
@@ -25,7 +27,7 @@ Utiliser uniquement l’environnement local avec des données fictives. Après a
 2. **Montrer le tableau de bord (2 min).** En session connectée, montrer les comptes de configuration réels — organisations, propriétés, états de politiques et brouillons — puis filtrer par organisation. Les décisions reçues sont agrégées par propriété et exportables en CSV uniquement si la collecte a été activée ; la propriété préparée par le seed n’a aucun événement fictif injecté. Les chiffres de scan du tableau de bord sont simulés. Un outil séparé permet un inventaire ponctuel local sur une page ouverte et exporte un JSON. L’éditeur peut l’importer manuellement sur une propriété Web de la console locale ; ne pas importer d’URL ou d’inventaire client réel dans cette démo.
 3. **Montrer la console (6 min).** Sélectionner l’organisation fictive préparée par le seed, montrer sa propriété de développement et son brouillon, expliquer ses finalités FR/AR, la durée configurée et les champs d’information fictifs à remplacer/faire valider par le client.
 4. **Montrer la gouvernance (3 min).** Enregistrer un changement, afficher sa révision, puis montrer qu’un autre compte doit publier le brouillon lorsque la validation à deux personnes est activée.
-5. **Montrer l’expérience Web (4 min).** Charger la page fictive de démonstration avec la propriété publiée ; accepter, refuser ou personnaliser ; rouvrir le centre de préférences. Les scripts utilisés sont locaux et fictifs.
+5. **Montrer l’expérience Web (4 min).** Charger la page fictive de démonstration avec la propriété publiée ; accepter, refuser ou personnaliser ; rouvrir le centre de préférences. Si une nouvelle version est publiée pendant que la page reste ouverte, le SDK la revalide au retour de l’onglet au premier plan ou dans les cinq minutes et redemande un choix pour cette version. Les scripts utilisés sont locaux et fictifs.
 6. **Montrer la traçabilité (3 min).** Ouvrir l’historique d’administration et exporter son CSV. Si la collecte a été activée pour la démonstration, exporter aussi le CSV des événements encore retenus et expliquer qu’il s’agit de déclarations du SDK, sans identité visiteur ni preuve d’affichage/action réelle. Sinon, ne pas fabriquer d’événements pour la séance.
 
 Ne pas faire de démonstration live d’une app bancaire, d’un domaine tiers ou d’un SDK publicitaire réel sans autorisation et périmètre écrits. Les SDK mobiles compilent ou s’emballent dans la CI, mais n’ont pas été intégrés dans une application cliente ; ne pas les annoncer comme validés ou distribués.

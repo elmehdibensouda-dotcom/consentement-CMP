@@ -2,7 +2,7 @@
 
 **Document interne · 6 octobre 2026 · Brouillons non envoyés**
 
-Ces textes servent à obtenir un entretien de découverte, pas à présenter Aman comme un produit de production ou une solution certifiée. Ajouter le nom du destinataire et une signature professionnelle validée avant tout envoi. Aucun message ni formulaire n’a été envoyé ou soumis.
+Ces textes servent à obtenir un entretien de découverte, pas à présenter ALAMANE comme un produit de production ou une solution certifiée. Ajouter le nom du destinataire et une signature professionnelle validée avant tout envoi. Aucun message ni formulaire n’a été envoyé ou soumis.
 
 ## Priorité et angle par compte
 
@@ -21,9 +21,9 @@ Les angles sont des hypothèses commerciales tirées du contexte publié par les
 
 Bonjour [Prénom],
 
-Je développe Aman, un projet de console qui vise à aider les organisations à configurer et gouverner les choix de consentement sur plusieurs propriétés numériques. Votre [Document d’enregistrement universel 2025](https://www.iam.ma/documents/66341/0/Document%2Bd%27enregistrement%2Buniversel%2B2025.pdf/3be70f4c-df20-161d-ec17-dcea815f8769?t=1774538846840) décrit plusieurs parcours numériques, notamment la souscription en ligne et l’espace self-care. Je cherche à comprendre comment les équipes produit, canaux, sécurité et protection des données coordonnent aujourd’hui les préférences et changements de traceurs sur ces parcours.
+Je développe ALAMANE, un projet de console qui vise à aider les organisations à configurer et gouverner les choix de consentement sur plusieurs propriétés numériques. Votre [Document d’enregistrement universel 2025](https://www.iam.ma/documents/66341/0/Document%2Bd%27enregistrement%2Buniversel%2B2025.pdf/3be70f4c-df20-161d-ec17-dcea815f8769?t=1774538846840) décrit plusieurs parcours numériques, notamment la souscription en ligne et l’espace self-care. Je cherche à comprendre comment les équipes produit, canaux, sécurité et protection des données coordonnent aujourd’hui les préférences et changements de traceurs sur ces parcours.
 
-Accepteriez-vous un échange exploratoire de 25 minutes ? Je peux montrer un démonstrateur local avec des données fictives ; je ne sollicite aucun accès à vos systèmes ni aucune donnée client. Aman reste un prototype et ne constitue pas un service de production.
+Accepteriez-vous un échange exploratoire de 25 minutes ? Je peux montrer un démonstrateur local avec des données fictives ; je ne sollicite aucun accès à vos systèmes ni aucune donnée client. ALAMANE reste un prototype et ne constitue pas un service de production.
 
 Bien cordialement,
 
@@ -39,7 +39,7 @@ Bien cordialement,
 
 Bonjour [Prénom],
 
-Je développe Aman, un projet de console qui vise à aider les équipes à configurer et gouverner les choix de consentement sur plusieurs propriétés numériques. En lisant votre [rapport ESG 2024](https://www.cihbank.ma/sites/default/files/2025-04/Rapport_ESG_CIH_2024.pdf), j’ai relevé les priorités que vous publiez en matière de transformation digitale et de protection des données. Je cherche à comprendre comment les équipes produit, sécurité et protection des données coordonnent aujourd’hui les changements de traceurs et les préférences sur le Web.
+Je développe ALAMANE, un projet de console qui vise à aider les équipes à configurer et gouverner les choix de consentement sur plusieurs propriétés numériques. En lisant votre [rapport ESG 2024](https://www.cihbank.ma/sites/default/files/2025-04/Rapport_ESG_CIH_2024.pdf), j’ai relevé les priorités que vous publiez en matière de transformation digitale et de protection des données. Je cherche à comprendre comment les équipes produit, sécurité et protection des données coordonnent aujourd’hui les changements de traceurs et les préférences sur le Web.
 
 Accepteriez-vous un échange exploratoire de 25 minutes ? Je peux montrer un démonstrateur local avec des données fictives ; je ne sollicite aucun accès à vos systèmes ni aucune donnée client.
 
@@ -53,7 +53,7 @@ Bien cordialement,
 
 Bonjour [Prénom],
 
-Je travaille sur Aman, un projet destiné à centraliser la configuration et la gouvernance des préférences de consentement sur les sites et applications. Vos pages présentent plusieurs services numériques pour les entreprises, dont Business Online, BMCE Direct et EDIFIN. Cela m’a donné envie de vérifier avec une équipe du secteur comment les règles et les intégrations sont coordonnées entre les différents services et équipes.
+Je travaille sur ALAMANE, un projet destiné à centraliser la configuration et la gouvernance des préférences de consentement sur les sites et applications. Vos pages présentent plusieurs services numériques pour les entreprises, dont Business Online, BMCE Direct et EDIFIN. Cela m’a donné envie de vérifier avec une équipe du secteur comment les règles et les intégrations sont coordonnées entre les différents services et équipes.
 
 Seriez-vous disponible pour un échange de 25 minutes ? L’objectif est de comprendre vos pratiques et critères d’évaluation. La démonstration éventuelle se ferait sur un environnement local et des données fictives, sans accès à vos systèmes.
 
@@ -67,9 +67,9 @@ Bien cordialement,
 
 Bonjour [Prénom],
 
-Je développe Aman, un projet de plateforme pour configurer et gouverner les préférences de consentement sur plusieurs propriétés numériques. Compte tenu de l’ampleur des activités digitales présentées dans votre [rapport annuel 2024](https://publications.attijariwafabank.com/rapport_annuel_2024_EN/33-Attijariwafa-bank-2024-Annual-Report.html), j’aimerais comprendre comment les sujets d’inventaire, de publication des règles et d’homologation fournisseur sont évalués chez vous.
+Je développe ALAMANE, un projet de plateforme pour configurer et gouverner les préférences de consentement sur plusieurs propriétés numériques. Compte tenu de l’ampleur des activités digitales présentées dans votre [rapport annuel 2024](https://publications.attijariwafabank.com/rapport_annuel_2024_EN/33-Attijariwafa-bank-2024-Annual-Report.html), j’aimerais comprendre comment les sujets d’inventaire, de publication des règles et d’homologation fournisseur sont évalués chez vous.
 
-Accepteriez-vous un échange de 25 minutes, ou pourriez-vous m’indiquer l’équipe ou le canal fournisseur approprié ? Aman est encore un démonstrateur : la rencontre servirait à qualifier les besoins et exigences, sans présenter de capacité de production ni demander d’accès interne.
+Accepteriez-vous un échange de 25 minutes, ou pourriez-vous m’indiquer l’équipe ou le canal fournisseur approprié ? ALAMANE est encore un démonstrateur : la rencontre servirait à qualifier les besoins et exigences, sans présenter de capacité de production ni demander d’accès interne.
 
 Bien cordialement,  
 [Nom et fonction]  

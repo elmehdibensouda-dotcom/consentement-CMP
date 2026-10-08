@@ -11,6 +11,8 @@
   const STORAGE_CHOICE = 'aman:demo:choice';
   const MEMORY_STORAGE = new Map();
   const DEFAULT_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1000;
+  const POLICY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+  const POLICY_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
   const MANAGED_TAG_SELECTOR = 'script[type="text/plain"][data-aman-src]';
   const DEFAULTS = {
     version: '1',
@@ -203,9 +205,21 @@
       throw new Error('Identifiant de propriété Aman invalide.');
     }
     const cacheKey = 'aman:policy:' + cfg.propertyId;
-    const cached = read(cacheKey);
+    let cached = read(cacheKey);
+    if (cached && cached.policy) {
+      try { cached.policy = validatePublishedPolicy(cached.policy, cfg); }
+      catch (_) {
+        cached = null;
+        removeStorageKey(cacheKey);
+      }
+    }
+    let memoryPolicy = null;
+    if (isRecord(cfg._publishedPolicySnapshot)) {
+      try { memoryPolicy = validatePublishedPolicy(cfg._publishedPolicySnapshot, cfg); }
+      catch (_) { memoryPolicy = null; }
+    }
     const headers = {};
-    if (cached && cached.etag) headers['If-None-Match'] = cached.etag;
+    if (cached && cached.policy && cached.etag) headers['If-None-Match'] = cached.etag;
     const base = secureApiBase(cfg.apiBaseUrl);
     let response;
     try {
@@ -213,7 +227,7 @@
         method: 'GET', headers, credentials: 'omit', cache: 'no-store', redirect: 'error'
       });
     } catch (error) {
-      if (cached && cached.policy && cached.policy.status === 'published') response = null;
+      if ((cached && cached.policy && cached.policy.status === 'published') || memoryPolicy) response = null;
       else throw error;
     }
     if (response && response.url) {
@@ -232,7 +246,7 @@
       }
     }
     let policy;
-    if (response === null) policy = cached.policy;
+    if (response === null) policy = cached && cached.policy ? cached.policy : memoryPolicy;
     else if (response.status === 304 && cached && cached.policy) policy = cached.policy;
     else if (response.ok) {
       try { policy = await response.json(); }
@@ -243,8 +257,9 @@
     } else {
       const temporaryFailure = response.status === 408 || response.status === 425 ||
         response.status === 429 || response.status >= 500;
-      if (temporaryFailure && cached && cached.policy) policy = cached.policy;
-      else {
+      if (temporaryFailure && ((cached && cached.policy) || memoryPolicy)) {
+        policy = cached && cached.policy ? cached.policy : memoryPolicy;
+      } else {
         if (!temporaryFailure) clearCachedPolicyAndChoice(cfg, cacheKey);
         throw new Error('Aucune politique Aman publiée pour cette propriété.');
       }
@@ -277,7 +292,8 @@
       retentionDays: policy.retentionDays,
       notice: localizedNotice || policy.notice,
       locale,
-      categories: purposes
+      categories: purposes,
+      _publishedPolicySnapshot: policy
     });
   }
   function t(cfg) { return LABELS[cfg.locale === 'ar' ? 'ar' : 'fr']; }
@@ -304,6 +320,10 @@
     const delay = Math.max(1, expiry - Date.now() + 1);
     choiceExpiryTimer = window.setTimeout(function () {
       choiceExpiryTimer = null;
+      if (cfg.policyAvailable === false) {
+        applyTags(cfg, null);
+        return;
+      }
       const current = currentChoice(cfg);
       if (current) {
         scheduleChoiceExpiry(cfg, current);
@@ -326,13 +346,15 @@
       else { MEMORY_STORAGE.delete(key); choice = null; }
       scheduleChoiceExpiry(cfg, choice);
       applyTags(cfg, choice);
+      if (cfg.policyAvailable === false) return;
       const banner = document.querySelector('.aman-banner');
       if (choice) {
         if (banner) banner.remove();
       } else if (!banner) renderBanner(cfg, null);
     });
   }
-  function consentFor(category, choice) {
+  function consentFor(category, choice, cfg) {
+    if (cfg && cfg.policyAvailable === false && !category.required) return false;
     if (category.required) return true;
     if (choice && choice.purposes && Object.prototype.hasOwnProperty.call(choice.purposes, category.id)) {
       return choice.purposes[category.id] === true;
@@ -342,7 +364,7 @@
   function emitConsentUpdate(cfg, choice) {
     const purposes = {};
     cfg.categories.forEach(function (category) {
-      purposes[category.id] = consentFor(category, choice);
+      purposes[category.id] = consentFor(category, choice, cfg);
     });
     const detail = {
       propertyId: cfg.propertyId || null,
@@ -362,7 +384,7 @@
   function applyTags(cfg, choice) {
     document.querySelectorAll(MANAGED_TAG_SELECTOR).forEach(function (placeholder) {
       const category = cfg.categories.find(function (item) { return item.id === placeholder.dataset.amanCategory; });
-      if (!category || !consentFor(category, choice) || placeholder.dataset.amanLoaded === 'true') return;
+      if (!category || !consentFor(category, choice, cfg) || placeholder.dataset.amanLoaded === 'true') return;
       const script = document.createElement('script');
       script.src = placeholder.dataset.amanSrc;
       script.async = true;
@@ -469,6 +491,7 @@
     parent.append(details);
   }
   function save(purposes, cfg, action) {
+    if (cfg.policyAvailable === false) throw new Error('Aucune politique valide n’est disponible.');
     const normalized = {};
     cfg.categories.forEach(function (category) {
       normalized[category.id] = category.required ? true :
@@ -517,7 +540,7 @@
     return status;
   }
   function openPanel(cfg, choice) {
-    if (activePanel) return;
+    if (activePanel || cfg.policyAvailable === false) return;
     panelFocusOrigin = document.activeElement;
     const labels = t(cfg);
     const rtl = cfg.locale === 'ar';
@@ -623,6 +646,15 @@
     banner.append(textBlock, actions);
     document.body.append(banner);
   }
+  function ensureManageButton(cfg) {
+    const existing = document.querySelector('.aman-manage');
+    if (existing) existing.remove();
+    if (cfg.policyAvailable === false) return;
+    const manage = make('button', 'aman-manage', t(cfg).manage);
+    manage.type = 'button';
+    manage.addEventListener('click', function () { openPanel(cfg, currentChoice(cfg)); });
+    document.body.append(manage);
+  }
   function addStyles() {
     if (document.getElementById('aman-cmp-style')) return;
     const style = make('style'); style.id = 'aman-cmp-style';
@@ -640,6 +672,7 @@
   }
   async function init() {
     let cfg = config();
+    cfg.policyAvailable = true;
     addStyles();
     document.documentElement.style.setProperty('--aman-color', cfg.color || DEFAULTS.color);
     if (cfg.apiBaseUrl && cfg.propertyId) {
@@ -660,6 +693,67 @@
         return;
       }
     }
+    let policyRefreshInFlight = false;
+    let lastPolicyRefreshAt = Date.now();
+    async function refreshPublishedPolicy(force) {
+      if (!cfg.apiBaseUrl || !cfg.propertyId || document.visibilityState === 'hidden' || policyRefreshInFlight) return;
+      const now = Date.now();
+      if (!force && now - lastPolicyRefreshAt < POLICY_REFRESH_MIN_INTERVAL_MS) return;
+      lastPolicyRefreshAt = now;
+      policyRefreshInFlight = true;
+      const previousVersion = cfg.policyVersion;
+      const wasUnavailable = cfg.policyAvailable === false;
+      try {
+        const refreshed = await loadPublishedPolicy(cfg);
+        const policyChanged = wasUnavailable || refreshed.policyVersion !== previousVersion;
+        Object.assign(cfg, refreshed, { policyAvailable: true });
+        if (!policyChanged) return;
+        closePanel(false);
+        const banner = document.querySelector('.aman-banner');
+        if (banner) banner.remove();
+        const previousStatus = document.getElementById('aman-demo-status');
+        if (previousStatus) previousStatus.remove();
+        const choice = currentChoice(cfg);
+        scheduleChoiceExpiry(cfg, choice);
+        applyTags(cfg, choice);
+        if (!choice) renderBanner(cfg, null);
+        ensureManageButton(cfg);
+        document.dispatchEvent(new CustomEvent('aman:policy-updated', {
+          detail: { propertyId: cfg.propertyId, previousPolicyVersion: previousVersion || null,
+            policyVersion: cfg.policyVersion }
+        }));
+      } catch (_) {
+        cfg.policyAvailable = false;
+        cfg._publishedPolicySnapshot = null;
+        cfg.policyVersion = null;
+        cfg.version = null;
+        closePanel(false);
+        scheduleChoiceExpiry(cfg, null);
+        const banner = document.querySelector('.aman-banner');
+        if (banner) banner.remove();
+        ensureManageButton(cfg);
+        applyTags(cfg, null);
+        const previousStatus = document.getElementById('aman-demo-status');
+        if (previousStatus) previousStatus.remove();
+        const status = renderStatus(t(cfg).unavailable, cfg.locale);
+        const retry = make('button', 'aman-button aman-secondary', t(cfg).retry);
+        retry.type = 'button';
+        retry.addEventListener('click', function () {
+          retry.disabled = true;
+          retry.textContent = t(cfg).loading;
+          void refreshPublishedPolicy(true);
+        });
+        status.append(' ', retry);
+        document.dispatchEvent(new CustomEvent('aman:policy-unavailable', {
+          detail: { propertyId: cfg.propertyId || null }
+        }));
+        document.dispatchEvent(new CustomEvent('aman:initialization-error', {
+          detail: { propertyId: cfg.propertyId || null }
+        }));
+      } finally {
+        policyRefreshInFlight = false;
+      }
+    }
     const previousStatus = document.getElementById('aman-demo-status');
     if (previousStatus) previousStatus.remove();
     const choice = currentChoice(cfg);
@@ -668,9 +762,13 @@
     observeChoiceChanges(cfg);
     applyTags(cfg, choice);
     if (!choice) renderBanner(cfg, null);
-    const manage = make('button', 'aman-manage', t(cfg).manage);
-    manage.type = 'button'; manage.addEventListener('click', function () { openPanel(cfg, currentChoice(cfg)); });
-    document.body.append(manage);
+    ensureManageButton(cfg);
+    if (cfg.apiBaseUrl && cfg.propertyId) {
+      window.setInterval(function () { void refreshPublishedPolicy(false); }, POLICY_REFRESH_INTERVAL_MS);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') void refreshPublishedPolicy(false);
+      });
+    }
     window.AmanCMP = Object.assign(window.AmanCMP || {}, {
       openPreferences: function () { openPanel(cfg, currentChoice(cfg)); },
       getChoice: function () { return currentChoice(cfg); },

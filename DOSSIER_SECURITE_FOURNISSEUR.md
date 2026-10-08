@@ -1,6 +1,6 @@
 # ALAMANE — dossier de sécurité fournisseur (document de travail)
 
-**État au 7 octobre 2026 · Usage interne pour préparer les échanges de qualification**
+**État au 8 octobre 2026 · Usage interne pour préparer les échanges de qualification**
 
 Ce document décrit l’état du prototype dans ce dépôt. Ce n’est ni une attestation de sécurité, ni une réponse approuvée à un questionnaire bancaire, ni un engagement contractuel. Il doit être actualisé et revu avec les responsables techniques, sécurité, juridiques et hébergement avant toute transmission à un prospect. Aucune donnée réelle de banque, d’employé ou de client ne doit être introduite dans cette version.
 
@@ -13,10 +13,16 @@ ALAMANE démontre localement une console multi-organisation, le contrôle d’ac
 | Isolation des organisations | Contrôles d’appartenance appliqués aux routes d’administration | Revue indépendante des contrôles d’accès, essais multi-tenant et modèle d’hébergement approuvé |
 | Authentification | Mot de passe haché avec scrypt, session opaque, cookie HTTP-only, contrôle CSRF ; invitation à usage unique | MFA/SSO, récupération et désactivation opérées, politique d’accès privilégié et revue indépendante |
 | Gouvernance | Rôles, transfert de propriété en deux étapes, audit administratif, révisions de brouillon, publication à deux personnes configurable (et imposée pour les propriétés production), révocation journalisée d’invitations et de transferts non acceptés | Centralisation et intégrité renforcée des journaux, alertes et procédures de revue |
-| Données | Les événements de choix n’acceptent pas de compte visiteur ni d’identifiant persistant d’appareil ; purge locale selon la politique configurée | Analyse de traitement, suppression vérifiée, sauvegarde/restauration et cycle de vie contractuel |
+| Données | Les événements de choix n’acceptent pas de compte visiteur ni d’identifiant persistant d’appareil ; purge selon la politique configurée | Analyse de traitement, suppression vérifiée, sauvegarde/restauration, cycle de vie contractuel et quota cumulatif de stockage des événements |
 | Plateforme | SQLite local par défaut ; adaptateur PostgreSQL de préproduction dans le code ; limiteurs persistés en base et CORS configuré par origine | Validation PostgreSQL sur une instance cible, clé HMAC commune pour plusieurs instances, proxy/WAF, déploiement, TLS, secrets, sauvegardes, supervision et reprise |
 | Assurance | Aucun rapport de test indépendant ou certificat n’est fourni | Modèle de menace, analyse de risques, test d’intrusion, gestion des vulnérabilités et preuves de remédiation |
 | SDK | La CI du 7 octobre (commit `08eb815`) a compilé la bibliothèque et l’exemple Android, le package Swift pour simulateur iOS, et emballé le tarball React Native ; le contrôle du SDK Web est syntaxique. | Aucune intégration dans une application cliente, matrice de compatibilité ou validation sur appareil cible ; l’APK de prévisualisation est signé avec une clé debug, les packages ne sont pas signés/publiés comme releases et aucune revue indépendante n’est fournie. |
+
+### Constat de revue interne du 8 octobre 2026
+
+Une analyse statique du dépôt a relevé un risque moyen sur la réception publique des événements de consentement : les limites de débit et la purge à échéance ne fixent pas de plafond cumulatif d’événements ou d’octets par propriété ou pour l’ensemble de la base. Des envois valides et soutenus pourraient donc consommer l’espace disponible avant expiration des enregistrements. L’impact pratique dépend de l’exposition, de la capacité de la base et des protections d’infrastructure du futur déploiement. Aucune reproduction de charge ni aucun test d’intrusion n’a été réalisé, et le constat n’est pas corrigé dans cette révision.
+
+Ce constat interne n’est ni une attestation, ni une preuve d’aptitude à un pilote bancaire. Avant toute donnée réelle, définir et vérifier des quotas cumulés, des alertes de capacité et les contrôles d’ingress du déploiement retenu.
 
 ## Inventaire des traitements du prototype
 
@@ -44,6 +50,7 @@ La durée de conservation des événements reçus est dérivée de la politique 
 - La [CI du 7 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37696110371) a réussi sur le commit `08eb815` : 17 tests backend, syntaxe Web, build Android release de la bibliothèque et debug de l’exemple, packaging du tarball React Native, compilation iOS simulateur. Elle ne valide pas une intégration dans une application cliente, un appareil réel, une release mobile signée, la sécurité du déploiement ou une homologation.
 - La [prévisualisation mobile manuelle](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37487329772) a joint un AAR Android, un APK debug et le tarball React Native au commit indiqué dans son manifeste ; ces artefacts temporaires ne sont pas des releases de production.
 - Le commit local `ebdc5e9` corrige le finding de limitation de débit du scan historique du 7 octobre ; la suite backend locale a passé 17 tests. Le rapport de scan original reste attaché à la révision pré-correction `0066e2a` et ne décrit pas l’état post-correction.
+- L’analyse statique interne du 8 octobre sur la révision `32c3248` a relevé un risque moyen d’épuisement de stockage lié aux événements publics sans quota cumulatif. Le rapport ne remplace pas un test d’intrusion ; aucune correction n’est incluse dans cette révision.
 - Le commit `08eb815` du 7 octobre 2026, poussé sur `codex/alamane-b2b-readiness`, contient les changements SDK Web/mobile et la mise à jour du présent dossier. La CI liée à ce commit a réussi ; ses limites sont celles décrites ci-dessus. Ces résultats ne sont pas un test de sécurité indépendant, une homologation ni un test d’intrusion.
 
 ## Questions auxquelles ne pas répondre par supposition
