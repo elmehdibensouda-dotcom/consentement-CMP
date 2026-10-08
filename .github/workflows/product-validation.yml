@@ -109,7 +109,7 @@ jobs:
         run: npm pack --pack-destination "$RUNNER_TEMP"
       - name: Generate the React Native dependency SBOM
         working-directory: mobile/react-native
-        run: npm sbom --sbom-format cyclonedx --omit=peer > "$RUNNER_TEMP/alamane-react-native.sbom.cdx.json"
+        run: npm sbom --sbom-format cyclonedx --legacy-peer-deps > "$RUNNER_TEMP/alamane-react-native.sbom.cdx.json"
       - name: Prepare traceable preview bundle
         if: github.event_name == 'workflow_dispatch'
         env:
