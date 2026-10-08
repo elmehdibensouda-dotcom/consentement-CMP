@@ -45,6 +45,7 @@ from .database import (
     prune_rate_limit_buckets,
     record_login_failure,
 )
+from .consent_metrics_repository import load_consent_metric_sources
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1714,31 +1715,7 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         now = utc_now()
-        rows = conn.execute(
-            "SELECT action,purposes,policy_version,recorded_at FROM consent_events "
-            "WHERE property_id=? AND recorded_at>=? AND expires_at>? ORDER BY recorded_at DESC",
-            (property_id, since, now),
-        ).fetchall()
-        policy_versions = sorted({
-            int(row["policy_version"])
-            for row in rows
-            if str(row["policy_version"]).isdigit()
-        })
-        policy_labels: Dict[str, Dict[str, Dict[str, str]]] = {}
-        for offset in range(0, len(policy_versions), 500):
-            version_batch = policy_versions[offset:offset + 500]
-            placeholders = ",".join("?" for _ in version_batch)
-            published_policies = conn.execute(
-                "SELECT version,body FROM policies WHERE property_id=? AND status IN ('published','retired') "
-                f"AND version IN ({placeholders})",
-                (property_id, *version_batch),
-            ).fetchall()
-            for policy_row in published_policies:
-                policy_body = json.loads(policy_row["body"])
-                policy_labels[str(policy_row["version"])] = {
-                    purpose["id"]: purpose.get("label", {})
-                    for purpose in policy_body.get("purposes", [])
-                }
+        rows, policy_labels = load_consent_metric_sources(conn, property_id, since, now)
     purpose_counts: Dict[Tuple[str, str], Dict[str, int]] = {}
     for row in rows:
         for purpose_id, allowed in json.loads(row["purposes"]).items():
