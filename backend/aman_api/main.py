@@ -142,6 +142,19 @@ LOGIN_RATE_MAX_BUCKETS = 20000
 CONSENT_EVENT_WINDOW_SECONDS = 60
 CONSENT_EVENT_CLIENT_LIMIT = 120
 CONSENT_EVENT_PROPERTY_LIMIT = 6000
+def positive_int_setting(name: str, default: int) -> int:
+    raw_value = os.environ.get(name, str(default))
+    try:
+        parsed = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a positive integer") from error
+    if parsed < 1:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return parsed
+
+
+CONSENT_EVENT_ACTIVE_TOTAL_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_TOTAL_LIMIT", 100_000)
+CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT", 25_000)
 CONSENT_EVENT_MAX_BUCKETS = 20000
 INVITATION_PREVIEW_LIMIT = 120
 INVITATION_ACCEPT_LIMIT = 20
@@ -1498,6 +1511,8 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
     now = utc_now()
     event_id_conflict = False
     duplicate_event = False
+    storage_capacity_full = False
+    storage_retry_after = 1
     with transaction() as conn:
         row = conn.execute(
             "SELECT pr.channel,pr.origin,p.body FROM properties pr JOIN policies p ON p.property_id=pr.id "
@@ -1533,6 +1548,8 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
             raise HTTPException(status_code=422, detail="reject_all must disable every optional purpose")
 
         enforce_consent_event_rate_limit(request, property_id, transaction_connection=conn)
+        # Serialize global and per-property capacity checks across PostgreSQL workers.
+        conn.lock_rate_limit_scope("consent_event_storage")
 
         purposes_json = json.dumps(body.purposes, sort_keys=True, separators=(",", ":"))
         existing = conn.execute("SELECT * FROM consent_events WHERE event_id=?", (body.eventId,)).fetchone()
@@ -1549,16 +1566,47 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
             else:
                 duplicate_event = True
         else:
-            conn.execute(
-                "INSERT INTO consent_events(event_id,property_id,policy_version,channel,action,purposes,recorded_at,expires_at) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (body.eventId, property_id, body.policyVersion, body.channel, body.action, purposes_json,
-                 now, now + int(policy["retentionDays"]) * 86_400),
-            )
             conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (now,))
+            total_count = conn.execute(
+                "SELECT COUNT(*) AS event_count FROM consent_events WHERE expires_at>?", (now,)
+            ).fetchone()["event_count"]
+            property_count = conn.execute(
+                "SELECT COUNT(*) AS event_count FROM consent_events WHERE property_id=? AND expires_at>?",
+                (property_id, now),
+            ).fetchone()["event_count"]
+            if total_count >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT or property_count >= CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT:
+                storage_capacity_full = True
+                retry_expiries = []
+                if total_count >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT:
+                    first_global_expiry = conn.execute(
+                        "SELECT MIN(expires_at) AS first_expiry FROM consent_events WHERE expires_at>?", (now,)
+                    ).fetchone()["first_expiry"]
+                    if first_global_expiry is not None:
+                        retry_expiries.append(int(first_global_expiry))
+                if property_count >= CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT:
+                    first_property_expiry = conn.execute(
+                        "SELECT MIN(expires_at) AS first_expiry FROM consent_events WHERE property_id=? AND expires_at>?",
+                        (property_id, now),
+                    ).fetchone()["first_expiry"]
+                    if first_property_expiry is not None:
+                        retry_expiries.append(int(first_property_expiry))
+                storage_retry_after = max(1, max(retry_expiries) - now) if retry_expiries else 60
+            else:
+                conn.execute(
+                    "INSERT INTO consent_events(event_id,property_id,policy_version,channel,action,purposes,recorded_at,expires_at) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    (body.eventId, property_id, body.policyVersion, body.channel, body.action, purposes_json,
+                     now, now + int(policy["retentionDays"]) * 86_400),
+                )
     if event_id_conflict:
         # Raise after commit so the valid conflicting attempt remains charged to the property quota.
         raise HTTPException(status_code=409, detail="Consent event identifier was already used")
+    if storage_capacity_full:
+        raise HTTPException(
+            status_code=503,
+            detail="Consent event storage is at its configured active-record limit; retry after the indicated time",
+            headers={"Retry-After": str(storage_retry_after)},
+        )
     if duplicate_event:
         return {"recorded": False, "duplicate": True}
     return {"recorded": True, "duplicate": False, "recordedAt": now}
