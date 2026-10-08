@@ -162,25 +162,120 @@
       const propertyId=JSON.stringify(property.id);
       if(property.channel==='web')return `<script src="https://cmp.example.ma/aman-cmp.js"\n  data-aman-api-base-url="https://cmp.example.ma"\n  data-aman-property-id=${propertyId}\n  data-aman-channel="web"\n  data-aman-collect-decision-events="false"><\/script>\n<!-- Remplacer les deux URL par les hôtes HTTPS approuvés du service et du SDK. Ajouter le nonce CSP de la réponse à l’élément script lorsque le site utilise des nonces. -->`;
       if(flavor==='react-native')return `// Installation pilote : le SDK est un package source privé, non publié sur npm.\n// Depuis la racine de l’application, adapter le chemin au checkout ALAMANE :\n// npm install ../alamane-consent/mobile/react-native @react-native-async-storage/async-storage\n// Si le SDK reste hors du dossier de l’application, configurer Metro pour surveiller son dossier (voir mobile/react-native/README.md).\nimport AsyncStorage from '@react-native-async-storage/async-storage';\nimport { useEffect } from 'react';\nimport { AmanConsentBanner, AmanConsentClient } from '@aman-consent/react-native';\n\n// Cet extrait correspond au canal ${property.channel} de cette propriété.\nconst aman = new AmanConsentClient({\n  baseUrl: 'https://cmp.example.ma', // Remplacer par l’URL HTTPS réelle\n  propertyId: ${propertyId},\n  channel: ${JSON.stringify(property.channel)},\n  storage: AsyncStorage,\n});\n\n// Désactiver l’auto-initialisation/collecte des SDK tiers dans la configuration native.\nexport function AppConsent() {\n  useEffect(() => {\n    const applyChoices = () => {\n      if (aman.isAllowed('analytics')) startAnalyticsIfNotStarted();\n      else stopAnalyticsIfSupported();\n      // Raccorder chaque finalité aux SDK concernés.\n    };\n    const unsubscribe = aman.subscribe(applyChoices);\n    applyChoices(); // Fermer les SDK côté JS ; configurer aussi leur auto-initialisation native.\n    // AmanConsentBanner charge la politique, notifie ensuite et propose une nouvelle tentative.\n    return unsubscribe;\n  }, []);\n\n  return <AmanConsentBanner client={aman} />;\n}\n\n// startAnalyticsIfNotStarted initialise le SDK seulement quand la finalité est autorisée. Implémenter l’arrêt selon le fournisseur.\n// aman.recordDecision(decision) est optionnel et reste un appel explicite, après validation du modèle de collecte.`;
-      if(property.channel==='ios')return `import SwiftUI\nimport AmanConsent\n\n@MainActor\nfunc loadAmanConsentManager() async throws -> AmanConsentManager {\n    // Désactiver l’auto-initialisation des SDK facultatifs dans la configuration native.\n    applyAnalyticsChoice(false) // Garder les SDK optionnels arrêtés pendant le chargement.\n    let client = AmanConsentAPIClient()\n    let apiBaseURL = URL(string: "https://cmp.example.ma")! // Remplacer par l’URL HTTPS réelle\n    let policy = try await client.fetchPolicy(\n        baseURL: apiBaseURL,\n        propertyId: ${propertyId},\n        channel: "ios"\n    )\n    let manager = AmanConsentManager(policy: policy)\n    manager.onEffectivePurposeStatesChanged = { states in\n        applyAnalyticsChoice(states["analytics"] == true)\n        // Raccorder chaque autre finalité à son propre SDK.\n    }\n    applyAnalyticsChoice(manager.isAllowed("analytics")) // Appliquer aussi un choix déjà enregistré.\n    return manager\n}\n\n// Implémenter applyAnalyticsChoice(_:) ; la vue hôte affiche le manager retourné avec AmanConsentSheet(manager: ...).\n@MainActor
-func refreshAmanConsentManager(_ manager: AmanConsentManager, propertyId: String) async {
-    let client = AmanConsentAPIClient()
-    let apiBaseURL = URL(string: "https://cmp.example.ma")! // Remplacer par l’URL HTTPS réelle
-    do {
-        let refreshedPolicy = try await client.fetchPolicy(
-            baseURL: apiBaseURL,
-            propertyId: propertyId,
-            channel: "ios"
-        )
-        manager.updatePolicy(refreshedPolicy)
-        _ = manager.refreshExpiredDecision()
-    } catch {
-        manager.markPolicyUnavailable()
-        applyAnalyticsChoice(false)
-    }
-}
+      if(property.channel==='ios')return `import SwiftUI
+import AmanConsent
 
-// Depuis la vue hôte, appeler refreshAmanConsentManager(...) au retour de scenePhase à .active. La fonction ferme les SDK facultatifs si aucune politique valide n’est disponible.`;
+@MainActor
+struct AmanConsentIntegrationView: View {
+    @State private var manager: AmanConsentManager?
+    @State private var showingPreferences = false
+    @State private var errorMessage: String?
+    @Environment(\\.scenePhase) private var scenePhase
+
+    private let propertyId = ${propertyId}
+    private let apiBaseURL = URL(string: "https://cmp.example.ma")! // Remplacer par l’URL HTTPS réelle
+    private let interfaceLanguage = Locale.preferredLanguages.first?.hasPrefix("ar") == true ? "ar" : "fr"
+
+    private func copy(_ french: String, _ arabic: String) -> String {
+        interfaceLanguage == "ar" ? arabic : french
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if let errorMessage {
+                Text(errorMessage).multilineTextAlignment(.center)
+                Button(copy("Réessayer", "إعادة المحاولة")) { Task { await loadConsentPolicy() } }
+            } else if manager != nil {
+                Button(copy("Gérer mes préférences", "إدارة تفضيلاتي")) { showingPreferences = true }
+            } else {
+                ProgressView(copy("Chargement des préférences…", "جارٍ تحميل التفضيلات…"))
+            }
+        }
+        .padding()
+        .task { await loadConsentPolicy() }
+        .onChange(of: scenePhase) { phase in
+            guard phase == .active else { return }
+            Task { await refreshConsentPolicy() }
+        }
+        .sheet(isPresented: $showingPreferences) {
+            if let manager { AmanConsentSheet(manager: manager, language: interfaceLanguage) }
+        }
+    }
+
+    private func loadConsentPolicy() async {
+        // Désactiver aussi l’auto-initialisation/collecte des SDK dans leur configuration native.
+        applyAnalyticsChoice(false)
+        do {
+            let client = AmanConsentAPIClient()
+            let policy = try await client.fetchPolicy(
+                baseURL: apiBaseURL,
+                propertyId: propertyId,
+                channel: "ios"
+            )
+            errorMessage = nil
+            let consentManager: AmanConsentManager
+            if let manager {
+                consentManager = manager
+                consentManager.updatePolicy(policy)
+            } else {
+                consentManager = AmanConsentManager(policy: policy)
+                consentManager.onEffectivePurposeStatesChanged = { states in
+                    applyAnalyticsChoice(states["analytics"] == true)
+                    // Raccorder chaque autre finalité à son SDK. Ce callback n’est pas une décision visiteur.
+                }
+                manager = consentManager
+            }
+            if consentManager.decision == nil { showingPreferences = true }
+            applyAnalyticsChoice(consentManager.isAllowed("analytics")) // Réconcilier aussi un choix déjà enregistré.
+        } catch {
+            manager?.markPolicyUnavailable()
+            showingPreferences = false
+            applyAnalyticsChoice(false)
+            errorMessage = copy("Impossible de charger la politique. Les SDK facultatifs restent arrêtés.",
+                                "تعذر تحميل السياسة. ستظل حزم SDK الاختيارية متوقفة.")
+        }
+    }
+
+    private func refreshConsentPolicy() async {
+        guard let manager else {
+            await loadConsentPolicy()
+            return
+        }
+        do {
+            let client = AmanConsentAPIClient()
+            let policy = try await client.fetchPolicy(
+                baseURL: apiBaseURL,
+                propertyId: propertyId,
+                channel: "ios"
+            )
+            manager.updatePolicy(policy)
+            _ = manager.refreshExpiredDecision()
+            errorMessage = nil
+            if manager.decision == nil { showingPreferences = true }
+            applyAnalyticsChoice(manager.isAllowed("analytics"))
+        } catch {
+            manager.markPolicyUnavailable()
+            showingPreferences = false
+            applyAnalyticsChoice(false)
+            errorMessage = copy("Aucune politique valide n’est disponible. Réessayez pour réactiver les finalités autorisées.",
+                                "لا تتوفر سياسة صالحة. أعد المحاولة لإعادة تفعيل الأغراض المسموح بها.")
+        }
+    }
+
+    private func applyAnalyticsChoice(_ allowed: Bool) {
+        if allowed { startAnalyticsIfNeeded() }
+        else { stopAnalyticsIfSupported() }
+        // Relier chaque autre finalité à son propre SDK.
+    }
+
+    private func startAnalyticsIfNeeded() {
+        // Initialiser le SDK uniquement si la finalité est autorisée ; rendre cette méthode idempotente.
+    }
+
+    private func stopAnalyticsIfSupported() {
+        // Arrêter le SDK si son fournisseur le permet ; cela n’efface pas les données déjà envoyées.
+    }
+}`;
       return `// Squelette d’Activity. Remplacer l’URL et raccorder les fonctions start/stop aux SDK utilisés.
 import android.app.Activity
 import android.os.Bundle
