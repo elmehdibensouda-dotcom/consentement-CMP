@@ -156,6 +156,7 @@ public final class AmanConsentAPIClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 10
         request.httpShouldHandleCookies = false
         if let etag = cached?.etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
 

@@ -82,9 +82,11 @@ from .policy_repository import (
 from .organization_repository import (
     create_organization as persist_organization_creation,
     get_member_role,
+    get_organization_approval_setting,
     list_members as list_member_rows,
     list_user_organizations,
     remove_member as persist_member_removal,
+    update_organization_approval_setting,
     update_member_role as persist_member_role_update,
 )
 from .auth_repository import (
@@ -413,6 +415,11 @@ class OrganizationBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=2, max_length=160)
     requireTwoPersonPublish: bool = True
+
+
+class OrganizationApprovalSettingsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    requireTwoPersonPublish: bool
 
 
 class PropertyBody(BaseModel):
@@ -924,6 +931,36 @@ def create_organization(body: OrganizationBody, request: Request,
         audit(conn, org_id, context.user_id, "organization.created", "organization", org_id)
     return {"id": org_id, "name": body.name.strip(), "role": "owner",
             "requireTwoPersonPublish": body.requireTwoPersonPublish}
+
+
+@app.put("/v1/organizations/{org_id}/approval-settings")
+def update_organization_approval_settings(
+    org_id: str,
+    body: OrganizationApprovalSettingsBody,
+    request: Request,
+    x_aman_csrf: Optional[str] = Header(default=None),
+):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    with transaction() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        row = get_organization_approval_setting(conn, org_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        previous = bool(row["require_two_person_publish"])
+        if previous != body.requireTwoPersonPublish:
+            update_organization_approval_setting(conn, org_id, body.requireTwoPersonPublish)
+            audit(
+                conn,
+                org_id,
+                context.user_id,
+                "organization.approval_setting_updated",
+                "organization",
+                org_id,
+                {"requireTwoPersonPublish": {"before": previous, "after": body.requireTwoPersonPublish}},
+            )
+    return {"id": org_id, "requireTwoPersonPublish": body.requireTwoPersonPublish}
 
 
 @app.post("/v1/organizations/{org_id}/invitations", status_code=status.HTTP_201_CREATED)

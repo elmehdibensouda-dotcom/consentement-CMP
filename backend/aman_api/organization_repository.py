@@ -33,6 +33,20 @@ def create_organization(
     )
 
 
+def get_organization_approval_setting(conn: Connection, org_id: str) -> Any:
+    return conn.execute(
+        "SELECT require_two_person_publish FROM organizations WHERE id=?",
+        (org_id,),
+    ).fetchone()
+
+
+def update_organization_approval_setting(conn: Connection, org_id: str, enabled: bool) -> None:
+    conn.execute(
+        "UPDATE organizations SET require_two_person_publish=? WHERE id=?",
+        (int(enabled), org_id),
+    )
+
+
 def list_members(conn: Connection, org_id: str) -> list[Any]:
     return conn.execute(
         "SELECT u.id,u.email,m.role,m.created_at AS joined_at "

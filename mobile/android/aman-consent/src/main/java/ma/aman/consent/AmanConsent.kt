@@ -405,6 +405,8 @@ private object AmanConsentExecutors {
     val policyRequests: Executor = Executors.newSingleThreadExecutor()
 }
 
+private const val DEFAULT_REQUEST_TIMEOUT_MS = 10_000
+
 /** Fetches policies off the UI thread and delivers results on the main thread by default. */
 class AmanConsentAPIClient(
     context: Context,
@@ -412,9 +414,17 @@ class AmanConsentAPIClient(
     private val callbackExecutor: Executor = Executor { command ->
         Handler(Looper.getMainLooper()).post(command)
         Unit
-    }
+    },
+    /** Connection and socket-read timeout in milliseconds; each is applied separately. */
+    private val requestTimeoutMs: Int = DEFAULT_REQUEST_TIMEOUT_MS
 ) {
     private val preferences = context.applicationContext.getSharedPreferences("aman_consent", Context.MODE_PRIVATE)
+
+    init {
+        require(requestTimeoutMs in 1_000..60_000) {
+            "Aman request timeout must be between 1000 and 60000 milliseconds"
+        }
+    }
 
     fun fetchPublishedPolicy(
         baseUrl: String,
@@ -441,8 +451,8 @@ class AmanConsentAPIClient(
                 val endpoint = "${baseUrl.trimEnd('/')}/v1/public/properties/$propertyId/policy"
                 connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
-                    connectTimeout = 5_000
-                    readTimeout = 5_000
+                    connectTimeout = requestTimeoutMs
+                    readTimeout = requestTimeoutMs
                     useCaches = false
                     instanceFollowRedirects = false
                     if (!cachedEtag.isNullOrBlank()) setRequestProperty("If-None-Match", cachedEtag)
@@ -543,8 +553,8 @@ class AmanConsentAPIClient(
                 val endpoint = "${baseUrl.trimEnd('/')}/v1/public/properties/${decision.propertyId}/consent-events"
                 connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 5_000
-                    readTimeout = 5_000
+                    connectTimeout = requestTimeoutMs
+                    readTimeout = requestTimeoutMs
                     useCaches = false
                     instanceFollowRedirects = false
                     doOutput = true

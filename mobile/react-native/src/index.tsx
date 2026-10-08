@@ -66,7 +66,30 @@ export type AmanConsentClientOptions = {
   channel: AmanChannel;
   storage: AmanStorage;
   fetcher?: typeof fetch;
+  requestTimeoutMs?: number;
 };
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+
+async function withNetworkTimeout<T>(
+  request: (signal?: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const pending = Promise.resolve().then(() => request(controller?.signal));
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller?.abort();
+      reject(new Error(`Aman network request timed out after ${timeoutMs} ms.`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([pending, deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
 
 const strings = {
   fr: {
@@ -241,6 +264,7 @@ export class AmanConsentClient {
   readonly channel: AmanChannel;
   private readonly storage: AmanStorage;
   private readonly fetcher: typeof fetch;
+  private readonly requestTimeoutMs: number;
   private policyLoadPromise: Promise<AmanPolicy> | null = null;
   private policyValue: AmanPolicy | null = null;
   private decisionValue: AmanDecision | null = null;
@@ -255,6 +279,10 @@ export class AmanConsentClient {
     this.channel = options.channel;
     this.storage = options.storage;
     this.fetcher = options.fetcher ?? fetch;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    if (!Number.isInteger(this.requestTimeoutMs) || this.requestTimeoutMs < 1_000 || this.requestTimeoutMs > 60_000) {
+      throw new Error('Aman request timeout must be an integer between 1000 and 60000 milliseconds.');
+    }
   }
 
   get policy(): AmanPolicy | null { return this.policyValue; }
@@ -307,14 +335,33 @@ export class AmanConsentClient {
     let fetchedFresh = false;
     let policyEtag = cachedEtag;
     let response: Response | null = null;
+    let freshPolicy: AmanPolicy | null = null;
+    let policyValidationError: unknown = null;
     try {
-      response = await this.fetcher(`${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/policy`, {
-        method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error',
-        headers: {
-          Accept: 'application/json',
-          ...(cachedEtag ? { 'If-None-Match': cachedEtag } : {}),
-        },
-      });
+      const result = await withNetworkTimeout(async (signal) => {
+        const fetched = await this.fetcher(`${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/policy`, {
+          method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error',
+          headers: {
+            Accept: 'application/json',
+            ...(cachedEtag ? { 'If-None-Match': cachedEtag } : {}),
+          },
+          ...(signal ? { signal } : {}),
+        });
+        if (!fetched.ok) return { response: fetched, policy: null, validationError: null as unknown };
+        try {
+          return {
+            response: fetched,
+            policy: validatePolicy(await fetched.json(), this.propertyId, this.channel),
+            validationError: null as unknown,
+          };
+        } catch (error) {
+          if (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) throw error;
+          return { response: fetched, policy: null, validationError: error };
+        }
+      }, this.requestTimeoutMs);
+      response = result.response;
+      freshPolicy = result.policy;
+      policyValidationError = result.validationError;
     } catch (error) {
       if (this.policyValue) policy = this.policyValue;
       else if (cached) policy = cached;
@@ -340,14 +387,17 @@ export class AmanConsentClient {
           throw new Error(`Aman policy request failed (${response.status}).`);
         }
       } else {
-        try {
-          policy = validatePolicy(await response.json(), this.propertyId, this.channel);
-          fetchedFresh = true;
-          policyEtag = response.headers.get('ETag');
-        } catch (error) {
+        if (policyValidationError) {
           await this.clearPolicyAndDecision();
-          throw error;
+          throw policyValidationError;
         }
+        if (!freshPolicy) {
+          await this.clearPolicyAndDecision();
+          throw new Error('Aman returned an empty consent policy.');
+        }
+        policy = freshPolicy;
+        fetchedFresh = true;
+        policyEtag = response.headers.get('ETag');
       }
     }
     if (!policy) throw new Error('Aman could not load a published consent policy.');
@@ -495,12 +545,14 @@ export class AmanConsentClient {
     if (!policy) throw new Error('Load the published Aman policy before reporting a decision.');
     validateDecision(decision, policy, this.channel);
     if (decision.expiresAt <= Date.now()) throw new Error('The consent decision has expired.');
-    const response = await this.fetcher(`${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/consent-events`, {
-      method: 'POST', credentials: 'omit', redirect: 'error',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ eventId: decision.eventId, policyVersion: decision.policyVersion,
-        channel: decision.channel, action: decision.action, purposes: decision.purposes }),
-    });
+    const response = await withNetworkTimeout((signal) => this.fetcher(
+      `${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/consent-events`, {
+        method: 'POST', credentials: 'omit', redirect: 'error',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ eventId: decision.eventId, policyVersion: decision.policyVersion,
+          channel: decision.channel, action: decision.action, purposes: decision.purposes }),
+        ...(signal ? { signal } : {}),
+      }), this.requestTimeoutMs);
     if (!response.ok) throw new Error(`Aman decision report failed (${response.status}).`);
   }
 }

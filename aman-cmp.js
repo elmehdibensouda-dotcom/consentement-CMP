@@ -11,6 +11,7 @@
   const STORAGE_CHOICE = 'aman:demo:choice';
   const MEMORY_STORAGE = new Map();
   const DEFAULT_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1000;
+  const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
   const POLICY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
   const POLICY_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
   const MANAGED_TAG_SELECTOR = 'script[type="text/plain"][data-aman-src]';
@@ -101,6 +102,9 @@
     if (attributes.amanColor) scriptConfig.color = attributes.amanColor;
     if (attributes.amanCollectDecisionEvents !== undefined) {
       scriptConfig.collectDecisionEvents = attributes.amanCollectDecisionEvents === 'true';
+    }
+    if (attributes.amanRequestTimeoutMs !== undefined) {
+      scriptConfig.requestTimeoutMs = Number(attributes.amanRequestTimeoutMs);
     }
     const merged = Object.assign({}, DEFAULTS, stored || {}, scriptConfig, hostConfig);
     merged.localeExplicit = attributes.amanLocale !== undefined ||
@@ -203,6 +207,26 @@
     }
     return url.href.replace(/\/+$/, '');
   }
+  function configuredRequestTimeout(cfg) {
+    const timeout = cfg.requestTimeoutMs === undefined ? DEFAULT_REQUEST_TIMEOUT_MS : Number(cfg.requestTimeoutMs);
+    if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 60000) {
+      throw new Error('Le délai réseau Aman doit être un entier compris entre 1000 et 60000 ms.');
+    }
+    return timeout;
+  }
+  async function withNetworkTimeout(request, timeoutMs) {
+    const controller = typeof window.AbortController === 'function' ? new window.AbortController() : null;
+    let timeout;
+    const pending = Promise.resolve().then(function () { return request(controller ? controller.signal : undefined); });
+    const deadline = new Promise(function (_, reject) {
+      timeout = window.setTimeout(function () {
+        if (controller) controller.abort();
+        reject(new Error('Aman network request timed out after ' + timeoutMs + ' ms.'));
+      }, timeoutMs);
+    });
+    try { return await Promise.race([pending, deadline]); }
+    finally { if (timeout !== undefined) window.clearTimeout(timeout); }
+  }
   async function loadPublishedPolicy(cfg) {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(cfg.propertyId || ''))) {
       throw new Error('Identifiant de propriété Aman invalide.');
@@ -224,11 +248,25 @@
     const headers = {};
     if (cached && cached.policy && cached.etag) headers['If-None-Match'] = cached.etag;
     const base = secureApiBase(cfg.apiBaseUrl);
+    const timeoutMs = configuredRequestTimeout(cfg);
     let response;
+    let fetchedPolicy;
+    let policyParseError = null;
     try {
-      response = await fetch(base + '/v1/public/properties/' + encodeURIComponent(cfg.propertyId) + '/policy', {
-        method: 'GET', headers, credentials: 'omit', cache: 'no-store', redirect: 'error'
-      });
+      const result = await withNetworkTimeout(async function (signal) {
+        const fetched = await fetch(base + '/v1/public/properties/' + encodeURIComponent(cfg.propertyId) + '/policy', {
+          method: 'GET', headers, credentials: 'omit', cache: 'no-store', redirect: 'error', signal: signal
+        });
+        if (!fetched.ok) return { response: fetched, policy: undefined, parseError: null };
+        try { return { response: fetched, policy: await fetched.json(), parseError: null }; }
+        catch (error) {
+          if (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) throw error;
+          return { response: fetched, policy: undefined, parseError: error };
+        }
+      }, timeoutMs);
+      response = result.response;
+      fetchedPolicy = result.policy;
+      policyParseError = result.parseError;
     } catch (error) {
       if ((cached && cached.policy && cached.policy.status === 'published') || memoryPolicy) response = null;
       else throw error;
@@ -252,11 +290,11 @@
     if (response === null) policy = cached && cached.policy ? cached.policy : memoryPolicy;
     else if (response.status === 304 && cached && cached.policy) policy = cached.policy;
     else if (response.ok) {
-      try { policy = await response.json(); }
-      catch (error) {
+      if (policyParseError) {
         clearCachedPolicyAndChoice(cfg, cacheKey);
-        throw error;
+        throw policyParseError;
       }
+      policy = fetchedPolicy;
     } else {
       const temporaryFailure = response.status === 408 || response.status === 425 ||
         response.status === 429 || response.status >= 500;
@@ -438,29 +476,35 @@
     let base;
     try { base = secureApiBase(cfg.apiBaseUrl); }
     catch (_) { return; }
-    fetch(base + '/v1/public/properties/' + encodeURIComponent(cfg.propertyId) + '/consent-events', {
-      method: 'POST',
-      credentials: 'omit',
-      keepalive: true,
-      redirect: 'error',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId: eventId,
-        policyVersion: cfg.policyVersion,
-        channel: cfg.channel || 'web',
-        action: action,
-        purposes: choice.purposes
-      })
-    }).then(function (response) {
-      return response.json().catch(function () { return {}; }).then(function (result) {
-        document.dispatchEvent(new CustomEvent('aman:consent-event-status', {
-          detail: {
-            state: response.ok ? (result.duplicate ? 'duplicate' : 'recorded') : 'failed',
-            status: response.status,
-            propertyId: cfg.propertyId
-          }
-        }));
+    let timeoutMs;
+    try { timeoutMs = configuredRequestTimeout(cfg); }
+    catch (_) { return; }
+    withNetworkTimeout(async function (signal) {
+      const response = await fetch(base + '/v1/public/properties/' + encodeURIComponent(cfg.propertyId) + '/consent-events', {
+        method: 'POST',
+        credentials: 'omit',
+        keepalive: true,
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: eventId,
+          policyVersion: cfg.policyVersion,
+          channel: cfg.channel || 'web',
+          action: action,
+          purposes: choice.purposes
+        }),
+        signal: signal
       });
+      const result = await response.json().catch(function () { return {}; });
+      return { response: response, result: result };
+    }, timeoutMs).then(function (result) {
+      document.dispatchEvent(new CustomEvent('aman:consent-event-status', {
+        detail: {
+          state: result.response.ok ? (result.result.duplicate ? 'duplicate' : 'recorded') : 'failed',
+          status: result.response.status,
+          propertyId: cfg.propertyId
+        }
+      }));
     }).catch(function () {
       document.dispatchEvent(new CustomEvent('aman:consent-event-status', {
         detail: { state: 'failed', status: 0, propertyId: cfg.propertyId }
