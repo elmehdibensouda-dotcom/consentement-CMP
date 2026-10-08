@@ -276,7 +276,7 @@ class AmanConsentManager(
     }
 
     fun showConsentDialog(activity: Activity, language: String? = null) {
-        if (!policyAvailable) return
+        if (!policyAvailable || activeConsentDialog?.isShowing == true) return
         val selectedLanguage = language ?: policy.defaultLanguage
         val isArabic = selectedLanguage.lowercase().startsWith("ar")
         val active = activePurposes

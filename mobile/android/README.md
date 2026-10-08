@@ -64,6 +64,8 @@ The client uses its last valid cache only for transport errors or temporary HTTP
 
 Without the optional `language` argument, `showConsentDialog` uses `defaultLanguage` from the published policy (`fr` or `ar`). The host application can still pass a language explicitly when its own language preference should take precedence.
 
+Call `showConsentDialog` on the Android main thread. Repeated calls while the same consent dialog is visible are ignored, which lets an app safely request the dialog from overlapping policy refresh callbacks without stacking duplicate windows.
+
 Translated notice content is read from `noticeTranslations.fr` and `noticeTranslations.ar`; the dialog selects the block matching its display language and falls back to the legacy `notice` field. The client must supply and review its content in every language it offers.
 
 `addEffectivePurposeStatesChangedListener` receives the effective state after a saved choice and after `updatePolicy`. If a newly fetched policy invalidates the saved choice, it sends the new policy defaults so the host can stop or start SDKs accordingly. This state callback is not a user decision and must not be uploaded as one. Apply `isAllowed(...)` once after manager creation because listener registration does not immediately invoke the listener.
