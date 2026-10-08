@@ -11,7 +11,7 @@ gradle :aman-consent:assembleRelease
 gradle :sample:assembleDebug
 ```
 
-Le workflow GitHub Actions `Product validation` est configuré pour compiler ces deux cibles et publier la bibliothèque dans un dépôt Maven local au build. Un prochain lancement manuel doit joindre ce dépôt, l’APK d’exemple et le package React Native dans un artefact de prévisualisation conservé 14 jours ; cette nouvelle sortie n’a pas encore été générée. Vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis consulter `BUILD-INFO.txt` pour confirmer le commit source et l’exécution. Le dépôt Maven contient l’AAR, le POM, les métadonnées Gradle et l’archive des sources ; ces éléments ne sont pas signés comme release et ne sont pas publiés dans un dépôt distant.
+Le workflow GitHub Actions `Product validation` compile ces deux cibles et publie la bibliothèque dans un dépôt Maven local au build. L’aperçu manuel du [8 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37767815026) comprend ce dépôt Maven, l’APK d’exemple et le package React Native ; ses artefacts sont conservés 14 jours, jusqu’au 22 octobre 2026. Vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis consulter `BUILD-INFO.txt` pour confirmer le commit source et l’exécution. Le dépôt Maven contient l’AAR, le POM, les métadonnées Gradle et l’archive des sources ; ces éléments ne sont pas signés comme release et ne sont pas publiés dans un dépôt distant.
 
 The library AAR is produced at `aman-consent/build/outputs/aar/aman-consent-release.aar`. To create a local Maven repository for inspection or internal distribution:
 
