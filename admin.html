@@ -181,42 +181,68 @@ func refreshAmanConsentManager(_ manager: AmanConsentManager, propertyId: String
 }
 
 // Depuis la vue hôte, appeler refreshAmanConsentManager(...) au retour de scenePhase à .active. La fonction ferme les SDK facultatifs si aucune politique valide n’est disponible.`;
-      return `// Extrait à placer dans une Activity Android ; complète les fonctions start/stop propres aux SDK utilisés.
-private val amanApiBaseUrl = "https://cmp.example.ma" // Remplacer par l’URL HTTPS réelle
-private val amanPropertyId = ${propertyId}
-private val amanClient by lazy { AmanConsentAPIClient(applicationContext) }
-private var amanManager: AmanConsentManager? = null
+      return `// Squelette d’Activity. Remplacer l’URL et raccorder les fonctions start/stop aux SDK utilisés.
+import android.app.Activity
+import android.os.Bundle
+import ma.aman.consent.AmanConsentAPIClient
+import ma.aman.consent.AmanConsentManager
 
-override fun onResume() {
-    super.onResume()
-    amanManager?.refreshExpiredDecision()
-    // Maintenir les SDK facultatifs arrêtés jusqu’à la revalidation de la politique.
-    stopAnalyticsIfSupported()
-    amanClient.fetchPublishedPolicy(amanApiBaseUrl, amanPropertyId, channel = "android") { result ->
-        result.onSuccess { policy ->
-            val manager = amanManager ?: AmanConsentManager(applicationContext, policy).also { created ->
-                created.addEffectivePurposeStatesChangedListener { states ->
-                    runOnUiThread {
-                        if (states["analytics"] == true) startAnalyticsIfNeeded()
-                        else stopAnalyticsIfSupported()
-                        // Raccorder chaque autre finalité à son propre SDK.
+class ConsentActivity : Activity() {
+    private val amanApiBaseUrl = "https://cmp.example.ma" // Remplacer par l’URL HTTPS réelle
+    private val amanPropertyId = ${propertyId}
+    private val amanClient by lazy { AmanConsentAPIClient(applicationContext) }
+    private var amanManager: AmanConsentManager? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Désactiver l’auto-initialisation et l’auto-collecte des SDK tiers dans leur configuration native.
+        stopAnalyticsIfSupported()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        amanManager?.refreshExpiredDecision()
+        // Garder les SDK facultatifs arrêtés jusqu’à la revalidation de la politique.
+        stopAnalyticsIfSupported()
+        amanClient.fetchPublishedPolicy(amanApiBaseUrl, amanPropertyId, channel = "android") { result ->
+            result.onSuccess { policy ->
+                val manager = amanManager ?: AmanConsentManager(applicationContext, policy).also { created ->
+                    created.addEffectivePurposeStatesChangedListener { states ->
+                        runOnUiThread { applyAnalyticsChoice(states["analytics"] == true) }
                     }
+                    amanManager = created
                 }
-                amanManager = created
-            }
-            manager.updatePolicy(policy)
-            if (manager.decision == null) manager.showConsentDialog(this)
-        }.onFailure {
-            amanManager?.markPolicyUnavailable()
-            runOnUiThread {
-                stopAnalyticsIfSupported()
-                showPolicyRetry()
+                manager.updatePolicy(policy)
+                applyAnalyticsChoice(manager.isAllowed("analytics")) // Appliquer aussi un choix déjà enregistré.
+                if (manager.decision == null) manager.showConsentDialog(this)
+            }.onFailure {
+                amanManager?.markPolicyUnavailable()
+                runOnUiThread {
+                    stopAnalyticsIfSupported()
+                    showPolicyRetry()
+                }
             }
         }
     }
-}
 
-// Désactiver l’auto-initialisation et l’auto-collecte des SDK tiers dans leur configuration native.`;
+    private fun applyAnalyticsChoice(allowed: Boolean) {
+        if (allowed) startAnalyticsIfNotStarted()
+        else stopAnalyticsIfSupported()
+        // Raccorder chaque autre finalité à son SDK correspondant.
+    }
+
+    private fun startAnalyticsIfNotStarted() {
+        // Initialiser le SDK analytique ici, une seule fois, après autorisation.
+    }
+
+    private fun stopAnalyticsIfSupported() {
+        // Arrêter la collecte si le SDK le permet ; cela n’efface pas les données déjà envoyées.
+    }
+
+    private fun showPolicyRetry() {
+        // Afficher une action permettant de relancer le chargement de la politique.
+    }
+}`;
     }
     function renderScanDetails(report, target){
       target.replaceChildren();
