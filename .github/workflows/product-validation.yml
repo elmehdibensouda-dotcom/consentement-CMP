@@ -111,3 +111,29 @@ jobs:
         uses: actions/checkout@v7.0.1
       - name: Compile for the iOS simulator
         run: swift build --package-path . --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios16.0-simulator
+      - name: Compile the distributable Swift package for the iOS simulator
+        run: swift build --package-path mobile/ios --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios16.0-simulator
+      - name: Prepare traceable iOS source preview
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bundle="$RUNNER_TEMP/alamane-ios-preview"
+          mkdir -p "$bundle"
+          tar -czf "$bundle/aman-consent-ios-source.tar.gz" -C mobile ios
+          {
+            echo "source_commit=$SOURCE_COMMIT"
+            echo "workflow_run=$WORKFLOW_RUN_URL"
+            echo "artifact_type=Swift Package source preview; no signed binary, SBOM, or production release"
+          } > "$bundle/BUILD-INFO.txt"
+          cd "$bundle"
+          shasum -a 256 aman-consent-ios-source.tar.gz > SHA256SUMS
+      - name: Attach iOS source preview for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: alamane-ios-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/alamane-ios-preview/
+          if-no-files-found: error
+          retention-days: 14
