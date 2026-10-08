@@ -20,7 +20,7 @@ Ne pas promettre une conformité garantie, une certification CNDP ou un taux de 
 
 Le besoin à valider est une gouvernance centralisée : connaître les traceurs par domaine, traduire une politique en configuration qui respecte les choix des visiteurs, garder un historique exploitable, et prouver les changements aux équipes internes. Les exigences d’intégration, de sécurité, d’hébergement et de contractualisation peuvent être des critères d’achat bloquants.
 
-Pour préparer le questionnaire fournisseur sans surpromettre, utiliser le [dossier de sécurité interne](./DOSSIER_SECURITE_FOURNISSEUR.md) comme inventaire de l’état actuel et des preuves manquantes. Ce document ne doit pas être transmis comme attestation ni comme preuve d’homologation.
+Pour préparer le questionnaire fournisseur sans surpromettre, utiliser le [dossier de sécurité interne](./DOSSIER_SECURITE_FOURNISSEUR.md) comme inventaire de l’état actuel et des preuves manquantes. Ce document ne doit pas être transmis comme attestation ni comme preuve d’homologation. La [présélection d’hébergement au Maroc](./HEBERGEMENT_PREPARATION_MAROC.md) identifie OCI Casablanca comme premier candidat à préqualifier, sans le sélectionner : disponibilité, sauvegarde et reprise restent à démontrer au regard des exigences d’un acheteur bancaire.
 
 ### Besoins à vérifier avant de figer le produit
 
