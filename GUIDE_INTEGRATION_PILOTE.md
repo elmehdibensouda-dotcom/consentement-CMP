@@ -6,7 +6,7 @@
 
 | Application à raccorder | SDK | État de distribution |
 | --- | --- | --- |
-| Site Web | `aman-cmp.js` | Fichier présent dans le dépôt ; à héberger par l’équipe cliente sur un domaine qu’elle contrôle. |
+| Site Web | `aman-cmp.js` | Fichier présent dans le dépôt ; un lancement manuel du workflow CI est configuré pour joindre un aperçu temporaire vérifiable. À héberger par l’équipe cliente sur un domaine qu’elle contrôle. |
 | Application React Native | `mobile/react-native` | Source installable depuis un checkout, ou tarball privé issu d’une exécution manuelle GitHub Actions (conservé 14 jours). Pas de publication npm. |
 | Application iOS native | `mobile/ios` | Package Swift depuis le dépôt privé ou un checkout local ; un lancement manuel du workflow CI est configuré pour joindre une archive source temporaire vérifiable. Pas de release signée ou publiée. |
 | Application Android native | `mobile/android` | Module Gradle depuis un checkout local ; l’AAR de prévisualisation vient d’une exécution manuelle GitHub Actions. Pas de release signée ou publiée dans Maven. |

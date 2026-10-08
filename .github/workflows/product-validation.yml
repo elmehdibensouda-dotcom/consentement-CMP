@@ -29,10 +29,46 @@ jobs:
         run: python -m pip install -r backend/requirements.txt
       - name: Run backend regression suite
         run: python -m unittest discover backend/tests -v
-      - name: Check web SDK syntax
+
+  web-sdk:
+    name: Web SDK and source preview
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node for the Web SDK
+        uses: actions/setup-node@v6.0.0
+        with:
+          node-version: "22"
+      - name: Check Web SDK syntax
         run: |
           node --check aman-cmp.js
           node --check aman-scanner.js
+      - name: Prepare traceable Web source preview
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bundle="$RUNNER_TEMP/alamane-web-preview"
+          mkdir -p "$bundle"
+          cp aman-cmp.js README.md "$bundle/"
+          {
+            echo "source_commit=$SOURCE_COMMIT"
+            echo "workflow_run=$WORKFLOW_RUN_URL"
+            echo "artifact_type=Web SDK source preview; not a signed or production release"
+          } > "$bundle/BUILD-INFO.txt"
+          cd "$bundle"
+          sha256sum aman-cmp.js README.md > SHA256SUMS
+      - name: Attach Web source preview for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: alamane-web-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/alamane-web-preview/
+          if-no-files-found: error
+          retention-days: 14
 
   android-sdk:
     name: Android SDK and sample build
