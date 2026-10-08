@@ -47,6 +47,7 @@ export type AmanPolicy = {
   notice: PrivacyNotice;
   noticeTranslations?: Record<AmanLanguage, PrivacyNotice>;
 };
+type CachedPolicy = { policy: AmanPolicy; etag: string | null };
 export type AmanDecision = {
   propertyId: string;
   policyVersion: string;
@@ -283,16 +284,30 @@ export class AmanConsentClient {
     let cachedRaw: string | null = null;
     try { cachedRaw = await this.storage.getItem(this.policyKey); } catch { /* Fetch a fresh policy if the cache adapter is unavailable. */ }
     let cached: AmanPolicy | null = null;
+    let cachedEtag: string | null = null;
     if (cachedRaw) {
-      try { cached = validatePolicy(JSON.parse(cachedRaw), this.propertyId, this.channel); } catch { cached = null; }
+      try {
+        const parsed: unknown = JSON.parse(cachedRaw);
+        if (isRecord(parsed) && Object.prototype.hasOwnProperty.call(parsed, 'policy')) {
+          cached = validatePolicy(parsed.policy, this.propertyId, this.channel);
+          cachedEtag = typeof parsed.etag === 'string' ? parsed.etag : null;
+        } else {
+          // Read policy-only cache entries written by earlier SDK versions.
+          cached = validatePolicy(parsed, this.propertyId, this.channel);
+        }
+      } catch { cached = null; }
     }
     let policy: AmanPolicy | null = null;
     let fetchedFresh = false;
+    let policyEtag = cachedEtag;
     let response: Response | null = null;
     try {
       response = await this.fetcher(`${this.baseUrl}/v1/public/properties/${encodeURIComponent(this.propertyId)}/policy`, {
         method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          ...(cachedEtag ? { 'If-None-Match': cachedEtag } : {}),
+        },
       });
     } catch (error) {
       if (this.policyValue) policy = this.policyValue;
@@ -300,7 +315,14 @@ export class AmanConsentClient {
       else throw error;
     }
     if (response) {
-      if (!response.ok) {
+      if (response.status === 304) {
+        if (!cached) {
+          await this.clearPolicyAndDecision();
+          throw new Error('Aman returned a policy cache hit without a valid local policy.');
+        }
+        policy = cached;
+        policyEtag = response.headers.get('ETag') ?? cachedEtag;
+      } else if (!response.ok) {
         const temporaryFailure = response.status === 408 || response.status === 425 ||
           response.status === 429 || response.status >= 500;
         if (temporaryFailure) {
@@ -315,6 +337,7 @@ export class AmanConsentClient {
         try {
           policy = validatePolicy(await response.json(), this.propertyId, this.channel);
           fetchedFresh = true;
+          policyEtag = response.headers.get('ETag');
         } catch (error) {
           await this.clearPolicyAndDecision();
           throw error;
@@ -328,9 +351,10 @@ export class AmanConsentClient {
       this.decisionValue = null;
       try { await this.storage.removeItem(this.decisionKey); } catch { /* The old choice remains inactive in memory. */ }
     }
-    if (fetchedFresh) {
+    if (fetchedFresh || response?.status === 304) {
       // A cache write failure must not replace a fresh server policy with stale cached content.
-      try { await this.storage.setItem(this.policyKey, JSON.stringify(policy)); } catch { /* Keep the fresh policy in memory. */ }
+      const cache: CachedPolicy = { policy, etag: policyEtag };
+      try { await this.storage.setItem(this.policyKey, JSON.stringify(cache)); } catch { /* Keep the valid policy in memory. */ }
     }
     await this.restoreDecision(policy);
     this.notify();

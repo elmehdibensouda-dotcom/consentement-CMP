@@ -4,7 +4,7 @@ Ce SDK fournit un panneau natif React Native FR/AR, le chargement d’une politi
 
 Si la politique publiée change pendant que le visiteur personnalise ses préférences, le panneau remplace les cases conservées par les états de départ de la nouvelle version avant l’enregistrement.
 
-Le SDK peut utiliser la dernière politique valide en cache lors d’une erreur réseau ou d’une réponse temporaire du service (`408`, `425`, `429` ou `5xx`). Une réponse non temporaire (dont `404`, qui signifie qu’aucune politique n’est publiée) ou une réponse de politique invalide efface la politique et le choix locaux ; `isAllowed()` renvoie alors `false` jusqu’au chargement d’une politique valide.
+Le SDK revalide le cache avec l’ETag de la politique ; une réponse `304` réutilise la politique locale sans la retélécharger. Il peut aussi utiliser la dernière politique valide en cache lors d’une erreur réseau ou d’une réponse temporaire du service (`408`, `425`, `429` ou `5xx`). Il lit les entrées de cache de politique seule produites par les versions précédentes du package. Une réponse non temporaire (dont `404`, qui signifie qu’aucune politique n’est publiée) ou une réponse de politique invalide efface la politique et le choix locaux ; `isAllowed()` renvoie alors `false` jusqu’au chargement d’une politique valide.
 
 ## Installation du paquet pilote privé
 
