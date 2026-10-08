@@ -1,6 +1,6 @@
 # Comptes de découverte — banques marocaines
 
-**Document interne · 6 octobre 2026 · Hypothèses à qualifier**
+**Document interne · 8 octobre 2026 · Hypothèses à qualifier**
 
 Cette liste sert à préparer des entretiens de découverte, pas à affirmer qu’une banque cherche une CMP ou qu’elle achètera Aman. Les signaux ci-dessous viennent des propres publications des établissements. Aucun interlocuteur n’a été contacté et aucune demande de rendez-vous n’a été envoyée.
 
@@ -15,11 +15,18 @@ Cette liste sert à préparer des entretiens de découverte, pas à affirmer qu�
 
 **Séquence de travail proposée :** démarrer la découverte avec CIH BANK pour qualifier le problème et le périmètre Web, examiner ensuite la structure multi-services de BANK OF AFRICA, puis approcher Attijariwafa bank avec un dossier fournisseur et un cas d’usage plus précis. Garder Maroc Telecom comme compte de diversification du segment grand compte, une fois le pitch Web et les critères de sécurité mieux cadrés. Cet ordre est une hypothèse basée sur les signaux publics et la préparation actuelle d’Aman ; il ne mesure ni l’ouverture commerciale, ni le budget, ni la probabilité d’achat.
 
-## Portes d’entrée publiques et limites
+## Accès fournisseurs vérifiés et limites
 
-- CIH BANK et BANK OF AFRICA affichent des parcours de contact destinés principalement aux clients. Ne pas les présenter comme canaux achats ou fournisseurs. Chercher une introduction professionnelle vers les équipes produit / digitale ou sécurité, ou demander le bon canal fournisseur lors d’un échange autorisé.
-- Attijariwafa bank publie une plateforme **Attijari Sourcing** permettant aux fournisseurs de se faire connaître. Vérifier les critères d’admission et le parcours applicable aux éditeurs SaaS avant d’y déposer un dossier ; la plateforme ne prouve pas qu’un appel d’offres CMP existe. [Attijari Sourcing](https://attijari-sourcing.attijariwafabank.com/)
-- Ne pas contacter les banques au nom de l’utilisateur sans autorisation explicite. Ne pas soumettre les formulaires publics avant d’avoir un nom de marque et une adresse de réponse validés.
+Vérification documentaire effectuée le 8 octobre 2026. Ces canaux décrivent des processus fournisseurs généraux ; aucun appel d’offres ou achat de CMP pour Aman n’a été identifié.
+
+| Établissement | Voie publique observée | Étape commerciale prudente |
+| --- | --- | --- |
+| **CIH BANK** | Le rapport ESG 2024 décrit la plateforme numérique N@chtary pour les appels d’offres et indique que le processus fournisseur comprend une charte prestataire. La charte est publiée sur le portail. [Rapport ESG 2024](https://www.cihbank.ma/sites/default/files/2025-04/Rapport_ESG_CIH_2024.pdf) · [Charte prestataires](https://nachtary.cihbank.ma/ChartePrestatairesCIHBANK.pdf) | Confirmer auprès des achats que le portail et le processus sont toujours à jour, puis vérifier la catégorie SaaS/logiciel et les conditions d’homologation. Le rapport 2024 ne garantit ni un appel d’offres ouvert ni un besoin CMP actuel. |
+| **BANK OF AFRICA** | Une charte d’achats responsables et un code de conduite fournisseurs sont publiés. Aucun portail général d’inscription fournisseur n’a été vérifié dans les sources publiques consultées. [Charte achats responsables](https://www.bankofafrica.ma/sites/default/files/documents/boa_charte_achats_responsables.pdf) · [Code de conduite 2024](https://www.bankofafrica.ma/sites/default/files/2025-06/Code_conduite_2024.pdf) | Demander le canal fournisseur approprié à un interlocuteur professionnel ou aux achats. Ne pas confondre SCF, l’offre de financement de la chaîne d’approvisionnement, avec un portail de référencement achats. |
+| **Attijariwafa bank** | **Attijari Sourcing** permet l’inscription des fournisseurs. Le guide indique que l’ICE est requis pour les entreprises marocaines et que les consultations/RFQ sont transmises sur invitation. [Portail Attijari Sourcing](https://attijari-sourcing.attijariwafabank.com/) · [Guide fournisseur](https://attijari-sourcing.attijariwafabank.com/documents/20190527-AWB-Guide-fournisseur.pdf) | Vérifier la catégorie qui correspond à un éditeur SaaS et préparer les éléments fournisseur. L’inscription ne signifie ni référencement accepté ni invitation à une consultation CMP. |
+| **Maroc Telecom (IAM)** | Le groupe publie une page d’appels d’offres et un code de conduite fournisseurs. [Appels d’offres](https://www.iam.ma/fr/groupe-maroc-telecom/appels-d-offres) | Surveiller les avis correspondant réellement au logiciel, à la donnée ou à la conformité et vérifier les critères du dossier. Les avis visibles consultés ne démontrent aucun besoin CMP identifié. |
+
+- Ne pas contacter les banques au nom de l’utilisateur sans autorisation explicite. Ne pas soumettre de formulaire fournisseur avant d’avoir confirmé la raison sociale, l’ICE, la marque commerciale et l’adresse de réponse à utiliser.
 
 ## Qualification à obtenir en entretien
 
