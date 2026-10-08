@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AppState,
   ActivityIndicator,
@@ -488,6 +488,8 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
   const [editing, setEditing] = useState(false);
   const [open, setOpen] = useState(!client.decision);
   const [choices, setChoices] = useState<Record<string, boolean>>({});
+  const onLoadErrorRef = useRef(onLoadError);
+  onLoadErrorRef.current = onLoadError;
   useEffect(() => {
     const unsubscribe = client.subscribe(() => setRevision((current) => current + 1));
     client.loadPolicy().then(() => {
@@ -496,10 +498,10 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
     }).catch((reason: unknown) => {
       const message = reason instanceof Error ? reason.message : 'Unable to load consent preferences.';
       setError(message);
-      onLoadError?.(new Error(message));
+      onLoadErrorRef.current?.(new Error(message));
     });
     return unsubscribe;
-  }, [client, onLoadError]);
+  }, [client]);
   useEffect(() => {
     const refresh = () => { void client.refreshExpiredDecision(); };
     const decision = client.decision;
@@ -519,12 +521,12 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
         } catch (reason) {
           const message = reason instanceof Error ? reason.message : 'Unable to load consent preferences.';
           setError(message);
-          onLoadError?.(new Error(message));
+          onLoadErrorRef.current?.(new Error(message));
         }
       })();
     });
     return () => subscription.remove();
-  }, [client, onLoadError]);
+  }, [client]);
   useEffect(() => {
     if (!client.decision && client.policy) setOpen(true);
   }, [client, revision]);
