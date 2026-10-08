@@ -401,10 +401,14 @@ class AmanConsentManager(
     }
 }
 
+private object AmanConsentExecutors {
+    val policyRequests: Executor = Executors.newSingleThreadExecutor()
+}
+
 /** Fetches policies off the UI thread and delivers results on the main thread by default. */
 class AmanConsentAPIClient(
     context: Context,
-    private val executor: Executor = Executors.newSingleThreadExecutor(),
+    private val executor: Executor = AmanConsentExecutors.policyRequests,
     private val callbackExecutor: Executor = Executor { command ->
         Handler(Looper.getMainLooper()).post(command)
         Unit
