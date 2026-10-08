@@ -47,6 +47,7 @@ from .database import (
 )
 from .consent_metrics_repository import load_consent_metric_sources
 from .dashboard_repository import load_dashboard_sources
+from .audit_repository import iter_audit_export_events, list_audit_events
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1493,12 +1494,7 @@ def list_audit(org_id: str, request: Request, limit: int = 100):
     with connection() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor", "viewer"})
-        rows = conn.execute(
-            "SELECT e.id,e.actor_user_id,u.email AS actor_email,e.action,e.resource_type,e.resource_id,e.occurred_at,e.details "
-            "FROM audit_events e JOIN users u ON u.id=e.actor_user_id "
-            "WHERE e.org_id=? ORDER BY e.occurred_at DESC LIMIT ?",
-            (org_id, max(1, min(limit, 500))),
-        ).fetchall()
+        rows = list_audit_events(conn, org_id, max(1, min(limit, 500)))
     return {"events": [
         {**dict(row), "details": json.loads(row["details"])} for row in rows
     ]}
@@ -1536,25 +1532,8 @@ def export_audit(
         yield buffer.getvalue()
         buffer.close()
 
-        clauses = ["e.org_id=?"]
-        parameters: list[Any] = [org_id]
-        if start is not None:
-            clauses.append("e.occurred_at>=?")
-            parameters.append(start)
-        if end is not None:
-            clauses.append("e.occurred_at<=?")
-            parameters.append(end)
-        parameters.append(limit)
-
         with connection() as conn:
-            cursor = conn.execute(
-                "SELECT id,actor_user_id,actor_email,action,resource_type,resource_id,occurred_at,details FROM ("
-                "SELECT e.id,e.actor_user_id,u.email AS actor_email,e.action,e.resource_type,e.resource_id,e.occurred_at,e.details "
-                "FROM audit_events e JOIN users u ON u.id=e.actor_user_id WHERE " + " AND ".join(clauses) +
-                " ORDER BY e.occurred_at DESC,e.id DESC LIMIT ?) ORDER BY occurred_at ASC,id ASC",
-                parameters,
-            )
-            for row in cursor:
+            for row in iter_audit_export_events(conn, org_id, start, end, limit):
                 buffer = io.StringIO(newline="")
                 writer = csv.writer(buffer, lineterminator="\r\n")
                 details = json.dumps(json.loads(row["details"]), ensure_ascii=False, separators=(",", ":"))
