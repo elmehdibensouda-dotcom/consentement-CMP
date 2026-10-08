@@ -21,6 +21,7 @@ struct ConsentSetupView: View {
     @State private var manager: AmanConsentManager?
     @State private var showingPreferences = false
     @State private var errorMessage: String?
+    @State private var policyRequestID = 0
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -46,6 +47,8 @@ struct ConsentSetupView: View {
     }
 
     private func loadConsentPolicy() async {
+        policyRequestID += 1
+        let requestID = policyRequestID
         // Démarrer fermé : aucune finalité optionnelle avant une politique valide.
         applyAnalyticsChoice(false)
         do {
@@ -56,6 +59,7 @@ struct ConsentSetupView: View {
                 propertyId: "PROPERTY_ID",
                 channel: "ios"
             )
+            guard requestID == policyRequestID else { return }
             errorMessage = nil
             let consentManager = AmanConsentManager(policy: policy)
             consentManager.onEffectivePurposeStatesChanged = { states in
@@ -68,6 +72,7 @@ struct ConsentSetupView: View {
             }
             applyAnalyticsChoice(consentManager.isAllowed("analytics"))
         } catch {
+            guard requestID == policyRequestID else { return }
             manager?.markPolicyUnavailable()
             showingPreferences = false
             applyAnalyticsChoice(false)
@@ -76,6 +81,8 @@ struct ConsentSetupView: View {
     }
 
     private func refreshConsentPolicy() async {
+        policyRequestID += 1
+        let requestID = policyRequestID
         guard let manager else {
             await loadConsentPolicy()
             return
@@ -88,10 +95,14 @@ struct ConsentSetupView: View {
                 propertyId: "PROPERTY_ID",
                 channel: "ios"
             )
+            guard requestID == policyRequestID else { return }
             manager.updatePolicy(policy)
+            _ = manager.refreshExpiredDecision()
             errorMessage = nil
+            if manager.decision == nil { showingPreferences = true }
             applyAnalyticsChoice(manager.isAllowed("analytics"))
         } catch {
+            guard requestID == policyRequestID else { return }
             manager.markPolicyUnavailable()
             showingPreferences = false
             applyAnalyticsChoice(false)

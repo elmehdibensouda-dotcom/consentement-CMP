@@ -170,6 +170,7 @@ struct AmanConsentIntegrationView: View {
     @State private var manager: AmanConsentManager?
     @State private var showingPreferences = false
     @State private var errorMessage: String?
+    @State private var policyRequestID = 0
     @Environment(\\.scenePhase) private var scenePhase
 
     private let propertyId = ${propertyId}
@@ -203,6 +204,8 @@ struct AmanConsentIntegrationView: View {
     }
 
     private func loadConsentPolicy() async {
+        policyRequestID += 1
+        let requestID = policyRequestID
         // Désactiver aussi l’auto-initialisation/collecte des SDK dans leur configuration native.
         applyAnalyticsChoice(false)
         do {
@@ -212,6 +215,7 @@ struct AmanConsentIntegrationView: View {
                 propertyId: propertyId,
                 channel: "ios"
             )
+            guard requestID == policyRequestID else { return }
             errorMessage = nil
             let consentManager: AmanConsentManager
             if let manager {
@@ -228,6 +232,7 @@ struct AmanConsentIntegrationView: View {
             if consentManager.decision == nil { showingPreferences = true }
             applyAnalyticsChoice(consentManager.isAllowed("analytics")) // Réconcilier aussi un choix déjà enregistré.
         } catch {
+            guard requestID == policyRequestID else { return }
             manager?.markPolicyUnavailable()
             showingPreferences = false
             applyAnalyticsChoice(false)
@@ -237,6 +242,8 @@ struct AmanConsentIntegrationView: View {
     }
 
     private func refreshConsentPolicy() async {
+        policyRequestID += 1
+        let requestID = policyRequestID
         guard let manager else {
             await loadConsentPolicy()
             return
@@ -248,12 +255,14 @@ struct AmanConsentIntegrationView: View {
                 propertyId: propertyId,
                 channel: "ios"
             )
+            guard requestID == policyRequestID else { return }
             manager.updatePolicy(policy)
             _ = manager.refreshExpiredDecision()
             errorMessage = nil
             if manager.decision == nil { showingPreferences = true }
             applyAnalyticsChoice(manager.isAllowed("analytics"))
         } catch {
+            guard requestID == policyRequestID else { return }
             manager.markPolicyUnavailable()
             showingPreferences = false
             applyAnalyticsChoice(false)
