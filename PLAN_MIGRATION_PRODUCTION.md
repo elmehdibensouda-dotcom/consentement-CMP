@@ -1,6 +1,6 @@
 # Plan de transition vers un service hébergeable
 
-**État :** plan d’ingénierie interne, 6 octobre 2026  
+**État :** plan d’ingénierie interne, 7 octobre 2026
 **But :** préparer un pilote entreprise sans présenter le prototype local comme apte à recevoir des données réelles.
 
 ## Décision d’architecture proposée
@@ -9,7 +9,7 @@ Conserver SQLite pour le développement local et retenir PostgreSQL comme cible 
 
 Le serveur continuera de refuser `AMAN_ENVIRONMENT=production` jusqu’à ce que les critères de mise en service ci-dessous soient satisfaits et qu’une revue sécurité distincte ait été effectuée.
 
-## État source vérifié au 6 octobre 2026
+## État source vérifié au 7 octobre 2026
 
 - `backend/aman_api/main.py` conserve SQLite comme moteur local, mais reçoit maintenant une interface `Connection` et délègue l’ouverture, la fermeture, les transactions et les erreurs d’intégrité au module `backend/aman_api/database.py`.
 - L’adaptateur SQLite garde le mode WAL, les clés étrangères, le mode d’accès aux lignes, les vérifications de permissions et `BEGIN IMMEDIATE`. Le SQL métier reste dans les routes et utilise le marqueur `?` ; l’extraction en dépôts métier et la définition du paramétrage portable ne sont donc pas terminées.
@@ -20,6 +20,9 @@ Le serveur continuera de refuser `AMAN_ENVIRONMENT=production` jusqu’à ce que
 - Les cookies de session et CSRF portent `Secure` dans tous les environnements hors `development`. La démo locale HTTP reste possible ; une préproduction HTTPS ne dépend pas du nom de l’environnement pour protéger ses cookies.
 - Une propriété étiquetée `production` impose désormais la publication à deux personnes, même si l’organisation a désactivé cette option ailleurs : l’auteur de la dernière modification du brouillon ne peut pas le publier. Cette règle protège le workflow; elle ne fournit ni isolation d’environnement, ni approbation juridique, ni aptitude de production.
 - Un adaptateur PostgreSQL de préproduction est maintenant sélectionné par `AMAN_DATABASE_URL`, avec pool borné, exigence `sslmode=verify-full` pour les hôtes distants, migrations versionnées et index unique de politique publiée. Les limites de connexion, événements et invitations utilisent des buckets transactionnels partagés ; PostgreSQL exige un `AMAN_RATE_LIMIT_HASH_KEY` commun entre instances. `AMAN_MIGRATION_DATABASE_URL` permet une connexion opérateur directe distincte ; sur un hôte distant, les rôles explicites doivent différer et cibler la même base. Aucun service PostgreSQL externe n’a encore été configuré ou validé.
+- La console multi-organisation affiche maintenant les décisions reçues sur 30 jours, la dernière décision encore retenue, les agrégats par finalité et version avec libellés FR/AR, et le CSV par propriété. L’export est un `POST` avec CSRF ; une demande et le nombre d’événements présents à cet instant sont inscrits au journal, sans prétendre confirmer la fin du téléchargement. Ces décisions sont déclarées par les SDK et ne démontrent pas l’affichage, l’identité du visiteur ou l’application effective du choix.
+- `GET /v1/auth/me` renvoie le jeton CSRF après validation du cookie et de son condensat de session pour permettre à une console servie sur une origine distincte de l’API de reprendre ses mutations après rechargement. CORS doit toujours autoriser l’origine exacte et la console doit rester sur le même site que l’API pour que les cookies `SameSite=Strict` soient envoyés. Ce parcours n’a pas encore été validé sur un déploiement multi-origine réel.
+- Les ajouts du tableau de bord, l’audit de demande d’export et l’initialisation CSRF multi-origine sont présents dans le checkout de développement ; ils n’ont pas encore été validés par la suite de tests ou contre PostgreSQL.
 
 ## Tranches de migration
 

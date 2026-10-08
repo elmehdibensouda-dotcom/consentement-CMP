@@ -673,12 +673,19 @@ def logout(request: Request, response: Response, x_aman_csrf: Optional[str] = He
 @app.get("/v1/auth/me")
 def who_am_i(request: Request):
     context = current_session(request)
+    csrf_token = request.cookies.get(CSRF_COOKIE)
     with connection() as conn:
+        session = conn.execute(
+            "SELECT csrf_hash FROM sessions WHERE token_hash=?", (context.session_hash,)
+        ).fetchone()
         orgs = conn.execute(
             "SELECT o.id,o.name,m.role FROM organizations o JOIN memberships m ON m.org_id=o.id "
             "WHERE m.user_id=? ORDER BY o.name", (context.user_id,),
         ).fetchall()
+    if not session or not csrf_token or not hmac.compare_digest(digest(csrf_token), session["csrf_hash"]):
+        raise HTTPException(status_code=403, detail="CSRF token unavailable; sign in again")
     return {"userId": context.user_id, "email": context.email,
+            "csrfToken": csrf_token,
             "organizations": [dict(row) for row in orgs]}
 
 
@@ -707,23 +714,26 @@ def dashboard(request: Request):
             (context.user_id,),
         ).fetchall()
         recent_events = conn.execute(
-            "SELECT e.id,e.org_id,o.name AS organization_name,e.actor_user_id,e.action,"
+            "SELECT e.id,e.org_id,o.name AS organization_name,e.actor_user_id,u.email AS actor_email,e.action,"
             "e.resource_type,e.resource_id,e.occurred_at,e.details "
             "FROM audit_events e JOIN organizations o ON o.id=e.org_id "
+            "JOIN users u ON u.id=e.actor_user_id "
             "JOIN memberships m ON m.org_id=o.id "
             "WHERE m.user_id=? ORDER BY e.occurred_at DESC,e.id DESC LIMIT 12",
             (context.user_id,),
         ).fetchall()
         consent_counts = conn.execute(
-            "SELECT ce.property_id,COUNT(*) AS decision_count,"
-            "SUM(CASE WHEN ce.action='accept_all' THEN 1 ELSE 0 END) AS accept_all_count,"
-            "SUM(CASE WHEN ce.action='reject_all' THEN 1 ELSE 0 END) AS reject_all_count,"
-            "SUM(CASE WHEN ce.action='custom' THEN 1 ELSE 0 END) AS custom_count "
+            "SELECT ce.property_id,"
+            "SUM(CASE WHEN ce.recorded_at>=? THEN 1 ELSE 0 END) AS decision_count,"
+            "SUM(CASE WHEN ce.recorded_at>=? AND ce.action='accept_all' THEN 1 ELSE 0 END) AS accept_all_count,"
+            "SUM(CASE WHEN ce.recorded_at>=? AND ce.action='reject_all' THEN 1 ELSE 0 END) AS reject_all_count,"
+            "SUM(CASE WHEN ce.recorded_at>=? AND ce.action='custom' THEN 1 ELSE 0 END) AS custom_count,"
+            "MAX(ce.recorded_at) AS latest_decision_received_at "
             "FROM consent_events ce JOIN properties p ON p.id=ce.property_id "
             "JOIN memberships m ON m.org_id=p.org_id "
-            "WHERE m.user_id=? AND ce.recorded_at>=? AND ce.expires_at>? "
+            "WHERE m.user_id=? AND ce.expires_at>? "
             "GROUP BY ce.property_id",
-            (context.user_id, metrics_since, now),
+            (metrics_since, metrics_since, metrics_since, metrics_since, context.user_id, now),
         ).fetchall()
 
     property_items = [dict(row) for row in properties]
@@ -734,6 +744,7 @@ def dashboard(request: Request):
         item["consent_accept_all_count_30d"] = counts.get("accept_all_count", 0)
         item["consent_reject_all_count_30d"] = counts.get("reject_all_count", 0)
         item["consent_custom_count_30d"] = counts.get("custom_count", 0)
+        item["latest_decision_received_at"] = counts.get("latest_decision_received_at")
     organization_items = [dict(row) for row in organizations]
     for organization in organization_items:
         scoped = [item for item in property_items if item["org_id"] == organization["id"]]
@@ -744,6 +755,10 @@ def dashboard(request: Request):
         organization["consent_accept_all_count_30d"] = sum(item["consent_accept_all_count_30d"] for item in scoped)
         organization["consent_reject_all_count_30d"] = sum(item["consent_reject_all_count_30d"] for item in scoped)
         organization["consent_custom_count_30d"] = sum(item["consent_custom_count_30d"] for item in scoped)
+        organization["latest_decision_received_at"] = max(
+            (item["latest_decision_received_at"] for item in scoped if item["latest_decision_received_at"] is not None),
+            default=None,
+        )
     events = [{**dict(row), "details": json.loads(row["details"])} for row in recent_events]
     return {
         "summary": {
@@ -1513,8 +1528,9 @@ def list_audit(org_id: str, request: Request, limit: int = 100):
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor", "viewer"})
         rows = conn.execute(
-            "SELECT id,actor_user_id,action,resource_type,resource_id,occurred_at,details "
-            "FROM audit_events WHERE org_id=? ORDER BY occurred_at DESC LIMIT ?",
+            "SELECT e.id,e.actor_user_id,u.email AS actor_email,e.action,e.resource_type,e.resource_id,e.occurred_at,e.details "
+            "FROM audit_events e JOIN users u ON u.id=e.actor_user_id "
+            "WHERE e.org_id=? ORDER BY e.occurred_at DESC LIMIT ?",
             (org_id, max(1, min(limit, 500))),
         ).fetchall()
     return {"events": [
@@ -1549,27 +1565,27 @@ def export_audit(
         yield "\ufeff"
         buffer = io.StringIO(newline="")
         writer = csv.writer(buffer, lineterminator="\r\n")
-        writer.writerow(["event_id", "occurred_at_epoch", "actor_user_id", "action",
+        writer.writerow(["event_id", "occurred_at_epoch", "actor_user_id", "actor_email", "action",
                          "resource_type", "resource_id", "details_json"])
         yield buffer.getvalue()
         buffer.close()
 
-        clauses = ["org_id=?"]
+        clauses = ["e.org_id=?"]
         parameters: list[Any] = [org_id]
         if start is not None:
-            clauses.append("occurred_at>=?")
+            clauses.append("e.occurred_at>=?")
             parameters.append(start)
         if end is not None:
-            clauses.append("occurred_at<=?")
+            clauses.append("e.occurred_at<=?")
             parameters.append(end)
         parameters.append(limit)
 
         with connection() as conn:
             cursor = conn.execute(
-                "SELECT id,actor_user_id,action,resource_type,resource_id,occurred_at,details FROM ("
-                "SELECT id,actor_user_id,action,resource_type,resource_id,occurred_at,details "
-                "FROM audit_events WHERE " + " AND ".join(clauses) +
-                " ORDER BY occurred_at DESC,id DESC LIMIT ?) ORDER BY occurred_at ASC,id ASC",
+                "SELECT id,actor_user_id,actor_email,action,resource_type,resource_id,occurred_at,details FROM ("
+                "SELECT e.id,e.actor_user_id,u.email AS actor_email,e.action,e.resource_type,e.resource_id,e.occurred_at,e.details "
+                "FROM audit_events e JOIN users u ON u.id=e.actor_user_id WHERE " + " AND ".join(clauses) +
+                " ORDER BY e.occurred_at DESC,e.id DESC LIMIT ?) ORDER BY occurred_at ASC,id ASC",
                 parameters,
             )
             for row in cursor:
@@ -1577,7 +1593,7 @@ def export_audit(
                 writer = csv.writer(buffer, lineterminator="\r\n")
                 details = json.dumps(json.loads(row["details"]), ensure_ascii=False, separators=(",", ":"))
                 writer.writerow([audit_csv_cell(row[key]) for key in
-                                 ("id", "occurred_at", "actor_user_id", "action", "resource_type", "resource_id")] +
+                                 ("id", "occurred_at", "actor_user_id", "actor_email", "action", "resource_type", "resource_id")] +
                                 [audit_csv_cell(details)])
                 yield buffer.getvalue()
                 buffer.close()
@@ -1703,6 +1719,26 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
             "WHERE property_id=? AND recorded_at>=? AND expires_at>? ORDER BY recorded_at DESC",
             (property_id, since, now),
         ).fetchall()
+        policy_versions = sorted({
+            int(row["policy_version"])
+            for row in rows
+            if str(row["policy_version"]).isdigit()
+        })
+        policy_labels: Dict[str, Dict[str, Dict[str, str]]] = {}
+        for offset in range(0, len(policy_versions), 500):
+            version_batch = policy_versions[offset:offset + 500]
+            placeholders = ",".join("?" for _ in version_batch)
+            published_policies = conn.execute(
+                "SELECT version,body FROM policies WHERE property_id=? AND status IN ('published','retired') "
+                f"AND version IN ({placeholders})",
+                (property_id, *version_batch),
+            ).fetchall()
+            for policy_row in published_policies:
+                policy_body = json.loads(policy_row["body"])
+                policy_labels[str(policy_row["version"])] = {
+                    purpose["id"]: purpose.get("label", {})
+                    for purpose in policy_body.get("purposes", [])
+                }
     purpose_counts: Dict[Tuple[str, str], Dict[str, int]] = {}
     for row in rows:
         for purpose_id, allowed in json.loads(row["purposes"]).items():
@@ -1719,7 +1755,13 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
         "decisionCount": total,
         "actions": actions,
         "purposes": [
-            {"policyVersion": version, "purposeId": purpose_id, **counts}
+            {
+                "policyVersion": version,
+                "purposeId": purpose_id,
+                "purposeLabelFr": policy_labels.get(version, {}).get(purpose_id, {}).get("fr"),
+                "purposeLabelAr": policy_labels.get(version, {}).get(purpose_id, {}).get("ar"),
+                **counts,
+            }
             for (version, purpose_id), counts in sorted(purpose_counts.items())
         ],
         "firstRecordedAt": rows[-1]["recorded_at"] if rows else None,
@@ -1727,20 +1769,31 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
     }
 
 
-@app.get("/v1/organizations/{org_id}/properties/{property_id}/consent-events/export")
+@app.post("/v1/organizations/{org_id}/properties/{property_id}/consent-events/export")
 def export_consent_events(org_id: str, property_id: str, request: Request,
-                          days: int = Query(default=30, ge=1, le=3650)):
+                          days: int = Query(default=30, ge=1, le=3650),
+                          x_aman_csrf: Optional[str] = Header(default=None)):
     """Export retained SDK-reported decisions; this is not proof of visitor identity or display."""
     context = current_session(request)
     with connection() as conn:
         membership(conn, org_id, context.user_id)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    since = now - days * 86_400
+    with transaction() as conn:
+        membership(conn, org_id, context.user_id)
         prop = conn.execute(
             "SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
         ).fetchone()
-    if not prop:
-        raise HTTPException(status_code=404, detail="Property not found")
-    now = utc_now()
-    since = now - days * 86_400
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        matching_events = conn.execute(
+            "SELECT COUNT(*) AS event_count FROM consent_events "
+            "WHERE property_id=? AND recorded_at>=? AND expires_at>?",
+            (property_id, since, now),
+        ).fetchone()["event_count"]
+        audit(conn, org_id, context.user_id, "consent_events.export_requested", "property", property_id,
+              {"periodDays": days, "eventCountAtRequest": matching_events})
 
     def csv_rows():
         yield "\ufeff"

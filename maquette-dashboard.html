@@ -127,10 +127,15 @@
       'member.invited': 'Membre invité',
       'member.joined': 'Membre ajouté',
       'member.role_changed': 'Rôle modifié',
+      'consent_events.export_requested': 'Demande d’export des décisions',
       'member.removed': 'Membre retiré'
     };
     const $ = (id) => document.getElementById(id);
     let dashboard = null;
+    function csrfCookieValue() {
+      const cookie = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('aman_csrf='));
+      return cookie ? decodeURIComponent(cookie.slice('aman_csrf='.length)) : '';
+    }
 
     function element(tag, text, className) {
       const item = document.createElement(tag);
@@ -159,7 +164,7 @@
           exportStatus.textContent = 'Préparation de l’export…';
           try {
             const exportUrl = `${apiBase}/v1/organizations/${encodeURIComponent(property.org_id)}/properties/${encodeURIComponent(property.id)}/consent-events/export?days=30`;
-            const exportResponse = await fetch(exportUrl, { method: 'GET', credentials: 'include', cache: 'no-store' });
+            const exportResponse = await fetch(exportUrl, { method: 'POST', credentials: 'include', cache: 'no-store', headers: { 'X-Aman-CSRF': csrfCookieValue() } });
             if (!exportResponse.ok) throw new Error(`Impossible de préparer l’export (HTTP ${exportResponse.status}).`);
             const blob = await exportResponse.blob();
             const objectUrl = URL.createObjectURL(blob);
@@ -170,7 +175,7 @@
             link.click();
             link.remove();
             setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-            exportStatus.textContent = 'Export téléchargé. Événements déclarés par les SDK, sans identité de visiteur.';
+            exportStatus.textContent = 'Demande d’export enregistrée. Événements déclarés par les SDK, sans identité de visiteur.';
           } catch (error) {
             exportStatus.textContent = error.message;
           } finally {
@@ -188,12 +193,14 @@
         table.className = 'live-table';
         const head = document.createElement('thead');
         const header = document.createElement('tr');
-        ['Version', 'Finalité', 'Autorisée', 'Refusée'].forEach((label) => header.append(element('th', label)));
+        ['Version', 'Finalité (FR · AR)', 'Autorisée', 'Refusée'].forEach((label) => header.append(element('th', label)));
         head.append(header);
         const body = document.createElement('tbody');
         purposeEntries.forEach((counts) => {
           const row = document.createElement('tr');
-          row.append(element('td', `v${counts.policyVersion}`), element('td', counts.purposeId), element('td', counts.allowed), element('td', counts.declined));
+          const purposeLabel = element('td', counts.purposeLabelFr && counts.purposeLabelAr ? `${counts.purposeLabelFr} · ${counts.purposeLabelAr}` : counts.purposeId);
+          purposeLabel.dir = 'auto';
+          row.append(element('td', `v${counts.policyVersion}`), purposeLabel, element('td', counts.allowed), element('td', counts.declined));
           body.append(row);
         });
         table.append(head, body);
@@ -275,7 +282,7 @@
         row.append(element('span', '•', 'act-icon'));
         const copy = element('div');
         copy.append(element('b', labels[event.action] || event.action));
-        copy.append(element('small', `${event.organization_name} · ${event.resource_type}`));
+        copy.append(element('small', `${event.organization_name} · ${event.actor_email || event.actor_user_id} · ${event.resource_type}`));
         row.append(copy);
         const time = element('time', new Date(event.occurred_at * 1000).toLocaleString('fr-MA'));
         time.dateTime = new Date(event.occurred_at * 1000).toISOString();
