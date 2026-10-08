@@ -15,6 +15,8 @@ python backend/create_admin.py
 uvicorn aman_api.main:app --app-dir backend --host 127.0.0.1 --port 8001 --no-access-log
 ```
 
+Pour rétablir localement l’accès d’un compte de démonstration, arrêter l’API puis lancer `python backend/reset_password.py`. La commande ne fonctionne qu’en environnement `development` avec SQLite local, demande le nouveau mot de passe sans l’afficher et révoque les sessions existantes du compte. C’est une opération d’administrateur de la machine, pas une récupération autonome pour l’utilisateur ni une procédure à utiliser en production.
+
 Les changements de schéma SQLite sont versionnés dans `backend/aman_api/migrations/`. Exécuter `python backend/migrate_db.py` après chaque mise à jour de l’API et avant de démarrer le serveur. Le démarrage refuse une base non initialisée, en retard ou dont le schéma ne correspond pas au code. Les scripts locaux de création d’admin et de démonstration initialisent aussi les migrations pour faciliter le premier lancement.
 
 Le stockage de développement est SQLite dans `~/.alamane/aman-dev.sqlite3` par défaut ; une nouvelle base est créée avec le mode `0600` et son répertoire dédié en `0700`. Le chemin peut être remplacé par `AMAN_DATABASE_PATH`, à condition de choisir un répertoire privé. Les permissions des bases existantes ne sont pas modifiées automatiquement : vérifiez-les et protégez également les fichiers WAL/SHM déjà présents. La doc interactive est à <http://127.0.0.1:8001/docs>.

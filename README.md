@@ -38,6 +38,8 @@ Pour lancer chaque composant séparément :
    .venv/bin/python backend/create_admin.py
    ```
 
+   Si tu dois rétablir l’accès à un compte local, arrête l’API et lance `.venv/bin/python backend/reset_password.py`. Cette commande réservée au développement demande un nouveau mot de passe sans affichage et révoque les sessions de ce compte ; ce n’est pas un parcours de récupération en libre-service ni une procédure de production.
+
    Préparer le jeu de démonstration fictif après la création du compte :
 
    ```sh
