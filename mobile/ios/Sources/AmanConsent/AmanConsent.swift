@@ -550,6 +550,15 @@ public struct AmanConsentSheet: View {
             .navigationTitle(copy("Vos préférences", "تفضيلاتك"))
             .navigationBarTitleDisplayMode(.inline)
             .environment(\.layoutDirection, isArabic ? .rightToLeft : .leftToRight)
+            .onChange(of: manager.policy.policyVersion) { _ in
+                choices = manager.effectivePurposeStates
+            }
+            .onChange(of: manager.policy.propertyId) { _ in
+                choices = manager.effectivePurposeStates
+            }
+            .onChange(of: manager.policyAvailable) { _ in
+                choices = manager.effectivePurposeStates
+            }
         }
     }
 

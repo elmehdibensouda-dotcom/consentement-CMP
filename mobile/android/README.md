@@ -91,6 +91,8 @@ policyClient.fetchPublishedPolicy(apiBaseUrl, propertyId) { result ->
 }
 ```
 
+If the policy version or property changes while the native consent dialog is open, the manager dismisses that stale dialog. The host can then reopen it using the updated policy and its defaults.
+
 ### Optional central decision reporting
 
 Only after the client approves the visitor notice and collection design, the app may explicitly report each submitted choice from the decision listener:

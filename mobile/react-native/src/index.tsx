@@ -490,6 +490,10 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
   const [choices, setChoices] = useState<Record<string, boolean>>({});
   const onLoadErrorRef = useRef(onLoadError);
   onLoadErrorRef.current = onLoadError;
+  const policy = client.policy;
+  useEffect(() => {
+    setChoices(client.effectivePurposeStates());
+  }, [client, policy?.propertyId, policy?.policyVersion]);
   useEffect(() => {
     const unsubscribe = client.subscribe(() => setRevision((current) => current + 1));
     client.loadPolicy().then(() => {
@@ -530,7 +534,6 @@ export function AmanConsentBanner({ client, language, onLoadError }: AmanConsent
   useEffect(() => {
     if (!client.decision && client.policy) setOpen(true);
   }, [client, revision]);
-  const policy = client.policy;
   const lang = language ?? policy?.defaultLanguage ?? policy?.languages[0] ?? 'fr';
   const t = strings[lang];
   const rtl = lang === 'ar';

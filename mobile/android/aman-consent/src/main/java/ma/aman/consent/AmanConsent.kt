@@ -166,6 +166,7 @@ class AmanConsentManager(
     fun updatePolicy(updated: AmanConsentPolicy) {
         val previousPropertyId = policy.propertyId
         val changed = policy.policyVersion != updated.policyVersion
+        if (previousPropertyId != updated.propertyId || changed) dismissActiveConsentDialog()
         policy = updated
         policyAvailable = true
         if (previousPropertyId != updated.propertyId) {
@@ -177,6 +178,12 @@ class AmanConsentManager(
         } else restore()
         scheduleExpiryRefresh()
         effectivePurposeListeners.forEach { it(effectivePurposeStates) }
+    }
+
+    private fun dismissActiveConsentDialog() {
+        val dialog = activeConsentDialog ?: return
+        activeConsentDialog = null
+        expiryHandler.post { if (dialog.isShowing) dialog.dismiss() }
     }
 
     fun isAllowed(purposeId: String): Boolean {
