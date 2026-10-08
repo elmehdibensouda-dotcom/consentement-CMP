@@ -9,15 +9,29 @@
 | Site Web | `aman-cmp.js` | Fichier présent dans le dépôt ; un lancement manuel du workflow CI est configuré pour joindre un aperçu temporaire vérifiable. À héberger par l’équipe cliente sur un domaine qu’elle contrôle. |
 | Application React Native | `mobile/react-native` | Source installable depuis un checkout, ou tarball privé issu d’une exécution manuelle GitHub Actions (conservé 14 jours). Pas de publication npm. |
 | Application iOS native | `mobile/ios` | Package Swift depuis le dépôt privé ou un checkout local ; un lancement manuel du workflow CI est configuré pour joindre une archive source temporaire vérifiable. Pas de release signée ou publiée. |
-| Application Android native | `mobile/android` | Module Gradle depuis un checkout local ; l’AAR de prévisualisation vient d’une exécution manuelle GitHub Actions. Pas de release signée ou publiée dans Maven. |
+| Application Android native | `mobile/android` | Module Gradle depuis un checkout local ; le workflow est configuré pour joindre un dépôt Maven local (AAR, POM, métadonnées et sources), mais cette nouvelle sortie manuelle reste à générer. Pas de release signée ni de dépôt Maven distant. |
 
-Les trois aperçus destinés à une évaluation sont disponibles dans le [lancement manuel GitHub Actions du 8 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37755115197), jusqu’au 22 octobre 2026 : sources Web, sources Swift Package iOS, AAR Android, APK de démonstration, tarball React Native et SBOM CycloneDX React Native. Les SHA-256 des manifestes ont été vérifiés. Le manifeste protège l’intégrité des fichiers après téléchargement, pas leur origine ; l’APK utilise une clé debug et aucun artefact n’est une release signée ou de production.
+Les trois aperçus destinés à une évaluation sont disponibles dans le [lancement manuel GitHub Actions du 8 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37755115197), jusqu’au 22 octobre 2026 : sources Web, sources Swift Package iOS, AAR Android, APK de démonstration, tarball React Native et SBOM CycloneDX React Native. Ce lancement précède la génération du dépôt Maven local configurée depuis ; un nouveau lancement est nécessaire pour obtenir les POM, métadonnées et sources Android. Les SHA-256 des manifestes des aperçus existants ont été vérifiés. Le manifeste protège l’intégrité des fichiers après téléchargement, pas leur origine ; l’APK utilise une clé debug et aucun artefact n’est une release signée ou de production.
 
 Les SDK mobiles sont des bases de pilote. Aucun n’a encore été intégré et validé dans une application cliente. La compilation ou l’emballage en CI ne constitue pas une validation sur les appareils et versions du client.
 
 ### Distribution envisagée pour un pilote entreprise
 
 Hypothèse à confirmer avec l’acheteur : après revue et gel d’une version, remettre un bundle horodaté avec commit source, manifeste d’empreintes et inventaire de composants pour import dans le dépôt d’artefacts approuvé par le client. Ce dépôt GitHub est privé et les aperçus CI actuels expirent après 14 jours ; ils ne constituent pas une distribution client durable. Aucun accès client au dépôt ALAMANE, aucune release publique et aucune publication npm/Maven n’ont été mis en place. Les empreintes détectent une altération après création du bundle, mais ne remplacent ni une signature de release ni une attestation de provenance. Les exigences de signature, SBOM, approbation et conservation sont à convenir avec la sécurité du client avant transfert.
+
+Quand les trois artefacts temporaires d’un même commit sont disponibles localement, `scripts/prepare-sdk-handoff.sh` les vérifie puis crée un seul paquet de transfert identifié. Il exige un checkout propre du même commit, refuse les commits différents, les fichiers requis absents et l’écrasement d’une archive existante, et inclut les guides de chaque plateforme. Le bundle Android contient le dépôt Maven local (AAR, POM, métadonnées Gradle et sources) ainsi que l’APK d’exemple debug ; seul le dépôt Maven est destiné à une éventuelle importation cliente après revue. Le libellé fourni identifie le transfert ; il ne change pas la version des SDK et ne constitue pas une release. Le script ne compile ni ne signe les SDK ; le paquet conserve les limites listées dans `HANDOFF.md`. Utiliser uniquement les artefacts d’un commit examiné et transmettre le paquet selon le processus approuvé par le client.
+
+Exemple après avoir téléchargé et extrait les trois artefacts dans des dossiers distincts :
+
+```sh
+scripts/prepare-sdk-handoff.sh pilote-banque-01 \
+  /chemin/alamane-web-preview-COMMIT \
+  /chemin/alamane-mobile-preview-COMMIT \
+  /chemin/alamane-ios-preview-COMMIT \
+  .local/sdk-handoffs
+```
+
+L’archive `alamane-sdk-pilot-pilote-banque-01-COMMIT.tar.gz` et son fichier `.sha256` sont créés dans `.local/sdk-handoffs`. Vérifier le téléchargement depuis ce dossier avec `shasum -a 256 -c alamane-sdk-pilot-pilote-banque-01-COMMIT.tar.gz.sha256` sur macOS ou `sha256sum -c alamane-sdk-pilot-pilote-banque-01-COMMIT.tar.gz.sha256` sur Linux. Après extraction, vérifier également le manifeste `SHA256SUMS` à la racine du paquet. Ce dossier est ignoré par Git ; ne déposer le paquet que dans un stockage approuvé par l’acheteur.
 
 ## Préparer la propriété dans la console
 

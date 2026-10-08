@@ -11,7 +11,7 @@ gradle :aman-consent:assembleRelease
 gradle :sample:assembleDebug
 ```
 
-Le workflow GitHub Actions `Product validation` compile ces deux cibles. Un lancement manuel du workflow joint l’AAR, l’APK d’exemple et le tarball React Native dans un artefact de prévisualisation conservé 14 jours. Vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis consulter `BUILD-INFO.txt` pour confirmer le commit source et l’exécution. Ces fichiers permettent de détecter une corruption après téléchargement; ils ne sont pas signés comme release ni publiés dans un dépôt Maven.
+Le workflow GitHub Actions `Product validation` est configuré pour compiler ces deux cibles et publier la bibliothèque dans un dépôt Maven local au build. Un prochain lancement manuel doit joindre ce dépôt, l’APK d’exemple et le package React Native dans un artefact de prévisualisation conservé 14 jours ; cette nouvelle sortie n’a pas encore été générée. Vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis consulter `BUILD-INFO.txt` pour confirmer le commit source et l’exécution. Le dépôt Maven contient l’AAR, le POM, les métadonnées Gradle et l’archive des sources ; ces éléments ne sont pas signés comme release et ne sont pas publiés dans un dépôt distant.
 
 The library AAR is produced at `aman-consent/build/outputs/aar/aman-consent-release.aar`. To create a local Maven repository for inspection or internal distribution:
 
@@ -19,7 +19,19 @@ The library AAR is produced at `aman-consent/build/outputs/aar/aman-consent-rele
 gradle :aman-consent:publish
 ```
 
-The local publication is written below `aman-consent/build/repository/`; change the repository block and credentials through the consuming organization's approved artifact repository before distributing releases.
+The local publication is written below `aman-consent/build/repository/`. For a pilot, copy that repository tree into the client's approved artifact store, or configure its publication endpoint and credentials through the consuming organization's release process. Do not publish the preview APK as a client release.
+
+To consume a transferred local Maven repository, place its `ma/` directory under a client-controlled location such as `vendor/alamane-maven`, then add a Maven repository and the pinned coordinate:
+
+```kotlin
+repositories {
+    maven { url = uri("$rootDir/vendor/alamane-maven") }
+}
+
+dependencies {
+    implementation("ma.aman:aman-consent-android:0.1.0")
+}
+```
 
 ## Integrate from an Android application
 

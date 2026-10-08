@@ -95,6 +95,9 @@ jobs:
       - name: Build Android library and sample
         working-directory: mobile/android
         run: gradle --no-daemon :aman-consent:assembleRelease :sample:assembleDebug
+      - name: Publish Android SDK to a local Maven repository
+        working-directory: mobile/android
+        run: gradle --no-daemon :aman-consent:publish
       - name: Set up Node for the React Native pilot package
         uses: actions/setup-node@v6.0.0
         with:
@@ -118,18 +121,20 @@ jobs:
         run: |
           bundle="$RUNNER_TEMP/alamane-mobile-preview"
           mkdir -p "$bundle"
-          cp mobile/android/aman-consent/build/outputs/aar/aman-consent-release.aar "$bundle/"
+          cp -R mobile/android/aman-consent/build/repository "$bundle/maven-repository"
           cp mobile/android/sample/build/outputs/apk/debug/sample-debug.apk "$bundle/"
-          cp "$RUNNER_TEMP/aman-consent-react-native-0.1.0.tgz" "$bundle/"
-          cp "$RUNNER_TEMP/alamane-react-native.sbom.cdx.json" "$bundle/"
+          mkdir -p "$bundle/react-native"
+          cp "$RUNNER_TEMP/aman-consent-react-native-0.1.0.tgz" "$bundle/react-native/"
+          cp "$RUNNER_TEMP/alamane-react-native.sbom.cdx.json" "$bundle/react-native/"
           {
             echo "source_commit=$SOURCE_COMMIT"
             echo "workflow_run=$WORKFLOW_RUN_URL"
             echo "artifact_type=preview; APK uses the Android debug key; not a production release"
-            echo "sbom_scope=React Native package lock dependency graph only; not a full repository or platform image inventory"
+            echo "android_distribution=local Maven repository with AAR, POM, Gradle module metadata, and sources"
+            echo "sbom_scope=React Native package lock dependency graph only; not Android/iOS dependencies, full repository, or platform image inventory"
           } > "$bundle/BUILD-INFO.txt"
           cd "$bundle"
-          sha256sum aman-consent-release.aar sample-debug.apk aman-consent-react-native-0.1.0.tgz alamane-react-native.sbom.cdx.json > SHA256SUMS
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
       - name: Attach mobile preview bundle for manual runs
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7.0.1
