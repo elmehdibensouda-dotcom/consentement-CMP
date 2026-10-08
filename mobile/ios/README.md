@@ -145,7 +145,7 @@ Le manifeste fourni déclare cette capacité conditionnelle comme interaction pr
 
 ## Choix et cycle de vie
 
-- `AmanConsentManager.isAllowed(_:)` respecte le choix enregistré, sinon applique le réglage de départ de la politique : une finalité avec `consentRequired` activé reste inactive jusqu’à un choix positif ; si ce réglage est désactivé, elle démarre active mais reste désactivable par le visiteur.
+- `AmanConsentManager.isAllowed(_:)` respecte le choix enregistré, sinon applique le réglage de départ de la politique : une finalité avec `consentRequired` activé reste inactive jusqu’à un choix positif ; si ce réglage est désactivé, elle démarre active mais reste désactivable par le visiteur. C’est le comportement technique de la politique validée par le client, pas une qualification juridique faite par Aman ; le responsable et son équipe juridique / DPO doivent valider ce réglage avant publication.
 - `acceptAll()`, `rejectOptional()` et `saveChoices(_:)` enregistrent localement une décision typée et appellent `onConsentChanged` ainsi que `onEffectivePurposeStatesChanged`. L’envoi central requiert un appel séparé à `AmanConsentAPIClient.recordDecision`.
 - `updatePolicy(_:)` applique la nouvelle politique et notifie `onEffectivePurposeStatesChanged` ; une nouvelle version invalide le choix précédent de cette propriété et l’application doit synchroniser ses SDK tiers avec les nouveaux états. Les choix restent isolés par `propertyId`.
 - Si une politique ou sa propriété change pendant que `AmanConsentSheet` est visible, le formulaire recharge les états effectifs de la politique reçue afin de ne pas conserver des cases de l’ancienne version.
