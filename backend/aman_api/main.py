@@ -65,10 +65,15 @@ from .published_policy_repository import get_published_policy as load_published_
 from .policy_repository import (
     get_policy_for_organization,
     get_policy_for_draft_update,
+    get_policy_for_publication,
+    get_policy_body,
+    get_published_policy_id,
     get_property_channel,
     insert_policy_draft,
     list_property_policies as list_property_policy_rows,
+    mark_policy_published,
     next_policy_version,
+    retire_policy,
     update_policy_draft as persist_policy_draft_update,
 )
 
@@ -1417,21 +1422,11 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
-        row = conn.execute(
-            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,pr.environment,o.require_two_person_publish "
-            "FROM policies p JOIN properties pr ON pr.id=p.property_id "
-            "JOIN organizations o ON o.id=pr.org_id WHERE p.id=? AND pr.org_id=?",
-            (policy_id, org_id),
-        ).fetchone()
+        row = get_policy_for_publication(conn, policy_id, org_id)
         if not row:
             raise HTTPException(status_code=404, detail="Policy not found")
         conn.lock_property(row["property_id"])
-        row = conn.execute(
-            "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,pr.channel,pr.environment,o.require_two_person_publish "
-            "FROM policies p JOIN properties pr ON pr.id=p.property_id "
-            "JOIN organizations o ON o.id=pr.org_id WHERE p.id=? AND pr.org_id=?",
-            (policy_id, org_id),
-        ).fetchone()
+        row = get_policy_for_publication(conn, policy_id, org_id)
         if not row:
             raise HTTPException(status_code=404, detail="Policy not found")
         if row["status"] != "draft":
@@ -1440,16 +1435,16 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
         last_editor_id = row["last_edited_by"] or row["created_by"]
         if requires_second_person and last_editor_id == context.user_id:
             raise HTTPException(status_code=409, detail="A different owner or administrator must publish after the last draft edit")
-        current = conn.execute("SELECT id FROM policies WHERE property_id=? AND status='published'",
-                               (row["property_id"],)).fetchone()
+        current = get_published_policy_id(conn, row["property_id"])
         if current:
-            conn.execute("UPDATE policies SET status='retired' WHERE id=?", (current["id"],))
-        policy_body = conn.execute("SELECT body FROM policies WHERE id=?", (policy_id,)).fetchone()["body"]
+            retire_policy(conn, current["id"])
+        policy_body = get_policy_body(conn, policy_id)
         policy_body = json.loads(policy_body)
         policy_body["status"] = "published"
-        conn.execute("UPDATE policies SET status='published',body=?,published_by=?,published_at=? WHERE id=?",
-                     (json.dumps(policy_body, ensure_ascii=False, separators=(",", ":")),
-                      context.user_id, now, policy_id))
+        mark_policy_published(
+            conn, policy_id, json.dumps(policy_body, ensure_ascii=False, separators=(",", ":")),
+            context.user_id, now,
+        )
         audit(conn, org_id, context.user_id, "policy.published", "policy", policy_id,
               {"version": row["version"], "channel": row["channel"], "previousPolicyId": current["id"] if current else None})
     return {"id": policy_id, "propertyId": row["property_id"], "version": row["version"],

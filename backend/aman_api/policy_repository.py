@@ -83,3 +83,41 @@ def update_policy_draft(
         (body, actor_id, policy_id, expected_revision),
     )
     return cursor.rowcount
+
+
+def get_policy_for_publication(conn: Connection, policy_id: str, org_id: str) -> Any:
+    return conn.execute(
+        "SELECT p.id,p.property_id,p.version,p.status,p.created_by,p.last_edited_by,"
+        "pr.channel,pr.environment,o.require_two_person_publish "
+        "FROM policies p JOIN properties pr ON pr.id=p.property_id "
+        "JOIN organizations o ON o.id=pr.org_id WHERE p.id=? AND pr.org_id=?",
+        (policy_id, org_id),
+    ).fetchone()
+
+
+def get_published_policy_id(conn: Connection, property_id: str) -> Any:
+    return conn.execute(
+        "SELECT id FROM policies WHERE property_id=? AND status='published'",
+        (property_id,),
+    ).fetchone()
+
+
+def retire_policy(conn: Connection, policy_id: str) -> None:
+    conn.execute("UPDATE policies SET status='retired' WHERE id=?", (policy_id,))
+
+
+def get_policy_body(conn: Connection, policy_id: str) -> str:
+    return conn.execute("SELECT body FROM policies WHERE id=?", (policy_id,)).fetchone()["body"]
+
+
+def mark_policy_published(
+    conn: Connection,
+    policy_id: str,
+    body: str,
+    publisher_id: str,
+    published_at: int,
+) -> None:
+    conn.execute(
+        "UPDATE policies SET status='published',body=?,published_by=?,published_at=? WHERE id=?",
+        (body, publisher_id, published_at, policy_id),
+    )
