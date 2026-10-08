@@ -350,6 +350,10 @@
         addLine('Dernier éditeur',entry.last_editor);addLine('Publiée par',entry.publisher);
         addLine('Publiée le',entry.published_at?new Date(entry.published_at*1000).toLocaleString():'—');
         addLine('Durée configurée (jours)',policy.retentionDays);
+        if((policy.purposes||[]).some(purpose=>!purpose.required&&typeof purpose.initiallyEnabled!=='boolean')){
+          const migrationNotice=node('div','Cette politique historique ne précise pas l’état initial de certaines finalités optionnelles. Les SDK actuels les traitent comme désactivées avant un choix valide. Modifie le brouillon, choisis explicitement les réglages après validation par le responsable et son conseil, puis republie la politique.','notice warning');
+          migrationNotice.setAttribute('role','note');target.append(migrationNotice);
+        }
         const purposes=node('div');purposes.append(node('h3','Finalités de cette version'));
         (policy.purposes||[]).forEach(purpose=>{
           const item=node('div',undefined,'choice');
