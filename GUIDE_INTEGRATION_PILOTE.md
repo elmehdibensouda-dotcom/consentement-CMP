@@ -15,7 +15,7 @@ Les SDK mobiles sont des bases de pilote. Aucun n’a encore été intégré et 
 
 ## Préparer la propriété dans la console
 
-1. Créer ou sélectionner l’organisation du pilote, puis une propriété avec le canal correspondant (`web`, `ios`, `android` ou `react-native`). L’étiquette d’environnement sert à la gouvernance ; elle ne sépare pas les données ni les déploiements.
+1. Créer ou sélectionner l’organisation du pilote, puis une propriété avec le canal correspondant (`web`, `ios` ou `android`). Pour une application React Native multiplateforme, créer une propriété iOS et une propriété Android ; le SDK choisit l’identifiant et la politique du canal natif correspondant. L’étiquette d’environnement sert à la gouvernance ; elle ne sépare pas les données ni les déploiements.
 2. Renseigner les finalités, leur classification, la règle de choix préalable (`consentRequired`), l’état avant le premier choix (`initiallyEnabled`) et les textes français/arabe. Faire valider ces paramètres, les traductions, les durées et le traitement par les responsables du client et leurs conseils.
 3. Publier une politique pour cette propriété. Une propriété étiquetée production exige une publication par une autre personne que celle ayant modifié le brouillon.
 4. Copier l’identifiant de propriété généré par la console. Il sert à sélectionner une configuration publique et n’est pas un secret.
