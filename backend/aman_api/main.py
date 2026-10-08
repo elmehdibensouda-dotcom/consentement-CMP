@@ -84,6 +84,15 @@ from .organization_repository import (
     remove_member as persist_member_removal,
     update_member_role as persist_member_role_update,
 )
+from .invitation_repository import (
+    create_invitation,
+    get_invitation_for_revocation,
+    get_user_for_invitation,
+    has_active_invitation,
+    is_organization_member,
+    list_organization_invitations,
+    revoke_invitation as persist_invitation_revocation,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -919,23 +928,17 @@ def invite_member(org_id: str, body: InviteBody, request: Request,
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
         email = str(body.email).strip().lower()
-        existing_user = conn.execute("SELECT id,disabled FROM users WHERE email=?", (email,)).fetchone()
+        existing_user = get_user_for_invitation(conn, email)
         if existing_user and existing_user["disabled"]:
             raise HTTPException(status_code=409, detail="This Aman account is disabled")
-        if existing_user and conn.execute(
-            "SELECT 1 FROM memberships WHERE org_id=? AND user_id=?", (org_id, existing_user["id"])
-        ).fetchone():
+        if existing_user and is_organization_member(conn, org_id, existing_user["id"]):
             raise HTTPException(status_code=409, detail="This account is already a member of the organization")
-        active_invitation = conn.execute(
-            "SELECT 1 FROM invitations WHERE org_id=? AND email=? AND accepted_at IS NULL AND expires_at>? LIMIT 1",
-            (org_id, email, now),
-        ).fetchone()
-        if active_invitation:
+        if has_active_invitation(conn, org_id, email, now):
             raise HTTPException(status_code=409, detail="An active invitation already exists for this email")
         invite_id = secrets.token_hex(16)
-        conn.execute(
-            "INSERT INTO invitations(id,org_id,email,role,token_hash,invited_by,expires_at) VALUES(?,?,?,?,?,?,?)",
-            (invite_id, org_id, email, body.role, digest(token), context.user_id, now + INVITE_TTL_SECONDS),
+        create_invitation(
+            conn, invite_id, org_id, email, body.role, digest(token), context.user_id,
+            now + INVITE_TTL_SECONDS,
         )
         audit(conn, org_id, context.user_id, "member.invited", "invitation", invite_id, {"role": body.role})
     # This development build returns the one-time token instead of sending email.
@@ -949,13 +952,7 @@ def list_invitations(org_id: str, request: Request):
     with connection() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
-        rows = conn.execute(
-            "SELECT i.id,i.email,i.role,i.expires_at AS expiresAt,u.email AS invitedBy "
-            "FROM invitations i JOIN users u ON u.id=i.invited_by "
-            "WHERE i.org_id=? AND i.accepted_at IS NULL "
-            "ORDER BY i.expires_at DESC,i.email",
-            (org_id,),
-        ).fetchall()
+        rows = list_organization_invitations(conn, org_id)
     now = utc_now()
     invitations = [
         {**dict(row), "status": "pending" if row["expiresAt"] > now else "expired"}
@@ -972,15 +969,12 @@ def revoke_invitation(org_id: str, invitation_id: str, request: Request,
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
-        invite = conn.execute(
-            "SELECT email,role,accepted_at FROM invitations WHERE id=? AND org_id=?",
-            (invitation_id, org_id),
-        ).fetchone()
+        invite = get_invitation_for_revocation(conn, org_id, invitation_id)
         if not invite:
             raise HTTPException(status_code=404, detail="Invitation not found")
         if invite["accepted_at"] is not None:
             raise HTTPException(status_code=409, detail="Invitation has already been accepted")
-        conn.execute("DELETE FROM invitations WHERE id=? AND org_id=?", (invitation_id, org_id))
+        persist_invitation_revocation(conn, org_id, invitation_id)
         audit(conn, org_id, context.user_id, "member.invitation_revoked", "invitation", invitation_id,
               {"role": invite["role"]})
     return {"ok": True}
