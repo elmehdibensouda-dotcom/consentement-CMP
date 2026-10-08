@@ -121,7 +121,7 @@
       rows.forEach(row=>table.append(row));target.append(table);
     }
     function formatLastDecision(timestamp){return timestamp==null?'Aucune décision conservée':new Date(timestamp*1000).toLocaleString()}
-    function auditActionLabel(action){return action==='consent_events.export_requested'?'Demande d’export des décisions':action==='organization.approval_setting_updated'?'Modification du réglage d’approbation':action}
+    function auditActionLabel(action){return action==='consent_events.export_requested'?'Demande d’export des décisions':action==='organization.approval_setting_updated'?'Modification du réglage d’approbation':action==='member.invitation_delivery_updated'?'Résultat de livraison d’invitation':action}
     async function loadDashboard(){
       clearError('dashboardError');
       const data=await api('/v1/dashboard');
@@ -885,15 +885,21 @@ class ConsentActivity : Activity() {
       try{
         const inviteEmail=$('memberEmail').value.trim();const inviteRole=$('memberRole').value;const inviteRoleLabel=$('memberRole').selectedOptions[0]?.textContent||inviteRole;
         const result=await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/invitations`,{method:'POST',body:{email:inviteEmail,role:inviteRole}});
-        const invitationUrl=new URL('admin.html',window.location.href);invitationUrl.hash=new URLSearchParams({invite:result.invitationToken}).toString();
-        const copyButton=node('button','Copier le lien d’invitation','btn');copyButton.type='button';
-        copyButton.addEventListener('click',async()=>{
-          try{await navigator.clipboard.writeText(invitationUrl.href);copyButton.textContent='Lien copié';}
-          catch(_){window.prompt('Copie ce lien et transmets-le au destinataire par un canal approuvé.',invitationUrl.href)}
-        });
         const expiry=new Date(result.expiresAt*1000).toLocaleString();
-        const emailLink=node('a','Préparer un e-mail','btn');emailLink.href=`mailto:${encodeURIComponent(inviteEmail)}?${new URLSearchParams({subject:`Invitation ALAMANE · ${state.org.name}`,body:`Bonjour,\n\nVous êtes invité(e) à rejoindre l’organisation « ${state.org.name} » avec le rôle « ${inviteRoleLabel} ».\n\nOuvrez ce lien pour examiner et accepter l’invitation :\n${invitationUrl.href}\n\nLe lien expire le ${expiry}.\n\nALAMANE`})}`;
-        $('inviteResult').append(node('div',`Transmets ce lien au destinataire par un canal approuvé. Le jeton à usage unique est inclus dans le lien et expire le ${expiry}.`,'success'),copyButton,emailLink);
+        if(result.delivery==='sent'){
+          $('inviteResult').append(node('div',`Message remis au relais SMTP pour ${inviteEmail}. Le relais confirme l’acceptation du message, pas sa réception dans la boîte du destinataire. Le lien à usage unique expire le ${expiry}.`,'success'));
+        }else{
+          if(!result.invitationToken)throw new Error('Le lien de secours n’est pas disponible. Vérifie l’état de l’invitation avant de réessayer.');
+          const invitationUrl=new URL('admin.html',window.location.href);invitationUrl.hash=new URLSearchParams({invite:result.invitationToken}).toString();
+          const copyButton=node('button','Copier le lien d’invitation','btn');copyButton.type='button';
+          copyButton.addEventListener('click',async()=>{
+            try{await navigator.clipboard.writeText(invitationUrl.href);copyButton.textContent='Lien copié';}
+            catch(_){window.prompt('Copie ce lien et transmets-le au destinataire par un canal approuvé.',invitationUrl.href)}
+          });
+          const emailLink=node('a','Préparer un e-mail','btn');emailLink.href=`mailto:${encodeURIComponent(inviteEmail)}?${new URLSearchParams({subject:`Invitation ALAMANE · ${state.org.name}`,body:`Bonjour,\n\nVous êtes invité(e) à rejoindre l’organisation « ${state.org.name} » avec le rôle « ${inviteRoleLabel} ».\n\nOuvrez ce lien pour examiner et accepter l’invitation :\n${invitationUrl.href}\n\nLe lien expire le ${expiry}.\n\nALAMANE`})}`;
+          const deliveryMessage=result.delivery==='failed'?'L’envoi automatique a échoué ; l’invitation existe. Transmets ce lien par un canal approuvé.':'Aucun relais e-mail n’est configuré. Transmets ce lien par un canal approuvé.';
+          $('inviteResult').append(node('div',`${deliveryMessage} Le jeton à usage unique est inclus dans le lien et expire le ${expiry}.`,result.delivery==='failed'?'notice warning':'success'),copyButton,emailLink);
+        }
         $('memberEmail').value='';await loadMembers();await loadAudit();
       }catch(err){error('memberError',err.message)}
     });

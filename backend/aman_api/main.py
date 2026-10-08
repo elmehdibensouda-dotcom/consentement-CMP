@@ -121,6 +121,11 @@ from .invitation_repository import (
     mark_invitation_accepted,
     revoke_invitation as persist_invitation_revocation,
 )
+from .invitation_delivery import (
+    InvitationEmailConfigurationError,
+    load_invitation_email_config,
+    send_invitation_email,
+)
 from .ownership_transfer_repository import (
     create_transfer as persist_ownership_transfer,
     get_membership_role as get_ownership_membership_role,
@@ -976,11 +981,22 @@ def invite_member(org_id: str, body: InviteBody, request: Request,
                   x_aman_csrf: Optional[str] = Header(default=None)):
     context = current_session(request)
     require_csrf(request, context, x_aman_csrf)
+    with connection() as conn:
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+    try:
+        email_config = load_invitation_email_config()
+    except InvitationEmailConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="Invitation email delivery is misconfigured") from exc
     token = secrets.token_urlsafe(40)
     now = utc_now()
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
+        org_row = conn.execute("SELECT name FROM organizations WHERE id=?", (org_id,)).fetchone()
+        if not org_row:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        org_name = org_row["name"]
         email = str(body.email).strip().lower()
         existing_user = get_user_for_invitation(conn, email)
         if existing_user and existing_user["disabled"]:
@@ -994,10 +1010,28 @@ def invite_member(org_id: str, body: InviteBody, request: Request,
             conn, invite_id, org_id, email, body.role, digest(token), context.user_id,
             now + INVITE_TTL_SECONDS,
         )
-        audit(conn, org_id, context.user_id, "member.invited", "invitation", invite_id, {"role": body.role})
-    # This development build returns the one-time token instead of sending email.
-    return {"invitationToken": token, "expiresAt": now + INVITE_TTL_SECONDS,
-            "delivery": "development-only; deliver through a reviewed invitation service before production"}
+        audit(conn, org_id, context.user_id, "member.invited", "invitation", invite_id,
+              {"role": body.role, "deliveryMethod": "smtp" if email_config else "manual"})
+
+    delivery = "manual"
+    if email_config:
+        try:
+            send_invitation_email(email_config, email, org_name, body.role, token, now + INVITE_TTL_SECONDS)
+            delivery = "sent"
+        except Exception:
+            delivery = "failed"
+            LOGGER.warning("SMTP invitation delivery failed for invitation_id=%s", invite_id)
+        try:
+            with transaction() as conn:
+                audit(conn, org_id, context.user_id, "member.invitation_delivery_updated", "invitation",
+                      invite_id, {"method": "smtp", "status": delivery})
+        except Exception:
+            LOGGER.exception("Could not record invitation delivery status for invitation_id=%s", invite_id)
+
+    result = {"expiresAt": now + INVITE_TTL_SECONDS, "delivery": delivery}
+    if delivery != "sent":
+        result["invitationToken"] = token
+    return result
 
 
 @app.get("/v1/organizations/{org_id}/invitations")
