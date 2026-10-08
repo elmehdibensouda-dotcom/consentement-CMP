@@ -10,7 +10,7 @@ Le SDK revalide le cache avec l’ETag de la politique ; une réponse `304` réu
 
 ## Installation du paquet pilote privé
 
-Depuis l’exécution manuelle du workflow GitHub Actions, télécharger l’artefact `alamane-mobile-preview-<commit>`, vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis vérifier `BUILD-INFO.txt` pour confirmer le commit source et l’exécution attendue. Le manifeste protège l’intégrité après téléchargement; il ne signe pas le package et ne certifie pas son origine. Extraire `aman-consent-react-native-0.1.0.tgz`. Dans l’application cliente, installer le tarball avec l’adaptateur de stockage choisi par l’application :
+Pour une exécution manuelle lancée depuis un commit contenant cette configuration, télécharger l’artefact `alamane-mobile-preview-<commit>`, vérifier `SHA256SUMS` avec `shasum -a 256 -c SHA256SUMS` sur macOS ou `sha256sum -c SHA256SUMS` sur Linux, puis vérifier `BUILD-INFO.txt` pour confirmer le commit source, l’exécution attendue et le périmètre limité du SBOM CycloneDX fourni (`alamane-react-native.sbom.cdx.json`). Ce SBOM décrit le graphe de dépendances npm du package React Native ; il ne couvre ni les dépendances Android/iOS, ni l’image de build, ni l’ensemble du dépôt. Le manifeste protège l’intégrité après téléchargement; il ne signe pas le package et ne certifie pas son origine. Extraire `aman-consent-react-native-0.1.0.tgz`. Dans l’application cliente, installer le tarball avec l’adaptateur de stockage choisi par l’application :
 
 ```sh
 npm install ./aman-consent-react-native-0.1.0.tgz @react-native-async-storage/async-storage
@@ -102,7 +102,7 @@ Pour signaler un choix au serveur, l’application peut appeler `aman.recordDeci
 
 ## Limites avant pilote
 
-- SDK pilote compilé et non publié sur npm; aucune matrice de compatibilité, release signée, SBOM ou validation d’accessibilité n’est fournie.
+- SDK pilote compilé et non publié sur npm ; pas de matrice de compatibilité ni de release signée. Le workflow est configuré pour joindre un SBOM CycloneDX limité au graphe npm React Native lors d’un lancement manuel, mais cette configuration n’a pas encore été exécutée ; il manque un SBOM couvrant les plateformes natives et l’environnement de build, ainsi qu’une validation d’accessibilité.
 - Le stockage est fourni par l’application. Si son écriture échoue, le choix ne dure que pendant la session en mémoire. Le choix reste local jusqu’à un appel d’envoi explicite; il n’existe pas de synchronisation multi-appareil ni de file de reprise.
 - L’application doit démarrer, arrêter et réconcilier réellement ses SDK tiers. Une bibliothèque native déjà initialisée peut ne pas pouvoir être déchargée.
 - La collecte, les formalités, les durées et le contenu de l’avis restent à valider par le client et ses conseils; le SDK ne garantit pas la conformité.
