@@ -28,29 +28,37 @@ For a source checkout, include `:aman-consent` as a Gradle project module. For a
 Avant d’utiliser ce code, désactive l’auto-initialisation et l’auto-collecte de chaque SDK facultatif dans sa configuration Android. Le callback intervient après le démarrage de l’application ; `startAnalyticsIfNotStarted()` doit initialiser le SDK seulement si l’état est autorisé. `stopAnalyticsIfSupported()` ne peut pas annuler les données déjà envoyées ni décharger une bibliothèque native.
 
 ```kotlin
-val policyClient = AmanConsentAPIClient(applicationContext)
-var consent: AmanConsentManager? = null
-// Démarrer fermé. Les SDK facultatifs doivent déjà être configurés sans auto-initialisation.
-stopAnalyticsIfSupported()
-policyClient.fetchPublishedPolicy("https://cmp.example.ma", "PROPERTY_ID") { result ->
-    result.onSuccess { policy ->
-        val current = consent ?: AmanConsentManager(applicationContext, policy).also { created ->
-            consent = created
-            created.addEffectivePurposeStatesChangedListener { states ->
-                runOnUiThread {
-                    if (states["analytics"] == true) startAnalyticsIfNotStarted()
-                    else stopAnalyticsIfSupported()
-                }
-            }
-        }
-        current.updatePolicy(policy)
-        if (current.decision == null) current.showConsentDialog(this)
-        if (current.isAllowed("analytics")) startAnalyticsIfNotStarted()
-    }.onFailure {
+private val policyClient = AmanConsentAPIClient(applicationContext)
+private var consent: AmanConsentManager? = null
+private var policyRequestId = 0L
+
+override fun onResume() {
+    super.onResume()
+    consent?.refreshExpiredDecision()
+    // Démarrer fermé. Les SDK facultatifs doivent déjà être configurés sans auto-initialisation.
+    stopAnalyticsIfSupported()
+    val requestId = ++policyRequestId
+    policyClient.fetchPublishedPolicy("https://cmp.example.ma", "PROPERTY_ID") { result ->
         runOnUiThread {
-            consent?.markPolicyUnavailable()
-            stopAnalyticsIfSupported()
-            showPolicyRetry()
+            if (requestId != policyRequestId) return@runOnUiThread
+            result.onSuccess { policy ->
+                val current = consent ?: AmanConsentManager(applicationContext, policy).also { created ->
+                    consent = created
+                    created.addEffectivePurposeStatesChangedListener { states ->
+                        runOnUiThread {
+                            if (states["analytics"] == true) startAnalyticsIfNotStarted()
+                            else stopAnalyticsIfSupported()
+                        }
+                    }
+                }
+                current.updatePolicy(policy)
+                if (current.decision == null) current.showConsentDialog(this)
+                if (current.isAllowed("analytics")) startAnalyticsIfNotStarted()
+            }.onFailure {
+                consent?.markPolicyUnavailable()
+                stopAnalyticsIfSupported()
+                showPolicyRetry()
+            }
         }
     }
 }

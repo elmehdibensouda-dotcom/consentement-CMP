@@ -296,6 +296,7 @@ class ConsentActivity : Activity() {
     private val amanPropertyId = ${propertyId}
     private val amanClient by lazy { AmanConsentAPIClient(applicationContext) }
     private var amanManager: AmanConsentManager? = null
+    private var amanPolicyRequestId = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -308,20 +309,22 @@ class ConsentActivity : Activity() {
         amanManager?.refreshExpiredDecision()
         // Garder les SDK facultatifs arrêtés jusqu’à la revalidation de la politique.
         stopAnalyticsIfSupported()
+        val requestId = ++amanPolicyRequestId
         amanClient.fetchPublishedPolicy(amanApiBaseUrl, amanPropertyId, channel = "android") { result ->
-            result.onSuccess { policy ->
-                val manager = amanManager ?: AmanConsentManager(applicationContext, policy).also { created ->
-                    created.addEffectivePurposeStatesChangedListener { states ->
-                        runOnUiThread { applyAnalyticsChoice(states["analytics"] == true) }
+            runOnUiThread {
+                if (requestId != amanPolicyRequestId) return@runOnUiThread
+                result.onSuccess { policy ->
+                    val manager = amanManager ?: AmanConsentManager(applicationContext, policy).also { created ->
+                        created.addEffectivePurposeStatesChangedListener { states ->
+                            runOnUiThread { applyAnalyticsChoice(states["analytics"] == true) }
+                        }
+                        amanManager = created
                     }
-                    amanManager = created
-                }
-                manager.updatePolicy(policy)
-                applyAnalyticsChoice(manager.isAllowed("analytics")) // Appliquer aussi un choix déjà enregistré.
-                if (manager.decision == null) manager.showConsentDialog(this)
-            }.onFailure {
-                amanManager?.markPolicyUnavailable()
-                runOnUiThread {
+                    manager.updatePolicy(policy)
+                    applyAnalyticsChoice(manager.isAllowed("analytics")) // Appliquer aussi un choix déjà enregistré.
+                    if (manager.decision == null) manager.showConsentDialog(this)
+                }.onFailure {
+                    amanManager?.markPolicyUnavailable()
                     stopAnalyticsIfSupported()
                     showPolicyRetry()
                 }
