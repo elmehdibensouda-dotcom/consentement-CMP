@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 
 from fastapi import Body, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, constr
@@ -644,6 +644,14 @@ if STATIC_CONSOLE_DIR.is_dir():
         StaticFiles(directory=STATIC_CONSOLE_DIR, html=True),
         name="console",
     )
+
+    @app.get("/aman-cmp.js", include_in_schema=False)
+    def serve_web_consent_sdk():
+        return FileResponse(
+            STATIC_CONSOLE_DIR / "aman-cmp.js",
+            media_type="application/javascript",
+        )
+
 app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,

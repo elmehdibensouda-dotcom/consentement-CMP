@@ -10,7 +10,7 @@ Depuis la racine du dépôt :
 docker build -t alamane-api:staging .
 ```
 
-Ne pas transmettre de mot de passe ou d’URL de base dans un argument `--build-arg` : les secrets ne doivent pas être intégrés à l’image. L’image contient l’API, ses exigences Python, le schéma de politique et les fichiers statiques de la console. Après démarrage, la console est disponible sur `/console/` et l’API reste exposée sur les routes `/v1/` et `/health/ready`. En hébergement distant, la console utilise la même origine pour l’API ; place l’ensemble derrière un proxy TLS et configure une URL HTTPS côté intégration.
+Ne pas transmettre de mot de passe ou d’URL de base dans un argument `--build-arg` : les secrets ne doivent pas être intégrés à l’image. L’image contient l’API, ses exigences Python, le schéma de politique et les fichiers statiques de la console. Après démarrage, la console est disponible sur `/console/`, le SDK Web sur `/aman-cmp.js` et l’API sur les routes `/v1/` et `/health/ready`. En hébergement distant, la console utilise la même origine pour l’API ; place l’ensemble derrière un proxy TLS et configure une URL HTTPS côté intégration.
 
 ## Préparer une préproduction
 
