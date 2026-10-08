@@ -93,6 +93,18 @@ from .invitation_repository import (
     list_organization_invitations,
     revoke_invitation as persist_invitation_revocation,
 )
+from .ownership_transfer_repository import (
+    create_transfer as persist_ownership_transfer,
+    get_membership_role as get_ownership_membership_role,
+    get_pending_transfer,
+    get_transfer_by_token_hash,
+    has_active_transfer,
+    list_pending_transfers_for_revocation,
+    mark_transfer_accepted,
+    revoke_other_pending_transfers,
+    revoke_pending_transfers,
+    update_member_role as persist_ownership_member_role,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -853,40 +865,20 @@ def accept_ownership_transfer(body: AcceptOwnershipTransferBody, request: Reques
     require_csrf(request, context, x_aman_csrf)
     now = utc_now()
     with transaction() as conn:
-        transfer = conn.execute(
-            "SELECT id,org_id,current_owner_id,proposed_owner_id,expires_at,accepted_at,revoked_at "
-            "FROM ownership_transfers WHERE token_hash=?",
-            (digest(body.token),),
-        ).fetchone()
+        transfer = get_transfer_by_token_hash(conn, digest(body.token))
         if not transfer or transfer["accepted_at"] is not None or transfer["revoked_at"] is not None \
                 or transfer["expires_at"] <= now:
             raise HTTPException(status_code=400, detail="Ownership transfer is invalid or expired")
         if transfer["proposed_owner_id"] != context.user_id:
             raise HTTPException(status_code=403, detail="This transfer is addressed to another Aman account")
-        source = conn.execute(
-            "SELECT role FROM memberships WHERE org_id=? AND user_id=?",
-            (transfer["org_id"], transfer["current_owner_id"]),
-        ).fetchone()
-        target = conn.execute(
-            "SELECT role FROM memberships WHERE org_id=? AND user_id=?",
-            (transfer["org_id"], context.user_id),
-        ).fetchone()
+        source = get_ownership_membership_role(conn, transfer["org_id"], transfer["current_owner_id"])
+        target = get_ownership_membership_role(conn, transfer["org_id"], context.user_id)
         if not source or source["role"] != "owner" or not target or target["role"] != "admin":
             raise HTTPException(status_code=409, detail="Organization ownership changed before acceptance")
-        conn.execute(
-            "UPDATE memberships SET role='admin' WHERE org_id=? AND user_id=?",
-            (transfer["org_id"], transfer["current_owner_id"]),
-        )
-        conn.execute(
-            "UPDATE memberships SET role='owner' WHERE org_id=? AND user_id=?",
-            (transfer["org_id"], context.user_id),
-        )
-        conn.execute("UPDATE ownership_transfers SET accepted_at=? WHERE id=?", (now, transfer["id"]))
-        conn.execute(
-            "UPDATE ownership_transfers SET revoked_at=? WHERE org_id=? AND accepted_at IS NULL "
-            "AND revoked_at IS NULL AND id<>?",
-            (now, transfer["org_id"], transfer["id"]),
-        )
+        persist_ownership_member_role(conn, transfer["org_id"], transfer["current_owner_id"], "admin")
+        persist_ownership_member_role(conn, transfer["org_id"], context.user_id, "owner")
+        mark_transfer_accepted(conn, transfer["id"], now)
+        revoke_other_pending_transfers(conn, transfer["org_id"], transfer["id"], now)
         audit(conn, transfer["org_id"], context.user_id, "organization.ownership_transferred",
               "organization", transfer["org_id"],
               {"fromUserId": transfer["current_owner_id"], "toUserId": context.user_id})
@@ -1039,25 +1031,15 @@ def create_ownership_transfer(org_id: str, body: OwnershipTransferBody, request:
     with transaction() as conn:
         actor_role = membership(conn, org_id, context.user_id)
         require_role(actor_role, {"owner"})
-        target = conn.execute(
-            "SELECT role FROM memberships WHERE org_id=? AND user_id=?",
-            (org_id, body.proposedOwnerId),
-        ).fetchone()
+        target = get_ownership_membership_role(conn, org_id, body.proposedOwnerId)
         if not target or target["role"] != "admin":
             raise HTTPException(status_code=422, detail="The proposed owner must be an existing organization admin")
-        active = conn.execute(
-            "SELECT id FROM ownership_transfers WHERE org_id=? AND accepted_at IS NULL "
-            "AND revoked_at IS NULL AND expires_at>? LIMIT 1",
-            (org_id, now),
-        ).fetchone()
-        if active:
+        if has_active_transfer(conn, org_id, now):
             raise HTTPException(status_code=409, detail="An ownership transfer is already awaiting acceptance")
         transfer_id = secrets.token_hex(16)
         expires_at = now + OWNERSHIP_TRANSFER_TTL_SECONDS
-        conn.execute(
-            "INSERT INTO ownership_transfers(id,org_id,current_owner_id,proposed_owner_id,token_hash,created_at,expires_at) "
-            "VALUES(?,?,?,?,?,?,?)",
-            (transfer_id, org_id, context.user_id, body.proposedOwnerId, digest(token), now, expires_at),
+        persist_ownership_transfer(
+            conn, transfer_id, org_id, context.user_id, body.proposedOwnerId, digest(token), now, expires_at,
         )
         audit(conn, org_id, context.user_id, "organization.ownership_transfer_proposed",
               "ownership_transfer", transfer_id, {"proposedOwnerId": body.proposedOwnerId})
@@ -1071,13 +1053,7 @@ def get_pending_ownership_transfer(org_id: str, request: Request):
     with connection() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner"})
-        row = conn.execute(
-            "SELECT t.id,t.created_at,t.expires_at,u.email AS proposedOwner "
-            "FROM ownership_transfers t JOIN users u ON u.id=t.proposed_owner_id "
-            "WHERE t.org_id=? AND t.current_owner_id=? AND t.accepted_at IS NULL "
-            "AND t.revoked_at IS NULL AND t.expires_at>? ORDER BY t.created_at DESC LIMIT 1",
-            (org_id, context.user_id, utc_now()),
-        ).fetchone()
+        row = get_pending_transfer(conn, org_id, context.user_id, utc_now())
     return {"transfer": dict(row) if row else None}
 
 
@@ -1090,18 +1066,10 @@ def revoke_pending_ownership_transfer(org_id: str, request: Request,
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner"})
-        rows = conn.execute(
-            "SELECT id FROM ownership_transfers WHERE org_id=? AND current_owner_id=? "
-            "AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>?",
-            (org_id, context.user_id, now),
-        ).fetchall()
+        rows = list_pending_transfers_for_revocation(conn, org_id, context.user_id, now)
         if not rows:
             raise HTTPException(status_code=404, detail="No pending ownership transfer")
-        conn.execute(
-            "UPDATE ownership_transfers SET revoked_at=? WHERE org_id=? AND current_owner_id=? "
-            "AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>?",
-            (now, org_id, context.user_id, now),
-        )
+        revoke_pending_transfers(conn, org_id, context.user_id, now)
         for row in rows:
             audit(conn, org_id, context.user_id, "organization.ownership_transfer_revoked",
                   "ownership_transfer", row["id"])

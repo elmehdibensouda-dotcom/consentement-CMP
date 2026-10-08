@@ -41,6 +41,8 @@ Le serveur continuera de refuser `AMAN_ENVIRONMENT=production` jusqu’à ce que
 
 Un contrat `Connection` commun, le cycle de vie des transactions et la traduction des erreurs d’intégrité sont en place dans `backend/aman_api/database.py`. Continuer en extrayant les opérations SQL des routes vers des modules de persistance, définir la conversion des paramètres et lignes sans supposer SQLite, puis garder SQLite comme première implémentation.
 
+Les opérations SQL des propriétés, rapports de scan, politiques publiées et brouillons, organisations, invitations et transferts de propriété sont maintenant isolées dans des dépôts dédiés. L’extraction des transferts de propriété conserve les contrôles d’accès, les transactions et les entrées d’audit dans les routes; la validation CI de cette révision reste à effectuer.
+
 **Critères de sortie :** aucun SQL métier ni détail de transaction spécifique à SQLite dans les routes; adaptateurs explicites et erreurs métier centralisées; les flux de console et SDK restent identiques.
 
 ### 2. Versionner le schéma — première tranche SQLite réalisée
