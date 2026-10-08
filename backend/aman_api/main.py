@@ -64,7 +64,12 @@ from .scan_report_repository import (
 from .published_policy_repository import get_published_policy as load_published_policy
 from .policy_repository import (
     get_policy_for_organization,
+    get_policy_for_draft_update,
+    get_property_channel,
+    insert_policy_draft,
     list_property_policies as list_property_policy_rows,
+    next_policy_version,
+    update_policy_draft as persist_policy_draft_update,
 )
 
 
@@ -1325,20 +1330,20 @@ def create_policy_draft(org_id: str, property_id: str, body: PolicyBody, request
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor"})
-        prop = conn.execute("SELECT id,channel FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        prop = get_property_channel(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         conn.lock_property(property_id)
         policy = validate_policy(body.policy, property_id, prop["channel"])
         if body.expectedRevision is not None:
             raise HTTPException(status_code=422, detail="expectedRevision is only valid when updating a draft")
-        version = conn.execute("SELECT COALESCE(MAX(version),0)+1 AS n FROM policies WHERE property_id=?",
-                               (property_id,)).fetchone()["n"]
+        version = next_policy_version(conn, property_id)
         policy_id = secrets.token_hex(16)
         policy["policyVersion"] = str(version)
-        conn.execute("INSERT INTO policies(id,property_id,version,revision,last_edited_by,status,body,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
-                     (policy_id, property_id, version, 1, context.user_id, "draft",
-                      json.dumps(policy, ensure_ascii=False, separators=(",", ":")), context.user_id, now))
+        insert_policy_draft(
+            conn, policy_id, property_id, version, context.user_id,
+            json.dumps(policy, ensure_ascii=False, separators=(",", ":")), now,
+        )
         audit(conn, org_id, context.user_id, "policy.draft_created", "policy", policy_id,
               {"version": version, "channel": prop["channel"]})
     return {"id": policy_id, "propertyId": property_id, "version": version, "status": "draft"}
@@ -1365,19 +1370,11 @@ def update_policy_draft(org_id: str, policy_id: str, body: PolicyBody, request: 
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor"})
-        row = conn.execute(
-            "SELECT p.id,p.property_id,p.version,p.revision,p.status,pr.channel FROM policies p "
-            "JOIN properties pr ON pr.id=p.property_id WHERE p.id=? AND pr.org_id=?",
-            (policy_id, org_id),
-        ).fetchone()
+        row = get_policy_for_draft_update(conn, policy_id, org_id)
         if not row:
             raise HTTPException(status_code=404, detail="Policy not found")
         conn.lock_property(row["property_id"])
-        row = conn.execute(
-            "SELECT p.id,p.property_id,p.version,p.revision,p.status,pr.channel FROM policies p "
-            "JOIN properties pr ON pr.id=p.property_id WHERE p.id=? AND pr.org_id=?",
-            (policy_id, org_id),
-        ).fetchone()
+        row = get_policy_for_draft_update(conn, policy_id, org_id)
         if not row:
             raise HTTPException(status_code=404, detail="Policy not found")
         if row["status"] != "draft":
@@ -1388,13 +1385,11 @@ def update_policy_draft(org_id: str, policy_id: str, body: PolicyBody, request: 
             raise HTTPException(status_code=409, detail="This draft changed since it was opened; reload it before saving")
         policy = validate_policy(body.policy, row["property_id"], row["channel"])
         policy["policyVersion"] = str(row["version"])
-        updated = conn.execute(
-            "UPDATE policies SET body=?,revision=revision+1,last_edited_by=? "
-            "WHERE id=? AND revision=? AND status='draft'",
-            (json.dumps(policy, ensure_ascii=False, separators=(",", ":")), context.user_id,
-             policy_id, body.expectedRevision),
+        updated = persist_policy_draft_update(
+            conn, policy_id, body.expectedRevision, context.user_id,
+            json.dumps(policy, ensure_ascii=False, separators=(",", ":")),
         )
-        if updated.rowcount != 1:
+        if updated != 1:
             raise HTTPException(status_code=409, detail="This draft changed while it was being saved; reload it")
         audit(conn, org_id, context.user_id, "policy.draft_updated", "policy", policy_id,
               {"version": row["version"], "revision": row["revision"] + 1, "updatedAt": now})
