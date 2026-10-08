@@ -406,15 +406,23 @@ class ConsentActivity : Activity() {
         const cookieData=Array.from(cookies.values()).map(item=>({
           name:item.name,pages:Array.from(item.pages).sort(),manualClassifications:Array.from(item.classifications).sort()
         })).sort((a,b)=>b.pages.length-a.pages.length||a.name.localeCompare(b.name));
-        const synthesisData={schema:'aman-local-inventory-synthesis-v1',generatedAt:new Date().toISOString(),reportCount:records.length,pageCount:pageList.length,pages:pageList,resources:resourceData,cookies:cookieData};
+        const limitations=[
+          'Synthèse de rapports mono-page importés manuellement ; aucune page supplémentaire n’a été parcourue.',
+          'Les classements sont saisis manuellement et ne constituent ni une validation juridique ni une confirmation du comportement réel des tags.',
+          'Le marqueur ALAMANE est un signal observé dans le DOM et ne prouve pas le contrôle de tous les déclenchements, notamment via un gestionnaire de balises.',
+          'Les chemins de pages et adresses de ressources peuvent contenir des éléments sensibles ; les examiner avant tout partage.'
+        ];
+        const controlLabels={marker_present:'Marqueur repéré',marker_missing:'Aucun marqueur direct repéré',not_evaluated:'Non évalué'};
+        const synthesisData={schema:'aman-local-inventory-synthesis-v1',generatedAt:new Date().toISOString(),reportCount:records.length,pageCount:pageList.length,pages:pageList,resources:resourceData,cookies:cookieData,limitations};
         const download=(filename,content,type)=>{const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
         const exportTools=node('div',undefined,'row wrap');const exportJson=node('button','Télécharger la synthèse JSON','btn');exportJson.type='button';const exportCsv=node('button','Télécharger la synthèse CSV','btn');exportCsv.type='button';
         const dateStamp=new Date().toISOString().slice(0,10);
         exportJson.addEventListener('click',()=>download(`aman-inventaire-synthese-${dateStamp}.json`,JSON.stringify(synthesisData,null,2),'application/json'));
         exportCsv.addEventListener('click',()=>{
-          const rows=[['type','kind_or_name','url','observed_pages','aman_control_signals','manual_classifications']];
-          resourceData.forEach(item=>rows.push(['resource',item.kind,item.url,item.pages.join(' | '),item.amanControlSignals.join(' | '),item.manualClassifications.join(' | ')]));
-          cookieData.forEach(item=>rows.push(['cookie',item.name,'',item.pages.join(' | '),'',item.manualClassifications.join(' | ')]));
+          const rows=[['type','kind_or_name','url','observed_pages','aman_control_signals','manual_classifications','limitations']];
+          resourceData.forEach(item=>rows.push(['resource',item.kind,item.url,item.pages.join(' | '),item.amanControlSignals.map(value=>controlLabels[value]||'Non évalué').join(' | '),item.manualClassifications.join(' | '),'']));
+          cookieData.forEach(item=>rows.push(['cookie',item.name,'',item.pages.join(' | '),'',item.manualClassifications.join(' | '),'']));
+          limitations.forEach(item=>rows.push(['limitation','','','','','',item]));
           const csv='\uFEFF'+rows.map(row=>row.map(value=>`"${String(value??'').replace(/"/g,'""')}"`).join(';')).join('\r\n');
           download(`aman-inventaire-synthese-${dateStamp}.csv`,csv,'text/csv;charset=utf-8');
         });
@@ -428,7 +436,7 @@ class ConsentActivity : Activity() {
         };
         const resourceRows=Array.from(resources.values()).sort((a,b)=>b.pages.size-a.pages.size||a.url.localeCompare(b.url)).map(item=>[
           item.kind,item.url,`${item.pages.size} · ${Array.from(item.pages).join(', ')}`,
-          Array.from(item.controls).sort().join(', '),Array.from(item.classifications).sort().join(', ')
+          Array.from(item.controls).sort().map(value=>controlLabels[value]||'Non évalué').join(', '),Array.from(item.classifications).sort().join(', ')
         ]);
         const cookieRows=Array.from(cookies.values()).sort((a,b)=>b.pages.size-a.pages.size||a.name.localeCompare(b.name)).map(item=>[
           item.name,`${item.pages.size} · ${Array.from(item.pages).join(', ')}`,Array.from(item.classifications).sort().join(', ')
