@@ -55,10 +55,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { AmanConsentBanner, AmanConsentClient } from '@aman-consent/react-native';
 
+// Créer une propriété ALAMANE pour iOS et une autre pour Android.
+// Chaque propriété porte sa propre politique publiée et son propre identifiant.
+const platformConfig = Platform.select({
+  ios: { propertyId: 'PROPERTY_ID_IOS', channel: 'ios' as const },
+  android: { propertyId: 'PROPERTY_ID_ANDROID', channel: 'android' as const },
+});
+
+if (!platformConfig) {
+  throw new Error('ALAMANE React Native prend en charge iOS et Android.');
+}
+
 const aman = new AmanConsentClient({
   baseUrl: 'https://cmp.example.ma',
-  propertyId: 'PROPERTY_ID',
-  channel: Platform.OS === 'ios' ? 'ios' : 'android',
+  ...platformConfig,
   storage: AsyncStorage,
 });
 
@@ -66,6 +76,8 @@ export function AppConsent() {
   return <AmanConsentBanner client={aman} language="fr" />;
 }
 ```
+
+Dans la console, choisis « React Native » dans le sélecteur de type d’intégration pour obtenir un extrait adapté à la propriété courante. Répète l’opération pour les propriétés iOS et Android et remplace les deux valeurs `PROPERTY_ID_*` ci-dessus par leurs identifiants respectifs. Cela permet à chaque binaire de charger la politique du canal natif correspondant ; les choix restent enregistrés localement par propriété et ne sont pas synchronisés entre iOS et Android.
 
 L’identifiant de propriété est une référence publique de configuration, pas un secret. Le client accepte HTTPS; HTTP est limité aux hôtes loopback pour le développement. Appeler `aman.loadPolicy()` au démarrage si l’application doit piloter elle-même le chargement. Le panneau charge la politique à son montage et utilise la politique valide en cache si le réseau échoue.
 
