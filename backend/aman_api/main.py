@@ -1625,6 +1625,10 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
             raise HTTPException(status_code=404, detail="Property not found")
         now = utc_now()
         rows, policy_labels = load_consent_metric_sources(conn, property_id, since, now)
+        active_event_count = conn.execute(
+            "SELECT COUNT(*) AS event_count FROM consent_events WHERE property_id=? AND expires_at>?",
+            (property_id, now),
+        ).fetchone()["event_count"]
     purpose_counts: Dict[Tuple[str, str], Dict[str, int]] = {}
     for row in rows:
         for purpose_id, allowed in json.loads(row["purposes"]).items():
@@ -1639,6 +1643,8 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
         "channel": prop["channel"],
         "periodDays": days,
         "decisionCount": total,
+        "activeEventCount": active_event_count,
+        "activeEventLimit": CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT,
         "actions": actions,
         "purposes": [
             {
