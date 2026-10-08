@@ -28,6 +28,15 @@ Vérification documentaire effectuée le 8 octobre 2026. Ces canaux décrivent d
 
 - Ne pas contacter les banques au nom de l’utilisateur sans autorisation explicite. Ne pas soumettre de formulaire fournisseur avant d’avoir confirmé la raison sociale, l’ICE, la marque commerciale et l’adresse de réponse à utiliser.
 
+## Vérification de fraîcheur des signaux publics — 8 octobre 2026
+
+- **CIH BANK :** l’offre officielle de Chef de Projet Digital, datée du 30 septembre 2026, est encore visible sur le [site de recrutement CIH](https://recrutement.cihbank.ma/1092_offre-emploi-chef-de-projet-digital.html). Elle décrit le pilotage de parcours, les mises en production et les évolutions d’application mobile. Cela renforce seulement le constat d’activité digitale ; l’offre ne mentionne ni consentement ni CMP.
+- **BANK OF AFRICA :** les pages officielles consultées présentent BMCE Direct sur Web et mobile ainsi que plusieurs produits de banque à distance, dont Business Online. Elles confirment une pluralité de canaux, pas un problème de gouvernance des choix, une technologie CMP ou un achat prévu. [Banque à distance](https://www.bankofafrica.ma/fr/entreprises/banque-a-distance) · [BMCE Direct](https://www.bankofafrica.ma/fr/entreprises/banque-distance/bmce-direct) · [Business Online](https://www.bankofafrica.ma/fr/entreprises/banque-a-distance/business-online).
+- **Attijariwafa bank :** le [portail Attijari Sourcing](https://attijari-sourcing.attijariwafabank.com/) est accessible pour l’inscription fournisseur. Son guide public demande un ICE aux entreprises marocaines ; il date de 2019 et ne permet pas de confirmer les exigences actuelles ni l’éligibilité d’un éditeur SaaS/CMP. Aucune inscription n’a été effectuée.
+- **Maroc Telecom (IAM) :** le [portail public des appels d’offres](https://www.iam.ma/fr/groupe-maroc-telecom/appels-d-offres) est actif et affiche des consultations en cours, mais celles vues lors de cette vérification ne signalent pas un besoin de plateforme de consentement. Cette lecture partielle ne prouve pas l’absence d’un besoin ou d’une consultation pertinente ailleurs.
+
+**Effet sur la qualification :** conserver CIH en premier pour une découverte de besoins digitaux, BANK OF AFRICA pour explorer la gouvernance multi-canal, Attijariwafa bank pour comprendre l’homologation fournisseur et IAM comme compte de diversification. Ces rangs restent des hypothèses d’approche, jamais un score d’intention d’achat. Aucun contact ou achat n’a été identifié ; la prochaine preuve attendue reste un entretien avec les rôles ciblés.
+
 ## Sources et couverture
 
 - **Utilisées :** publications et pages officielles de CIH BANK, BANK OF AFRICA, Attijariwafa bank et Maroc Telecom, consultées le 8 octobre 2026 ; elles étayent uniquement les faits signalés dans le tableau.
