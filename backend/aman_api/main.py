@@ -76,6 +76,14 @@ from .policy_repository import (
     retire_policy,
     update_policy_draft as persist_policy_draft_update,
 )
+from .organization_repository import (
+    create_organization as persist_organization_creation,
+    get_member_role,
+    list_members as list_member_rows,
+    list_user_organizations,
+    remove_member as persist_member_removal,
+    update_member_role as persist_member_role_update,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -880,11 +888,7 @@ def accept_ownership_transfer(body: AcceptOwnershipTransferBody, request: Reques
 def list_organizations(request: Request):
     context = current_session(request)
     with connection() as conn:
-        rows = conn.execute(
-            "SELECT o.id,o.name,o.require_two_person_publish AS requireTwoPersonPublish,m.role,o.created_at "
-            "FROM organizations o JOIN memberships m ON m.org_id=o.id WHERE m.user_id=? ORDER BY o.name",
-            (context.user_id,),
-        ).fetchall()
+        rows = list_user_organizations(conn, context.user_id)
     return {"organizations": [dict(row) for row in rows]}
 
 
@@ -896,10 +900,9 @@ def create_organization(body: OrganizationBody, request: Request,
     org_id = secrets.token_urlsafe(18)
     now = utc_now()
     with transaction() as conn:
-        conn.execute("INSERT INTO organizations(id,name,require_two_person_publish,created_at) VALUES(?,?,?,?)",
-                     (org_id, body.name.strip(), int(body.requireTwoPersonPublish), now))
-        conn.execute("INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)",
-                     (org_id, context.user_id, "owner", now))
+        persist_organization_creation(
+            conn, org_id, body.name.strip(), body.requireTwoPersonPublish, context.user_id, now,
+        )
         audit(conn, org_id, context.user_id, "organization.created", "organization", org_id)
     return {"id": org_id, "name": body.name.strip(), "role": "owner",
             "requireTwoPersonPublish": body.requireTwoPersonPublish}
@@ -988,13 +991,7 @@ def list_members(org_id: str, request: Request):
     context = current_session(request)
     with connection() as conn:
         membership(conn, org_id, context.user_id)
-        rows = conn.execute(
-            "SELECT u.id,u.email,m.role,m.created_at AS joined_at "
-            "FROM memberships m JOIN users u ON u.id=m.user_id "
-            "WHERE m.org_id=? ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 "
-            "WHEN 'editor' THEN 2 ELSE 3 END,u.email",
-            (org_id,),
-        ).fetchall()
+        rows = list_member_rows(conn, org_id)
     return {"members": [dict(row) for row in rows]}
 
 
@@ -1006,17 +1003,14 @@ def update_member_role(org_id: str, member_id: str, body: MemberRoleBody, reques
     with transaction() as conn:
         actor_role = membership(conn, org_id, context.user_id)
         require_role(actor_role, {"owner", "admin"})
-        target = conn.execute(
-            "SELECT role FROM memberships WHERE org_id=? AND user_id=?", (org_id, member_id)
-        ).fetchone()
+        target = get_member_role(conn, org_id, member_id)
         if not target:
             raise HTTPException(status_code=404, detail="Organization member not found")
         if target["role"] == "owner":
             raise HTTPException(status_code=409, detail="The owner role requires a separate ownership-transfer process")
         previous_role = target["role"]
         if previous_role != body.role:
-            conn.execute("UPDATE memberships SET role=? WHERE org_id=? AND user_id=?",
-                         (body.role, org_id, member_id))
+            persist_member_role_update(conn, org_id, member_id, body.role)
             audit(conn, org_id, context.user_id, "member.role_changed", "membership", member_id,
                   {"from": previous_role, "to": body.role})
     return {"userId": member_id, "role": body.role}
@@ -1030,14 +1024,12 @@ def remove_member(org_id: str, member_id: str, request: Request,
     with transaction() as conn:
         actor_role = membership(conn, org_id, context.user_id)
         require_role(actor_role, {"owner", "admin"})
-        target = conn.execute(
-            "SELECT role FROM memberships WHERE org_id=? AND user_id=?", (org_id, member_id)
-        ).fetchone()
+        target = get_member_role(conn, org_id, member_id)
         if not target:
             raise HTTPException(status_code=404, detail="Organization member not found")
         if target["role"] == "owner":
             raise HTTPException(status_code=409, detail="The owner cannot be removed from the organization")
-        conn.execute("DELETE FROM memberships WHERE org_id=? AND user_id=?", (org_id, member_id))
+        persist_member_removal(conn, org_id, member_id)
         audit(conn, org_id, context.user_id, "member.removed", "membership", member_id,
               {"previousRole": target["role"]})
     return {"ok": True}
