@@ -62,6 +62,10 @@ from .scan_report_repository import (
     list_scan_reports as list_scan_report_rows,
 )
 from .published_policy_repository import get_published_policy as load_published_policy
+from .policy_repository import (
+    get_policy_for_organization,
+    list_property_policies as list_property_policy_rows,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1348,15 +1352,7 @@ def list_property_policies(org_id: str, property_id: str, request: Request):
         prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
-        rows = conn.execute(
-            "SELECT p.id,p.version,p.revision,p.status,p.created_by,p.created_at,p.published_by,p.published_at,"
-            "u.email AS author,COALESCE(editor.email,u.email) AS last_editor,publisher.email AS publisher "
-            "FROM policies p JOIN users u ON u.id=p.created_by "
-            "LEFT JOIN users editor ON editor.id=p.last_edited_by "
-            "LEFT JOIN users publisher ON publisher.id=p.published_by "
-            "WHERE p.property_id=? ORDER BY p.version DESC",
-            (property_id,),
-        ).fetchall()
+        rows = list_property_policy_rows(conn, property_id)
     return {"policies": [dict(row) for row in rows]}
 
 
@@ -1411,16 +1407,7 @@ def get_policy(org_id: str, policy_id: str, request: Request):
     with connection() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor", "viewer"})
-        row = conn.execute(
-            "SELECT p.id,p.property_id,p.version,p.revision,p.last_edited_by,p.status,p.body,p.created_by,p.created_at,"
-            "p.published_by,p.published_at,u.email AS author,COALESCE(editor.email,u.email) AS last_editor,publisher.email AS publisher "
-            "FROM policies p JOIN properties pr ON pr.id=p.property_id "
-            "JOIN users u ON u.id=p.created_by "
-            "LEFT JOIN users editor ON editor.id=p.last_edited_by "
-            "LEFT JOIN users publisher ON publisher.id=p.published_by "
-            "WHERE p.id=? AND pr.org_id=?",
-            (policy_id, org_id),
-        ).fetchone()
+        row = get_policy_for_organization(conn, policy_id, org_id)
     if not row:
         raise HTTPException(status_code=404, detail="Policy not found")
     return {**dict(row), "policy": json.loads(row["body"])}
