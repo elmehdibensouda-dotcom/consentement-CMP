@@ -32,20 +32,7 @@ psql "$AMAN_MIGRATION_DATABASE_URL" \
 
 Remplacer `aman_preprod` et `aman_api` par les noms exacts déjà configurés dans les URL, sans inscrire les URL ni mots de passe dans le dépôt. Le script donne à l’API `CONNECT`, `USAGE` du schéma et les seules opérations actuellement utilisées par l’application sur les tables Aman; il ne lui donne ni propriété des tables ni droits DDL. L’opérateur conserve les droits de migration. Le script n’a pas encore été appliqué à une instance PostgreSQL : vérifier les permissions avec les rôles réels avant préproduction, puis revoir et compléter les droits explicitement après chaque migration ajoutant une table.
 
-Après la migration distante, accorder les droits applicatifs séparément, sans donner à l’API la propriété du schéma ni les droits DDL. Pour un schéma `public`, le DBA peut appliquer le minimum DML sur les tables métier (adapter les noms de rôles et base) :
-
-```sql
-GRANT CONNECT ON DATABASE aman TO aman_api;
-GRANT USAGE ON SCHEMA public TO aman_api;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
-  users, organizations, memberships, invitations, ownership_transfers,
-  properties, policies, sessions, audit_events, consent_events, scan_reports,
-  rate_limit_buckets
-  TO aman_api;
-GRANT SELECT ON TABLE schema_migrations TO aman_api;
-```
-
-Cette voie n’a pas encore été éprouvée contre un service PostgreSQL géré par un acheteur et ne lève pas le refus du mode `production`.
+N’accorde pas de droits DML globaux à toutes les tables : l’API n’a pas besoin de `UPDATE` ou `DELETE` sur chacune d’elles. Le seul modèle fourni est [`ops/postgres-runtime-privileges.sql`](../ops/postgres-runtime-privileges.sql), avec des droits différenciés par table. Toute évolution de schéma doit mettre à jour et faire revoir ce modèle avant d’accorder un privilège au rôle d’exécution. Il n’a pas encore été appliqué à une instance PostgreSQL réelle et ne lève pas le refus du mode `production`.
 
 La démo web utilise `http://localhost:8000`; l’API autorise cette origine pour les appels avec cookies. `admin.html` lit l’URL API depuis `<meta name="aman-api-base-url" content="https://api.exemple.ma">`; en l’absence de ce réglage, elle utilise le port 8001 en local et la même origine en hébergement distant. `AMAN_CORS_ORIGINS` doit contenir les origines exactes des consoles qui utilisent les cookies. La console peut être sur une origine distincte de l’API : `GET /v1/auth/me` vérifie le cookie CSRF puis renvoie son jeton pour les mutations après un rechargement. L’API et la console doivent rester sur le même site pour que le cookie `SameSite=Strict` accompagne les requêtes ; configure CORS avec les origines exactes. Chaque origine de propriété Web est vérifiée à l’exécution et autorise seulement les routes publiques de lecture de politique et d’envoi d’événement de consentement, sans cookies. Une origine saisie dans Aman est une association de configuration, pas une preuve de contrôle du domaine. Le compte initial est créé par commande locale, pas par une route d’inscription publique.
 
