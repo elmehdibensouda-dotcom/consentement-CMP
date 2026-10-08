@@ -21,6 +21,17 @@ Le stockage de développement est SQLite dans `~/.alamane/aman-dev.sqlite3` par 
 
 Pour une préproduction isolée, `AMAN_DATABASE_URL` sélectionne l’adaptateur PostgreSQL et un pool borné par `AMAN_DB_POOL_MAX_SIZE` (1 à 50, 10 par défaut et par processus API). Injecter cette URL depuis le gestionnaire de secrets, jamais depuis le dépôt. Toute connexion distante exige `sslmode=verify-full`. Pour partager les limites de requêtes entre processus, fournir aussi `AMAN_RATE_LIMIT_HASH_KEY` (au moins 32 octets aléatoires, identiques dans chaque instance, via le gestionnaire de secrets). La clé n’est jamais journalisée ni stockée en base ; la remplacer invalide les empreintes des buckets actifs et réinitialise temporairement ces limites. La commande opérateur `python backend/migrate_db.py` et les scripts `create_admin.py` / `seed_demo.py` appliquent le schéma avec `AMAN_MIGRATION_DATABASE_URL`; pour un PostgreSQL distant, l’API et l’opérateur doivent nommer des rôles différents et cibler le même serveur et la même base. Le rôle opérateur doit pouvoir créer et modifier le schéma. L’API ne fait que vérifier `schema_migrations` au démarrage. Pour un serveur local, la même URL loopback peut servir aux deux rôles pour le développement.
 
+Après la migration, un DBA ou le propriétaire des tables peut appliquer le modèle initial de privilèges du rôle API depuis la racine du dépôt :
+
+```sh
+psql "$AMAN_MIGRATION_DATABASE_URL" \
+  --set=database_name=aman_preprod \
+  --set=api_role=aman_api \
+  --file=ops/postgres-runtime-privileges.sql
+```
+
+Remplacer `aman_preprod` et `aman_api` par les noms exacts déjà configurés dans les URL, sans inscrire les URL ni mots de passe dans le dépôt. Le script donne à l’API `CONNECT`, `USAGE` du schéma et les seules opérations actuellement utilisées par l’application sur les tables Aman; il ne lui donne ni propriété des tables ni droits DDL. L’opérateur conserve les droits de migration. Le script n’a pas encore été appliqué à une instance PostgreSQL : vérifier les permissions avec les rôles réels avant préproduction, puis revoir et compléter les droits explicitement après chaque migration ajoutant une table.
+
 Après la migration distante, accorder les droits applicatifs séparément, sans donner à l’API la propriété du schéma ni les droits DDL. Pour un schéma `public`, le DBA peut appliquer le minimum DML sur les tables métier (adapter les noms de rôles et base) :
 
 ```sql
