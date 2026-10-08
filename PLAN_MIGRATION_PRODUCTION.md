@@ -44,6 +44,8 @@ Un contrat `Connection` commun, le cycle de vie des transactions et la traductio
 
 Les opérations SQL des propriétés, rapports de scan, politiques publiées et brouillons, organisations, invitations et transferts de propriété sont isolées dans des dépôts dédiés et validées par CI sur SQLite, sans validation PostgreSQL. La consultation et la création des sessions sont extraites dans `backend/aman_api/auth_repository.py` ; la CI les a validées dans `3c02a85` (run `37719131144`). L’acceptation et la prévisualisation des invitations ont été ajoutées au dépôt et validées dans `77d3feb` (run `37719540545`). Les routes gardent les contrôles d’accès, les transactions et les entrées d’audit.
 
+Les routes réutilisent maintenant les dépôts pour résoudre le rôle du membre et vérifier qu’une propriété appartient à l’organisation pendant les parcours de scan et de politique. La CI de cette tranche reste à effectuer.
+
 **Critères de sortie :** aucun SQL métier ni détail de transaction spécifique à SQLite dans les routes; adaptateurs explicites et erreurs métier centralisées; les flux de console et SDK restent identiques.
 
 ### 2. Versionner le schéma — première tranche SQLite réalisée

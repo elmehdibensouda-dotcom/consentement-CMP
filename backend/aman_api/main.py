@@ -50,6 +50,7 @@ from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
 from .property_repository import (
     create_property as persist_property,
+    get_property_for_organization,
     get_property_for_origin_update,
     has_scan_reports,
     list_properties as list_property_rows,
@@ -517,7 +518,7 @@ def current_session(request: Request) -> SessionContext:
 
 
 def membership(conn: Connection, org_id: str, user_id: str) -> str:
-    row = conn.execute("SELECT role FROM memberships WHERE org_id=? AND user_id=?", (org_id, user_id)).fetchone()
+    row = get_member_role(conn, org_id, user_id)
     if not row:
         raise HTTPException(status_code=404, detail="Organization not found")
     return row["role"]
@@ -1205,9 +1206,7 @@ def import_scan_report(org_id: str, property_id: str, body: ScanReportBody, requ
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor"})
-        prop = conn.execute(
-            "SELECT id,channel,origin FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
-        ).fetchone()
+        prop = get_property_for_organization(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         if prop["channel"] != "web":
@@ -1236,7 +1235,7 @@ def list_scan_reports(org_id: str, property_id: str, request: Request,
     context = current_session(request)
     with connection() as conn:
         membership(conn, org_id, context.user_id)
-        prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        prop = get_property_for_organization(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         rows = list_scan_report_rows(conn, property_id, limit)
@@ -1264,7 +1263,7 @@ def delete_scan_report(org_id: str, property_id: str, report_id: str, request: R
     with transaction() as conn:
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin", "editor"})
-        prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        prop = get_property_for_organization(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         deleted = delete_scan_report_row(conn, property_id, report_id)
@@ -1307,7 +1306,7 @@ def list_property_policies(org_id: str, property_id: str, request: Request):
     context = current_session(request)
     with connection() as conn:
         membership(conn, org_id, context.user_id)
-        prop = conn.execute("SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)).fetchone()
+        prop = get_property_for_organization(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         rows = list_property_policy_rows(conn, property_id)
