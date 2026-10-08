@@ -26,3 +26,12 @@ updates:
       time: "09:30"
       timezone: Africa/Casablanca
     open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /mobile/react-native
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:45"
+      timezone: Africa/Casablanca
+    open-pull-requests-limit: 5
