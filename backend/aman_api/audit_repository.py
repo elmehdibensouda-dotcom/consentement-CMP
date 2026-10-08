@@ -7,6 +7,24 @@ from typing import Any
 from .database import Connection
 
 
+def append_audit_event(
+    conn: Connection,
+    event_id: str,
+    org_id: str,
+    actor_id: str,
+    action: str,
+    resource_type: str,
+    resource_id: str,
+    occurred_at: int,
+    details_json: str,
+) -> None:
+    conn.execute(
+        "INSERT INTO audit_events(id,org_id,actor_user_id,action,resource_type,resource_id,occurred_at,details) "
+        "VALUES(?,?,?,?,?,?,?,?)",
+        (event_id, org_id, actor_id, action, resource_type, resource_id, occurred_at, details_json),
+    )
+
+
 def list_audit_events(conn: Connection, org_id: str, limit: int) -> list[Any]:
     return conn.execute(
         "SELECT e.id,e.actor_user_id,u.email AS actor_email,e.action,e.resource_type,e.resource_id,e.occurred_at,e.details "

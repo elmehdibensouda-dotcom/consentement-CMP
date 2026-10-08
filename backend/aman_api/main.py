@@ -47,7 +47,7 @@ from .database import (
 )
 from .consent_metrics_repository import load_consent_metric_sources
 from .dashboard_repository import load_dashboard_sources
-from .audit_repository import iter_audit_export_events, list_audit_events
+from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -309,11 +309,9 @@ def enforce_invitation_rate_limit(request: Request, operation: str, limit: int) 
 
 def audit(conn: Connection, org_id: str, actor: str, action: str,
           resource_type: str, resource_id: str, details: Optional[dict] = None) -> None:
-    conn.execute(
-        "INSERT INTO audit_events(id,org_id,actor_user_id,action,resource_type,resource_id,occurred_at,details) "
-        "VALUES(?,?,?,?,?,?,?,?)",
-        (secrets.token_hex(16), org_id, actor, action, resource_type, resource_id, utc_now(),
-         json.dumps(details or {}, separators=(",", ":"), ensure_ascii=False)),
+    append_audit_event(
+        conn, secrets.token_hex(16), org_id, actor, action, resource_type, resource_id, utc_now(),
+        json.dumps(details or {}, separators=(",", ":"), ensure_ascii=False),
     )
 
 
