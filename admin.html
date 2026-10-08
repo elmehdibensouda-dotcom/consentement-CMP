@@ -30,6 +30,7 @@
     </nav><div class="side-note">Console de développement. N’ajoute pas de données clients ou bancaires.<br><br><a href="demo-site.html" style="color:#176447">Ouvrir le site de démonstration ↗</a></div></aside>
     <main class="main"><header class="bar"><small id="who">Session active</small><div class="row"><span id="apiState" class="api-state">API locale · :8001</span><button id="logout">Se déconnecter</button></div></header>
       <div class="content">
+        <div id="logoutError" class="error" role="alert" aria-live="assertive"></div>
         <section id="overview" class="page show">
           <div class="heading"><div><div class="eyebrow">VUE MULTI-ORGANISATION</div><h1>Vue d’ensemble</h1><p>Configuration et activité des organisations auxquelles ton compte a accès.</p></div><button class="btn" id="dashboardRefresh">Actualiser</button></div>
           <div id="dashboardError" class="error"></div>
@@ -781,7 +782,15 @@ class ConsentActivity : Activity() {
     }
     async function enterApp(){state.user=await api('/v1/auth/me');state.csrf=state.user.csrfToken||state.csrf;$('who').textContent=state.user.email;$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');await loadOrganizations();showPage('overview')}
     $('loginForm').addEventListener('submit',async event=>{event.preventDefault();clearError('loginError');try{const result=await api('/v1/auth/login',{method:'POST',publicCall:true,body:{email:$('email').value,password:$('password').value}});state.csrf=result.csrfToken;await enterApp()}catch(e){error('loginError',e.message)}});
-    $('logout').addEventListener('click',async()=>{try{await api('/v1/auth/logout',{method:'POST',body:{}})}catch(_){}state.user=null;state.csrf='';$('appView').classList.add('hidden');$('loginView').classList.remove('hidden')});
+    $('logout').addEventListener('click',async()=>{
+      const button=$('logout');button.disabled=true;clearError('logoutError');
+      try{
+        await api('/v1/auth/logout',{method:'POST',body:{}});
+        state.user=null;state.csrf='';$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');
+      }catch(err){
+        error('logoutError',`Déconnexion non confirmée : ta session peut rester active. ${err.message} Réessaie lorsque l’API est disponible.`);
+      }finally{button.disabled=false}
+    });
     $('orgSelect').addEventListener('change',async e=>{resetDraftEdit();state.org=state.orgs.find(x=>x.id===e.target.value)||null;renderOrganizations();try{await loadProperties();await loadMembers();await loadAudit()}catch(err){error('orgError',err.message)}});
     $('orgForm').addEventListener('submit',async e=>{e.preventDefault();clearError('orgError');try{const org=await api('/v1/organizations',{method:'POST',body:{name:$('orgName').value,requireTwoPersonPublish:true}});$('orgName').value='';await loadOrganizations();state.org=state.orgs.find(x=>x.id===org.id)||state.org;renderOrganizations();await loadProperties();await loadMembers()}catch(err){error('orgError',err.message)}});
     $('orgApprovalForm').addEventListener('submit',async e=>{e.preventDefault();if(!state.org||!canPublishPolicies())return;const button=$('saveOrgApprovalSettings');button.disabled=true;clearError('orgError');try{const orgId=state.org.id;const updated=await api(`/v1/organizations/${encodeURIComponent(orgId)}/approval-settings`,{method:'PUT',body:{requireTwoPersonPublish:$('orgRequireTwoPersonPublish').checked}});state.orgs=state.orgs.map(org=>org.id===orgId?{...org,requireTwoPersonPublish:updated.requireTwoPersonPublish}:org);if(state.org?.id===orgId){state.org=state.orgs.find(org=>org.id===orgId)||state.org;renderOrganizations();$('orgApprovalStatus').textContent='Paramètre enregistré.';await loadAudit()}}catch(err){error('orgError',err.message)}finally{button.disabled=!canPublishPolicies()}});
