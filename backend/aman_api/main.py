@@ -46,6 +46,7 @@ from .database import (
     record_login_failure,
 )
 from .consent_metrics_repository import load_consent_metric_sources
+from .consent_event_repository import count_events_for_export, iter_events_for_export
 from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
 from .property_repository import (
@@ -1609,11 +1610,7 @@ def export_consent_events(org_id: str, property_id: str, request: Request,
         prop = get_property_for_organization(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
-        matching_events = conn.execute(
-            "SELECT COUNT(*) AS event_count FROM consent_events "
-            "WHERE property_id=? AND recorded_at>=? AND expires_at>?",
-            (property_id, since, now),
-        ).fetchone()["event_count"]
+        matching_events = count_events_for_export(conn, property_id, since, now)
         audit(conn, org_id, context.user_id, "consent_events.export_requested", "property", property_id,
               {"periodDays": days, "eventCountAtRequest": matching_events})
 
@@ -1627,12 +1624,7 @@ def export_consent_events(org_id: str, property_id: str, request: Request,
         buffer.close()
 
         with connection() as conn:
-            cursor = conn.execute(
-                "SELECT event_id,recorded_at,expires_at,property_id,policy_version,channel,action,purposes "
-                "FROM consent_events WHERE property_id=? AND recorded_at>=? AND expires_at>? "
-                "ORDER BY recorded_at ASC,event_id ASC",
-                (property_id, since, now),
-            )
+            cursor = iter_events_for_export(conn, property_id, since, now)
             for row in cursor:
                 buffer = io.StringIO(newline="")
                 writer = csv.writer(buffer, lineterminator="\r\n")

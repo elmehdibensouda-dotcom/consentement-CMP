@@ -48,6 +48,8 @@ Les routes réutilisent maintenant les dépôts pour résoudre le rôle du membr
 
 Les recherches de propriété utilisées par CORS public et par les écrans de métriques/export sont aussi déléguées à `property_repository.py`, ce qui garde les prédicats d’organisation dans le dépôt. CI de cette tranche en attente.
 
+Le comptage audité et la lecture ordonnée du CSV de décisions sont isolés dans `backend/aman_api/consent_event_repository.py`; la route parcourt le curseur sans appeler `fetchall`, tandis que le mode de mise en mémoire interne dépend de l’adaptateur. Cette extraction ne modifie pas l’ingestion publique; CI en attente.
+
 **Critères de sortie :** aucun SQL métier ni détail de transaction spécifique à SQLite dans les routes; adaptateurs explicites et erreurs métier centralisées; les flux de console et SDK restent identiques.
 
 ### 2. Versionner le schéma — première tranche SQLite réalisée
