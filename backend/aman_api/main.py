@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, Generator, Literal, Optional, Tuple
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi import Body, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from jsonschema import Draft202012Validator
@@ -451,6 +451,11 @@ class PolicyBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     policy: Dict[str, Any]
     expectedRevision: Optional[int] = Field(default=None, ge=1)
+
+
+class PublishPolicyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: constr(strip_whitespace=True, min_length=5, max_length=500)
 
 
 class ConsentEventBody(BaseModel):
@@ -1366,7 +1371,8 @@ def get_policy(org_id: str, policy_id: str, request: Request):
 
 @app.post("/v1/organizations/{org_id}/policies/{policy_id}/publish")
 def publish_policy(org_id: str, policy_id: str, request: Request,
-                   x_aman_csrf: Optional[str] = Header(default=None)):
+                   x_aman_csrf: Optional[str] = Header(default=None),
+                   body: Optional[PublishPolicyBody] = Body(default=None)):
     context = current_session(request)
     require_csrf(request, context, x_aman_csrf)
     now = utc_now()
@@ -1386,6 +1392,8 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
         last_editor_id = row["last_edited_by"] or row["created_by"]
         if requires_second_person and last_editor_id == context.user_id:
             raise HTTPException(status_code=409, detail="A different owner or administrator must publish after the last draft edit")
+        if body is None:
+            raise HTTPException(status_code=422, detail="A publication reason is required for the audit record")
         current = get_published_policy_id(conn, row["property_id"])
         if current:
             retire_policy(conn, current["id"])
@@ -1397,7 +1405,8 @@ def publish_policy(org_id: str, policy_id: str, request: Request,
             context.user_id, now,
         )
         audit(conn, org_id, context.user_id, "policy.published", "policy", policy_id,
-              {"version": row["version"], "channel": row["channel"], "previousPolicyId": current["id"] if current else None})
+              {"version": row["version"], "channel": row["channel"], "previousPolicyId": current["id"] if current else None,
+               "reason": body.reason})
     return {"id": policy_id, "propertyId": row["property_id"], "version": row["version"],
             "status": "published", "publishedAt": now}
 

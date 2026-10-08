@@ -95,7 +95,7 @@ Pour préparer un jeu de démonstration fictif après avoir créé le premier ad
 | `POST /v1/organizations/{org}/properties/{property}/policies` | Éditeur+ + CSRF | Crée un brouillon versionné |
 | `GET /v1/organizations/{org}/policies/{policy}` | Membre | Lit le détail d’une version immuable et son historique ; les rôles d’édition peuvent reprendre un brouillon |
 | `PUT /v1/organizations/{org}/policies/{policy}` | Éditeur+ + CSRF | Met à jour un brouillon avec `expectedRevision`; refuse les révisions périmées et toute version déjà publiée |
-| `POST /v1/organizations/{org}/policies/{policy}/publish` | Owner/admin autre que le dernier éditeur + CSRF | Publie la politique |
+| `POST /v1/organizations/{org}/policies/{policy}/publish` | Owner/admin autre que le dernier éditeur + CSRF | Publie la politique avec un motif de 5 à 500 caractères conservé dans l’audit ; ce motif ne vaut pas validation juridique |
 | `GET /v1/public/properties/{property}/policy` | Public | SDK : dernière politique publiée, cacheable avec ETag |
 | `POST /v1/public/properties/{property}/consent-events` | Public | Réception facultative d’un choix explicite du SDK Web ou d’un appel natif ; vérifie version, canal et finalités de la politique active, ignore les répétitions identiques et refuse les identifiants réutilisés avec d’autres valeurs |
 | `GET /v1/organizations/{org}/properties/{property}/consent-metrics?days=30` | Membre | Agrégats par version de politique et finalité sur 1 à 180 jours, avec libellés FR/AR de la version correspondante ; aucun détail individuel |

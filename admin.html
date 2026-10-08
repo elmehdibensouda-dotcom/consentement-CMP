@@ -375,6 +375,32 @@
         target.classList.remove('hidden');target.scrollIntoView({behavior:'smooth',block:'start'});
       }catch(err){error('policyError',err.message)}
     }
+    function openPublishDialog(policy){
+      const dialog=node('dialog',undefined,'policy-preview');dialog.setAttribute('aria-labelledby','publishPolicyTitle');
+      const header=node('div',undefined,'policy-preview-head');const heading=node('div');
+      const title=node('h2',`Motif de publication · version ${policy.version}`);title.id='publishPolicyTitle';
+      heading.append(title,node('p','Cette note sera conservée dans le journal d’audit. Elle ne constitue pas une validation juridique. N’ajoute aucune donnée personnelle ni aucun secret.'));
+      const close=node('button','Fermer','btn');close.type='button';close.addEventListener('click',()=>dialog.close());header.append(heading,close);dialog.append(header);
+      const form=node('form');form.style.padding='16px 20px';
+      const label=node('label','Pourquoi cette version est-elle publiée ?');label.htmlFor='publishReason';
+      const reason=node('textarea');reason.id='publishReason';reason.required=true;reason.minLength=5;reason.maxLength=500;reason.rows=5;reason.placeholder='Ex. Revue interne terminée et configuration validée pour le périmètre de recette.';
+      reason.style.cssText='display:block;width:100%;box-sizing:border-box;margin-top:7px;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;resize:vertical';
+      const errorText=node('p','');errorText.className='error';errorText.setAttribute('role','alert');
+      const actions=node('div',undefined,'row wrap');actions.style.cssText='justify-content:flex-end;margin-top:14px';
+      const cancel=node('button','Annuler','btn');cancel.type='button';cancel.addEventListener('click',()=>dialog.close());
+      const submit=node('button','Confirmer la publication','btn primary');submit.type='submit';actions.append(cancel,submit);form.append(label,reason,errorText,actions);dialog.append(form);
+      dialog.addEventListener('close',()=>dialog.remove());
+      form.addEventListener('submit',async event=>{
+        event.preventDefault();const publicationReason=reason.value.trim();
+        if(publicationReason.length<5){errorText.textContent='Saisis un motif d’au moins 5 caractères.';reason.focus();return}
+        submit.disabled=true;errorText.textContent='';
+        try{
+          await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/policies/${encodeURIComponent(policy.id)}/publish`,{method:'POST',body:{reason:publicationReason}});
+          dialog.close();await loadProperties();await loadAudit();
+        }catch(err){errorText.textContent=err.message;submit.disabled=false}
+      });
+      document.body.append(dialog);dialog.showModal();reason.focus();
+    }
     async function loadPolicies(){
       const property=chosenProperty();state.property=property;$('policyDetails').classList.add('hidden');
       if(!property){$('policyList').textContent='Choisis une propriété.';return}
@@ -398,7 +424,7 @@
         }
         if(p.status==='draft'&&canPublishPolicies()){
           const button=node('button','Publier','btn primary');button.style.marginLeft='6px';
-          button.addEventListener('click',async()=>{try{clearError('policyError');await api(`/v1/organizations/${encodeURIComponent(state.org.id)}/policies/${encodeURIComponent(p.id)}/publish`,{method:'POST',body:{}});await loadProperties();await loadAudit()}catch(e){error('policyError',e.message)}});
+          button.addEventListener('click',()=>{clearError('policyError');openPublishDialog(p)});
           actionCell.append(button);
         }
         row.append(actionCell);table.append(row);
