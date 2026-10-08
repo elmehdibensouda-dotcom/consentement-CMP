@@ -46,6 +46,8 @@ Les opérations SQL des propriétés, rapports de scan, politiques publiées et 
 
 Les routes réutilisent maintenant les dépôts pour résoudre le rôle du membre et vérifier qu’une propriété appartient à l’organisation pendant les parcours de scan et de politique. La CI de cette tranche reste à effectuer.
 
+Les recherches de propriété utilisées par CORS public et par les écrans de métriques/export sont aussi déléguées à `property_repository.py`, ce qui garde les prédicats d’organisation dans le dépôt. CI de cette tranche en attente.
+
 **Critères de sortie :** aucun SQL métier ni détail de transaction spécifique à SQLite dans les routes; adaptateurs explicites et erreurs métier centralisées; les flux de console et SDK restent identiques.
 
 ### 2. Versionner le schéma — première tranche SQLite réalisée

@@ -47,6 +47,13 @@ def get_property_for_organization(conn: Connection, org_id: str, property_id: st
     ).fetchone()
 
 
+def get_public_property(conn: Connection, property_id: str) -> Any:
+    return conn.execute(
+        "SELECT origin,channel FROM properties WHERE id=?",
+        (property_id,),
+    ).fetchone()
+
+
 def has_scan_reports(conn: Connection, property_id: str) -> bool:
     return conn.execute(
         "SELECT 1 FROM scan_reports WHERE property_id=? LIMIT 1", (property_id,)

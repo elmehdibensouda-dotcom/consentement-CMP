@@ -50,6 +50,7 @@ from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
 from .property_repository import (
     create_property as persist_property,
+    get_public_property,
     get_property_for_organization,
     get_property_for_origin_update,
     has_scan_reports,
@@ -631,9 +632,7 @@ async def property_public_cors(request: Request, call_next):
     property_id, resource = route.groups()
     expected_method = "GET" if resource == "policy" else "POST"
     with connection() as conn:
-        prop = conn.execute(
-            "SELECT origin,channel FROM properties WHERE id=?", (property_id,)
-        ).fetchone()
+        prop = get_public_property(conn, property_id)
     if not prop or prop["channel"] != "web" or not prop["origin"] or origin != prop["origin"]:
         return await call_next(request)
 
@@ -1559,9 +1558,7 @@ def consent_metrics(org_id: str, property_id: str, request: Request,
     since = utc_now() - days * 86_400
     with connection() as conn:
         membership(conn, org_id, context.user_id)
-        prop = conn.execute(
-            "SELECT id,channel FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
-        ).fetchone()
+        prop = get_property_for_organization(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         now = utc_now()
@@ -1609,9 +1606,7 @@ def export_consent_events(org_id: str, property_id: str, request: Request,
     since = now - days * 86_400
     with transaction() as conn:
         membership(conn, org_id, context.user_id)
-        prop = conn.execute(
-            "SELECT id FROM properties WHERE id=? AND org_id=?", (property_id, org_id)
-        ).fetchone()
+        prop = get_property_for_organization(conn, org_id, property_id)
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found")
         matching_events = conn.execute(
