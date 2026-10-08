@@ -23,3 +23,25 @@ def iter_events_for_export(conn: Connection, property_id: str, since: int, now: 
         "ORDER BY recorded_at ASC,event_id ASC",
         (property_id, since, now),
     )
+
+
+def count_organization_events_for_export(conn: Connection, org_id: str, since: int, now: int) -> int:
+    row = conn.execute(
+        "SELECT COUNT(*) AS event_count FROM consent_events e "
+        "JOIN properties p ON p.id=e.property_id "
+        "WHERE p.org_id=? AND e.recorded_at>=? AND e.expires_at>?",
+        (org_id, since, now),
+    ).fetchone()
+    return int(row["event_count"])
+
+
+def iter_organization_events_for_export(conn: Connection, org_id: str, since: int, now: int) -> Any:
+    """Stream retained SDK-reported decisions for every property in one organization."""
+    return conn.execute(
+        "SELECT e.event_id,e.recorded_at,e.expires_at,e.property_id,p.name AS property_name,"
+        "e.policy_version,e.channel,e.action,e.purposes "
+        "FROM consent_events e JOIN properties p ON p.id=e.property_id "
+        "WHERE p.org_id=? AND e.recorded_at>=? AND e.expires_at>? "
+        "ORDER BY e.recorded_at ASC,e.event_id ASC",
+        (org_id, since, now),
+    )

@@ -46,7 +46,12 @@ from .database import (
     record_login_failure,
 )
 from .consent_metrics_repository import load_consent_metric_sources
-from .consent_event_repository import count_events_for_export, iter_events_for_export
+from .consent_event_repository import (
+    count_events_for_export,
+    count_organization_events_for_export,
+    iter_events_for_export,
+    iter_organization_events_for_export,
+)
 from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
 from .property_repository import (
@@ -1746,6 +1751,56 @@ def export_consent_events(org_id: str, property_id: str, request: Request,
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="aman-decisions-{property_id}-{days}d.csv"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.post("/v1/organizations/{org_id}/consent-events/export")
+def export_organization_consent_events(org_id: str, request: Request,
+                                       days: int = Query(default=30, ge=1, le=3650),
+                                       x_aman_csrf: Optional[str] = Header(default=None)):
+    """Export retained SDK-reported decisions across the member's organization."""
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    since = now - days * 86_400
+    with transaction() as conn:
+        membership(conn, org_id, context.user_id)
+        matching_events = count_organization_events_for_export(conn, org_id, since, now)
+        audit(conn, org_id, context.user_id, "consent_events.export_requested", "organization", org_id,
+              {"periodDays": days, "eventCountAtRequest": matching_events, "scope": "organization"})
+
+    def csv_rows():
+        yield "\ufeff"
+        buffer = io.StringIO(newline="")
+        writer = csv.writer(buffer, lineterminator="\r\n")
+        writer.writerow(["event_id", "received_at_epoch", "expires_at_epoch", "property_id",
+                         "property_name", "policy_version", "channel", "action", "purposes_json"])
+        yield buffer.getvalue()
+        buffer.close()
+
+        with connection() as conn:
+            cursor = iter_organization_events_for_export(conn, org_id, since, now)
+            for row in cursor:
+                buffer = io.StringIO(newline="")
+                writer = csv.writer(buffer, lineterminator="\r\n")
+                purposes = json.dumps(json.loads(row["purposes"]), ensure_ascii=False, sort_keys=True,
+                                      separators=(",", ":"))
+                writer.writerow([audit_csv_cell(row[key]) for key in
+                                 ("event_id", "recorded_at", "expires_at", "property_id", "property_name",
+                                  "policy_version", "channel", "action")] + [audit_csv_cell(purposes)])
+                yield buffer.getvalue()
+                buffer.close()
+
+    return StreamingResponse(
+        csv_rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="aman-decisions-{org_id}-{days}d.csv"',
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
         },
