@@ -103,7 +103,7 @@ Pour signaler un choix au serveur, l’application peut appeler `aman.recordDeci
 
 ## Limites avant pilote
 
-- SDK pilote compilé et non publié sur npm ; pas de matrice de compatibilité ni de release signée. Le workflow est configuré pour joindre un SBOM CycloneDX limité au graphe npm React Native lors d’un lancement manuel, mais cette configuration n’a pas encore été exécutée ; il manque un SBOM couvrant les plateformes natives et l’environnement de build, ainsi qu’une validation d’accessibilité.
+- SDK pilote compilé et non publié sur npm ; pas de matrice de compatibilité ni de release signée. La [prévisualisation manuelle du 8 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37755115197) a joint un tarball React Native, un SBOM CycloneDX limité au graphe npm React Native, un AAR Android et un APK de démonstration. Les SHA-256 ont été vérifiés ; l’APK utilise une clé debug et l’artefact expire le 22 octobre 2026. Il manque un SBOM couvrant les plateformes natives et l’environnement de build, une matrice de compatibilité et une validation d’accessibilité.
 - Le stockage est fourni par l’application. Si son écriture échoue, le choix ne dure que pendant la session en mémoire. Le choix reste local jusqu’à un appel d’envoi explicite; il n’existe pas de synchronisation multi-appareil ni de file de reprise.
 - L’application doit démarrer, arrêter et réconcilier réellement ses SDK tiers. Une bibliothèque native déjà initialisée peut ne pas pouvoir être déchargée.
 - La collecte, les formalités, les durées et le contenu de l’avis restent à valider par le client et ses conseils; le SDK ne garantit pas la conformité.

@@ -11,6 +11,8 @@
 | Application iOS native | `mobile/ios` | Package Swift depuis le dépôt privé ou un checkout local ; un lancement manuel du workflow CI est configuré pour joindre une archive source temporaire vérifiable. Pas de release signée ou publiée. |
 | Application Android native | `mobile/android` | Module Gradle depuis un checkout local ; l’AAR de prévisualisation vient d’une exécution manuelle GitHub Actions. Pas de release signée ou publiée dans Maven. |
 
+Les trois aperçus destinés à une évaluation sont disponibles dans le [lancement manuel GitHub Actions du 8 octobre 2026](https://github.com/elmehdibensouda-dotcom/alamane-consent/actions/runs/37755115197), jusqu’au 22 octobre 2026 : sources Web, sources Swift Package iOS, AAR Android, APK de démonstration, tarball React Native et SBOM CycloneDX React Native. Les SHA-256 des manifestes ont été vérifiés. Le manifeste protège l’intégrité des fichiers après téléchargement, pas leur origine ; l’APK utilise une clé debug et aucun artefact n’est une release signée ou de production.
+
 Les SDK mobiles sont des bases de pilote. Aucun n’a encore été intégré et validé dans une application cliente. La compilation ou l’emballage en CI ne constitue pas une validation sur les appareils et versions du client.
 
 ## Préparer la propriété dans la console
