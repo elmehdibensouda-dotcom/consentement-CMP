@@ -1,7 +1,7 @@
 # ALAMANE — support de découverte et de démonstration
 
-**Version de travail · 8 octobre 2026**
-**Cible initiale :** banques et grandes entreprises au Maroc  
+**Version de travail · 9 octobre 2026**
+**Premier prospect visé :** une compagnie d’assurance au Maroc
 **Usage :** préparer un entretien exploratoire et une démonstration sur données fictives. Ce document n’est ni une offre contractuelle ni une déclaration de conformité ou de sécurité.
 
 Pour les questions d’installation et de distribution des SDK, voir le [guide d’intégration pilote](./GUIDE_INTEGRATION_PILOTE.md). Le guide décrit l’état du prototype ; il ne représente pas une procédure de mise en production.
@@ -19,18 +19,18 @@ Chercher un sponsor métier ou digital et, dès le premier échange, demander à
 - RSSI, architecture et achats fournisseurs ;
 - équipes Web et mobiles qui contrôlent les tags et SDK tiers.
 
-## Parcours de démonstration — 20 minutes
+## Parcours de démonstration assurance — 20 minutes
 
-Utiliser uniquement l’environnement local avec des données fictives. Après avoir créé le premier admin et démarré les serveurs, lancer `python backend/seed_demo.py` pour préparer une organisation, des propriétés Web, iOS et Android locales et un brouillon fictif par canal. Les finalités et durées sont des valeurs de démonstration, à remplacer et faire valider par le client. Depuis la console, inviter un second compte de démonstration et accepter l’invitation dans un autre profil de navigateur. Pendant la séance, un compte prépare le brouillon et le second le publie ; la validation à deux personnes est activée par défaut. Elle est imposée pour les propriétés étiquetées production, même si l’organisation la désactive pour le développement ou la recette.
+Utiliser uniquement l’environnement local et des données fictives. Lancer `bash scripts/start-demo.sh --web-only` pour préparer la base dédiée au pilote Web assurance, la console locale et la maquette `demo-assurance.html`. Le script demande un compte administrateur local si nécessaire ; il refuse de toucher une base PostgreSQL et un port déjà occupé. Il crée une propriété Web de développement et un brouillon bilingue. Les finalités, durées et notices restent des exemples à remplacer et à faire valider par l’assureur. Pour montrer l’approbation à deux personnes, inviter un second compte de démonstration depuis la console, accepter l’invitation dans un autre profil, puis publier le brouillon avec ce second compte.
 
 1. **Cadrer le problème (2 min).** Demander comment les finalités, tags et approbations sont actuellement répartis entre les domaines et équipes.
-2. **Montrer le tableau de bord (2 min).** En session connectée, montrer les comptes de configuration réels — organisations, propriétés, états de politiques et brouillons — puis filtrer par organisation. Les décisions reçues sont agrégées par propriété et exportables en CSV uniquement si la collecte a été activée ; les trois propriétés préparées par le seed n’ont aucun événement fictif injecté. Les chiffres de scan du tableau de bord sont simulés. Un outil séparé permet un inventaire ponctuel local sur une page ouverte et exporte un JSON. L’éditeur peut l’importer manuellement sur une propriété Web de la console locale ; ne pas importer d’URL ou d’inventaire client réel dans cette démo.
-3. **Montrer la console et les canaux (6 min).** Sélectionner l’organisation fictive préparée par le seed et montrer ses trois propriétés Web, iOS et Android avec leurs brouillons distincts. Expliquer les finalités FR/AR, les durées indicatives et les champs d’information fictifs à remplacer/faire valider par le client. Ouvrir aussi [`mobile/react-native/example/ConsentIntegration.tsx`](./mobile/react-native/example/ConsentIntegration.tsx) pour illustrer le raccordement d’une finalité ; préciser que l’API réelle d’un fournisseur reste à intégrer et que cet exemple n’est pas une application cliente validée.
+2. **Montrer le tableau de bord (2 min).** En session connectée, montrer l’organisation Assurance Démo, sa propriété Web et les actions conformité. Les décisions reçues sont agrégées et exportables seulement après activation explicite de la collecte ; la base dédiée ne contient aucun événement visiteur fictif injecté. Les chiffres d’inventaire affichés restent des exemples, pas un scan complet du portail.
+3. **Montrer la politique et la gouvernance (6 min).** Ouvrir le brouillon Web FR/AR, expliquer que les finalités, durées, notices et états sont des exemples à faire valider par l’assureur. Modifier un champ, enregistrer une révision, puis montrer l’approbation par le second compte et l’historique. Ne pas présenter les textes d’exemple comme un avis juridique.
 4. **Montrer la gouvernance (3 min).** Enregistrer un changement, afficher sa révision, puis montrer qu’un autre compte doit publier le brouillon lorsque la validation à deux personnes est activée. Avant publication, saisir le motif qui sera conservé dans le journal d’audit ; préciser qu’il documente l’action et ne prouve ni la revue réelle ni une validation juridique.
-5. **Montrer l’expérience Web (4 min).** Charger la page fictive de démonstration avec la propriété publiée ; accepter, refuser ou personnaliser ; rouvrir le centre de préférences. Si une nouvelle version est publiée pendant que la page reste ouverte, le SDK la revalide au retour de l’onglet au premier plan ou dans les cinq minutes et redemande un choix pour cette version. Les scripts utilisés sont locaux et fictifs.
-6. **Montrer la traçabilité (3 min).** Ouvrir l’historique d’administration et exporter son CSV. Si la collecte a été activée pour la démonstration, exporter aussi le CSV des événements encore retenus et expliquer qu’il s’agit de déclarations du SDK, sans identité visiteur ni preuve d’affichage/action réelle. Sinon, ne pas fabriquer d’événements pour la séance.
+5. **Montrer l’expérience Web (4 min).** Ouvrir `demo-assurance.html?property=ID` avec l’identifiant de la propriété publiée. Montrer accepter, refuser, personnaliser, rouvrir et révoquer les préférences ; confirmer que les scripts locaux fictifs suivent le choix. Le lien en haut de page bascule le module entre français et arabe ; le reste de la page fictive demeure en français. Le bouton de réinitialisation est réservé aux essais locaux. Aucune balise tierce réelle n’est intégrée.
+6. **Montrer la traçabilité (3 min).** Ouvrir l’historique d’administration et exporter son CSV. Garder la collecte des décisions désactivée pour la démonstration. Expliquer que si elle est autorisée et activée plus tard, les événements déclarés par le SDK ne prouveront ni identité, ni affichage, ni action réelle du visiteur.
 
-Ne pas faire de démonstration live d’une app bancaire, d’un domaine tiers ou d’un SDK publicitaire réel sans autorisation et périmètre écrits. Les SDK mobiles compilent ou s’emballent dans la CI, mais n’ont pas été intégrés dans une application cliente ; ne pas les annoncer comme validés ou distribués.
+Ne pas faire de démonstration live d’un portail client, d’un domaine tiers ou d’un SDK publicitaire réel sans autorisation et périmètre écrits. Les SDK mobiles compilent ou s’emballent dans la CI, mais n’ont pas été intégrés dans une application cliente ; ne pas les annoncer comme validés ou distribués.
 
 ## Questions de découverte
 
@@ -47,13 +47,13 @@ Ne pas faire de démonstration live d’une app bancaire, d’un domaine tiers o
 
 À la fin, consigner le sponsor, les décideurs manquants, les critères de sécurité, le périmètre technique, le processus d’achat et la prochaine étape datée. Une conversation positive n’est pas à elle seule une validation du marché.
 
-## Hypothèse de pilote à discuter
+## Hypothèse de pilote assurance à discuter
 
 Proposer, uniquement si le prospect confirme l’intérêt et après revue des équipes concernées, un pilote limité :
 
 - **Durée indicative :** 6 à 10 semaines, à ajuster selon l’intégration et l’homologation ;
-- **Périmètre initial :** un domaine Web public, non authentifié, environnement isolé et technologies convenues avec le client ;
-- **Données :** aucune donnée bancaire, identifiant de compte, donnée réelle de visiteur ou secret de production ; politiques et événements de démonstration fictifs ;
+- **Périmètre initial :** une seule route de recette de l’espace assuré, derrière l’authentification de test du client, sur une origine approuvée par écrit et dans un environnement isolé ;
+- **Données :** aucun compte assuré réel, numéro de contrat, sinistre, donnée de santé, identifiant de session ou secret de production ; comptes et données synthétiques ;
 - **Travail conjoint :** établir l’inventaire accepté, configurer les finalités, intégrer les scripts autorisés, puis vérifier les comportements accepter/refuser/modifier et les changements publiés ;
 - **Livrables à définir au contrat :** périmètre et responsabilités, compte rendu des écarts, résultats des vérifications convenues, effort d’intégration, exigences restant à satisfaire et recommandation de suite ;
 - **Réussite :** critères écrits et acceptés par les deux parties avant le démarrage. La grille ci-dessous est une base de discussion, pas une promesse de résultat ; les seuils et moyens de preuve doivent être fixés selon le périmètre et l’environnement effectivement autorisés ;

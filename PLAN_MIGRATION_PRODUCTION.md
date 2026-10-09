@@ -78,7 +78,7 @@ Conserver les prédicats `org_id` dans chaque requête et ajouter une défense e
 
 ### 5. Autoriser un pilote hébergé limité
 
-Décider avec le client du mode dédié ou mutualisé, des connexions sortantes, de l’hébergement, des transferts, de la rétention et du modèle de preuve. Compléter MFA/SSO selon les exigences, livraison d’invitations, réponse aux incidents, SLA, revue contractuelle et pentest indépendant. Démarrer sur un domaine public non authentifié avec données synthétiques ou approuvées explicitement.
+Décider avec le client du mode dédié ou mutualisé, des connexions sortantes, de l’hébergement, des transferts, de la rétention et du modèle de preuve. Compléter MFA/SSO selon les exigences, livraison d’invitations, réponse aux incidents, SLA, revue contractuelle et pentest indépendant. Pour le premier assureur, viser une route de recette de l’espace assuré protégée par son authentification de test, avec données synthétiques et autorisation écrite ; si cette route n’est pas disponible, rester sur une démonstration fictive locale.
 
 **Critères de sortie :** approbations sécurité, juridique, DPO, achats et opérations du client; procédure de retour arrière et de suppression vérifiée; aucune promesse générale de conformité ou de résidence avant validation documentée.
 

@@ -1,14 +1,20 @@
 # ALAMANE — préparation d’un pilote Web fermé
 
-**État au 9 octobre 2026 : kit local de démonstration prêt à préparer ; aucun pilote client ni hébergement public n’est configuré.**
+**État au 9 octobre 2026 : kit local de démonstration en adaptation pour un premier assureur ; aucun pilote client ni hébergement public n’est configuré.**
+
+## Cadrage du premier prospect — assurance
+
+La cible de la présentation est un assureur. Le parcours à montrer est l’intégration du SDK Web dans une page d’essai de l’espace assuré, idéalement dans une recette protégée avec comptes fictifs. Une page authentifiée ne doit pas transmettre à ALAMANE de session, identifiant assuré, contrat, sinistre, donnée de santé ou autre donnée réelle. Le SDK de démonstration ne lit pas ces champs. L’équipe du prospect doit autoriser par écrit la route, l’origine, les testeurs et la fenêtre de test avant toute intégration sur son domaine.
+
+Si l’accès à une recette client n’est pas accordé à temps, la démonstration se fait dans la maquette locale [demo-assurance.html](./demo-assurance.html) avec des finalités fictives. Cette solution montre le parcours visuel et les choix locaux ; elle ne prouve pas une intégration dans le portail de l’assureur. L’API locale n’est pas accessible au prospect et ne doit recevoir aucune donnée réelle.
 
 ## Périmètre visé
 
-- Une seule propriété Web, sur un domaine public contrôlé par le client et explicitement autorisé.
+- Une seule propriété Web, sur une origine de recette contrôlée par le client et explicitement autorisée.
 - Un environnement de recette isolé du site et des comptes de production.
-- Une page publique non authentifiée ou une page de recette représentative, avec accès limité aux testeurs convenus.
+- Pour le premier assureur, une route de l’espace assuré derrière l’authentification de test du client, limitée aux testeurs convenus ; une page publique fictive n’est qu’un repli de démonstration.
 - Une politique et des technologies fictives tant que les équipes du client n’ont pas approuvé le contenu et les traitements.
-- Aucune donnée bancaire, donnée réelle de visiteur, identifiant de compte ou secret de production.
+- Aucun compte assuré réel, contrat, sinistre, donnée de santé, donnée réelle de visiteur, identifiant de session ou secret de production.
 - Transmission centrale des décisions désactivée, sauf décision écrite ultérieure du client après revue.
 
 Le domaine du client reste **à choisir et à autoriser par écrit**. La configuration locale ci-dessous utilise `http://localhost:8000`; elle ne publie rien sur Internet et ne constitue pas le pilote client.
@@ -21,7 +27,7 @@ Depuis la racine du dépôt, lancer :
 bash scripts/start-demo.sh --web-only
 ```
 
-Le script utilise une base dédiée, `.local/alamane-web-pilot.sqlite3`, distincte de la démonstration multi-canal. Il crée un compte administrateur local si nécessaire, puis une organisation fictive « Banque Démo » et **une seule propriété `web`**. Les politiques sont des brouillons d’exemple en français et en arabe ; aucun événement visiteur n’est créé. Le script refuse les URL PostgreSQL pour éviter de toucher une base partagée.
+Le script utilise `.local/alamane-web-pilot.sqlite3`, distincte de la démonstration multi-canal. Il crée un compte administrateur local si nécessaire, puis ajoute l’organisation fictive « Assurance Démo » avec **une propriété `web`** et un brouillon bilingue français/arabe. Les autres enregistrements éventuels de cette base ne sont pas supprimés. Aucun événement visiteur n’est créé. Le script refuse les URL PostgreSQL pour éviter de toucher une base partagée.
 
 La sortie affiche les adresses de la console, de la page fictive et de l’API. Pour ce mode, console, API et page de démonstration passent par la même origine `http://localhost:8000/console/`; l’API écoute sur `127.0.0.1` et le port 8001 n’est pas nécessaire. Cela évite le blocage navigateur rencontré avec une API sur un port séparé. `Ctrl+C` arrête le service local. Le port 8000 doit être libre.
 
@@ -29,10 +35,10 @@ Pour démontrer la publication avec l’approbation à deux personnes activée, 
 
 ## Parcours à dérouler avec des données fictives
 
-1. Ouvrir la console et vérifier qu’elle ne contient que l’organisation fictive et sa propriété Web.
+1. Ouvrir la console, sélectionner « Assurance Démo » et vérifier sa propriété Web de développement.
 2. Relire le brouillon d’exemple. Ne pas présenter ses finalités, durées ou notices comme un conseil juridique ou une politique client.
-3. Faire approuver et publier le brouillon par un second compte local, puis ouvrir l’URL `demo-site.html` affichée par le script.
-4. Parcourir accepter, refuser, personnaliser et rouvrir le centre de préférences en français et en arabe standard.
+3. Faire approuver et publier le brouillon par un second compte local, puis ouvrir l’URL `demo-assurance.html` affichée par le script.
+4. Parcourir accepter, refuser, personnaliser, rouvrir et réinitialiser le centre. Le lien « العربية / Français » change la langue du module ; utiliser `?lang=ar` pour le départ arabe. Le bouton de réinitialisation ne s’affiche que sur localhost et efface le choix de la propriété de démonstration courante.
 5. Dans les outils développeur du navigateur, observer les scripts locaux fictifs avant le choix, après chaque choix et après une révocation. Aucun fournisseur tiers réel n’est configuré dans cette démonstration.
 6. Confirmer que la console ne montre aucun événement visiteur injecté. Les métriques et événements ne doivent jamais être inventés pour rendre la démo plus convaincante.
 

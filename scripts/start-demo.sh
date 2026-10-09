@@ -21,7 +21,7 @@ case "$DEMO_MODE" in
     CHECK_PORTS="8000"
     API_PORT=8000
     CONSOLE_URL="http://localhost:8000/console/admin.html"
-    DEMO_SITE_PATH="/console/demo-site.html"
+    DEMO_SITE_PATH="/console/demo-assurance.html"
     API_DOCS_URL="http://localhost:8000/docs"
     READY_API_URL="http://127.0.0.1:8000/health/ready"
     READY_SITE_URL="http://127.0.0.1:8000/console/admin.html"
@@ -133,7 +133,7 @@ if [[ -z "$owner_email" ]]; then
 fi
 
 if [[ "$DEMO_MODE" == "--web-only" ]]; then
-  seed_output=$("$PYTHON" backend/seed_demo.py --web-only --owner-email "$owner_email")
+  seed_output=$("$PYTHON" backend/seed_demo.py --web-only --industry insurance --owner-email "$owner_email")
 else
 seed_output=$("$PYTHON" backend/seed_demo.py --owner-email "$owner_email")
 fi
@@ -149,7 +149,7 @@ web_pid=""
 if [[ "$DEMO_MODE" == "--web-only" ]]; then
   PILOT_CONSOLE_DIR="$REPO_ROOT/.local/alamane-web-pilot-console"
   mkdir -p "$PILOT_CONSOLE_DIR/demo-tags"
-  cp "$REPO_ROOT/admin.html" "$REPO_ROOT/index.html" "$REPO_ROOT/demo-site.html" \
+  cp "$REPO_ROOT/admin.html" "$REPO_ROOT/index.html" "$REPO_ROOT/demo-site.html" "$REPO_ROOT/demo-assurance.html" \
     "$REPO_ROOT/aman-cmp.js" "$REPO_ROOT/aman-scanner.js" "$REPO_ROOT/scanner-tool.html" \
     "$PILOT_CONSOLE_DIR/"
   cp -R "$REPO_ROOT/demo-tags/." "$PILOT_CONSOLE_DIR/demo-tags/"

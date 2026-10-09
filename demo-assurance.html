@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f7f4">
+  <title>ALAMANE — Espace assuré fictif</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f4f7f4;color:#1b2c24;font-family:Arial,Helvetica,sans-serif}.top{height:68px;background:#fff;border-bottom:1px solid #e1e8e1;display:flex;justify-content:space-between;align-items:center;padding:0 max(22px,calc((100vw - 1100px)/2));font-size:13px}.logo{font-weight:800;letter-spacing:.08em;color:#174a36}.top a{color:#506258;text-decoration:none;margin-left:18px}.hero{max-width:1100px;margin:70px auto 0;padding:45px 28px;border-radius:24px;background:linear-gradient(120deg,#183f31,#316849);color:#fff;min-height:300px;display:flex;justify-content:space-between;align-items:center;overflow:hidden}.hero small{letter-spacing:.16em;color:#c5dfce;font-size:11px}.hero h1{font-size:clamp(34px,6vw,59px);line-height:1.02;letter-spacing:-.04em;max-width:600px;margin:18px 0}.hero p{color:#deebe1;font-size:15px;line-height:1.6;max-width:510px}.hero-icon{font-size:130px;opacity:.18;margin-right:55px}.body{max-width:1100px;margin:26px auto;display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.card{background:white;border:1px solid #e1e8e1;border-radius:14px;padding:23px}.card h2{font-size:16px;margin:0 0 9px}.card p{font-size:13px;line-height:1.6;color:#68766d;margin:0}.account{display:flex;align-items:center;gap:15px;margin-top:20px;padding:15px;background:#f6f8f5;border-radius:11px}.account .symbol{width:42px;height:42px;border-radius:12px;background:#e2efe5;display:grid;place-items:center;color:#176447;font-size:20px}.account b{font-size:13px;display:block}.account small{color:#748078}.tag-panel{max-width:1100px;margin:0 auto 20px;padding:14px 18px;background:#fff8e8;border:1px solid #f3e5bf;border-radius:10px;color:#715a27;font-size:11px;line-height:1.5}.demo-note{max-width:1100px;margin:0 auto 60px;color:#7a867d;font-size:11px}.demo-reset{margin-top:10px;border:1px solid #cdd8ce;border-radius:7px;background:#fff;padding:8px 11px;color:#28563f;font:600 11px Arial,Helvetica,sans-serif;cursor:pointer}.demo-reset:focus-visible{outline:3px solid #8dbb9b;outline-offset:2px}.tag-results{display:grid;gap:7px;margin-top:15px}.result{display:flex;align-items:center;gap:8px;font-size:11px;color:#68766d}.dot{width:8px;height:8px;border-radius:50%;background:#d5ddd5}.dot.on{background:#34906a}@media(max-width:700px){.hero{margin:28px 12px 0;padding:30px 24px;min-height:260px}.hero-icon{display:none}.body{grid-template-columns:1fr;margin:14px 12px}.tag-panel,.demo-note{margin-left:12px;margin-right:12px}.top{padding:0 16px}.top a:nth-child(2){display:none}}
+  </style>
+</head>
+<body>
+  <header class="top"><span class="logo">ASSURANCE DÉMO</span><nav><a href="#">Particuliers</a><a href="#">Entreprises</a><a href="#">Espace client ↗</a><a id="consent-locale-toggle" href="?lang=ar" aria-label="Afficher le module de consentement en arabe">العربية</a></nav></header>
+  <section class="hero"><div><small>VOTRE ASSURANCE, À VOTRE RYTHME</small><h1>Vos projets, en confiance.</h1><p>Une expérience d’assurance pensée pour vous. Cette page simule un espace assuré de recette et vous permet de gérer vos préférences.</p></div><div class="hero-icon" aria-hidden="true">◈</div></section>
+  <main class="body">
+    <section class="card"><h2>Bienvenue dans votre espace assuré de démonstration</h2><p>Maquette locale de recette pour valider l’intégration ALAMANE. Aucun compte réel, contrat, sinistre ou donnée personnelle n’est utilisé.</p><div class="account"><div class="symbol">⌂</div><div><b>Espace assuré fictif</b><small>Session de démonstration · aucun compte réel</small></div></div></section>
+    <section class="card"><h2>Technologies fictives de démonstration</h2><p>Les scripts facultatifs ci-dessous sont locaux et affichent uniquement leur état. Aucun fournisseur tiers ni service d’assurance n’est appelé.</p><div class="tag-results"><div class="result"><span class="dot" id="analytics-dot"></span><span id="analytics-state">Mesure d’audience : en attente du choix</span></div><div class="result"><span class="dot" id="marketing-dot"></span><span id="marketing-state">Publicité personnalisée : en attente du choix</span></div></div></section>
+  </main>
+  <div class="tag-panel"><b>Démo technique uniquement.</b> Les catégories et leur réglage « consentement requis » sont des exemples. Une revue juridique et une validation par le client sont nécessaires avant tout déploiement réel.</div>
+  <p class="demo-note">Maquette de recette ALAMANE : les choix restent sur cet appareil. L’ajout de <code>?property=ID_PROPRIÉTÉ</code> charge une politique publiée depuis l’API ; ne l’utilise sur le domaine d’un assureur qu’après autorisation et validation de son environnement de test.<br><button id="reset-assurance-demo" class="demo-reset" type="button">Recommencer le parcours de consentement</button></p>
+  <div id="aman-demo-status" class="aman-demo-status" aria-live="polite"></div>
+  <script>
+    const assuranceDemoParams = new URLSearchParams(window.location.search);
+    const assurancePropertyId = assuranceDemoParams.get('property');
+    const assuranceLocale = assuranceDemoParams.get('lang') === 'ar' ? 'ar' : 'fr';
+    const localeToggle = document.getElementById('consent-locale-toggle');
+    if (localeToggle) {
+      const nextURL = new URL(window.location.href);
+      nextURL.searchParams.set('lang', assuranceLocale === 'fr' ? 'ar' : 'fr');
+      localeToggle.href = nextURL.pathname + nextURL.search + nextURL.hash;
+      localeToggle.textContent = assuranceLocale === 'fr' ? 'العربية' : 'Français';
+      localeToggle.setAttribute('aria-label', assuranceLocale === 'fr'
+        ? 'Afficher le module de consentement en arabe'
+        : 'Afficher le module de consentement en français');
+    }
+    const arabicPurposes = [
+      { id: 'essential', label: 'أساسي', description: 'ضروري لتشغيل الموقع.', required: true, consentRequired: false, initiallyEnabled: true, vendors: [] },
+      { id: 'analytics', label: 'قياس الجمهور', description: 'يساعد على فهم استخدام الموقع.', required: false, consentRequired: true, initiallyEnabled: false, vendors: [] },
+      { id: 'marketing', label: 'الإعلانات المخصصة', description: 'يسمح بقياس الحملات أو تخصيصها.', required: false, consentRequired: true, initiallyEnabled: false, vendors: [] }
+    ];
+    const assuranceConfig = {
+      version: '1', locale: assuranceLocale, channel: 'web',
+      title: assuranceLocale === 'ar' ? 'تفضيلات الخصوصية' : 'Vos préférences de confidentialité',
+      message: assuranceLocale === 'ar'
+        ? 'اختر الاستخدامات الاختيارية التي ترغب في السماح بها. تستخدم هذه الصفحة نصوصاً تجريبية محلية فقط.'
+        : 'Choisissez les usages facultatifs que vous souhaitez autoriser. Cette page utilise uniquement des scripts fictifs locaux.',
+      color: '#176447', propertyId: assurancePropertyId || 'assurance-demo-preview',
+      apiBaseUrl: assurancePropertyId ? (location.pathname.startsWith('/console/') ? location.origin : 'http://localhost:8001') : ''
+    };
+    if (assuranceLocale === 'ar' && !assurancePropertyId) assuranceConfig.categories = arabicPurposes;
+    window.AmanConsentConfig = assuranceConfig;
+    const resetAssuranceDemo = document.getElementById('reset-assurance-demo');
+    const isLocalDemoHost = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+    if (resetAssuranceDemo && !isLocalDemoHost) resetAssuranceDemo.hidden = true;
+    if (resetAssuranceDemo && isLocalDemoHost) resetAssuranceDemo.addEventListener('click', function () {
+      const choiceKey = 'aman:choice:' + (assurancePropertyId || 'assurance-demo-preview');
+      try { window.localStorage.removeItem(choiceKey); } catch (_) {}
+      try { window.sessionStorage.removeItem(choiceKey); } catch (_) {}
+      window.location.reload();
+    });
+    // Keep the demo status visible even when ALAMANE correctly blocks the
+    // optional scripts that would normally update these labels themselves.
+    document.addEventListener('aman:consent-update', function (event) {
+      const purposes = event.detail && event.detail.purposes || {};
+      const purposeLabels = assuranceLocale === 'ar'
+        ? [['analytics', 'قياس الجمهور'], ['marketing', 'الإعلانات المخصصة']]
+        : [['analytics', 'Mesure d’audience'], ['marketing', 'Publicité personnalisée']];
+      purposeLabels.forEach(function (item) {
+        const allowed = purposes[item[0]] === true;
+        const dot = document.getElementById(item[0] + '-dot');
+        const state = document.getElementById(item[0] + '-state');
+        if (dot) dot.classList.toggle('on', allowed);
+        if (state) state.textContent = assuranceLocale === 'ar'
+          ? item[1] + (allowed ? ' : مثال محلي نشط وفق الاختيار' : ' : مثال محلي محظور وفق الاختيار')
+          : item[1] + (allowed
+            ? ' : exemple local actif selon le choix ALAMANE'
+            : ' : exemple local bloqué selon le choix ALAMANE');
+      });
+    });
+  </script>
+  <script src="aman-cmp.js"></script>
+  <script type="text/plain" data-aman-category="analytics" data-aman-src="demo-tags/analytics.js"></script>
+  <script type="text/plain" data-aman-category="marketing" data-aman-src="demo-tags/marketing.js"></script>
+</body>
+</html>

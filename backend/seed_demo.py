@@ -19,7 +19,10 @@ from aman_api.main import (
 )
 
 
-ORG_NAME = "Banque Démo — données fictives"
+ORG_NAMES = {
+    "bank": "Banque Démo — données fictives",
+    "insurance": "Assurance Démo — données fictives",
+}
 DEMO_PROPERTIES = (
     {"name": "Site fictif — développement", "channel": "web", "origin": "http://localhost:8000", "retention_days": 180},
     {"name": "Application iOS fictive — développement", "channel": "ios", "origin": None, "retention_days": 30},
@@ -27,7 +30,13 @@ DEMO_PROPERTIES = (
 )
 
 
-def demo_policy(property_id: str, channel: str, retention_days: int) -> dict:
+def demo_policy(
+    property_id: str,
+    channel: str,
+    retention_days: int,
+    controller_name: str,
+    controller_name_ar: str,
+) -> dict:
     if channel == "web":
         optional_purposes = [
             (
@@ -94,7 +103,7 @@ def demo_policy(property_id: str, channel: str, retention_days: int) -> dict:
         "retentionDays": retention_days,
         "purposes": purposes,
         "notice": {
-            "controllerName": "Entité bancaire fictive de démonstration",
+            "controllerName": controller_name,
             "contact": "privacy@example.invalid",
             "processingReference": "Référence fictive à remplacer et faire valider",
             "dataCategories": ["Préférences de démonstration uniquement"],
@@ -103,7 +112,7 @@ def demo_policy(property_id: str, channel: str, retention_days: int) -> dict:
         },
         "noticeTranslations": {
             "fr": {
-                "controllerName": "Entité bancaire fictive de démonstration",
+                "controllerName": controller_name,
                 "contact": "privacy@example.invalid",
                 "processingReference": "Référence fictive à remplacer et faire valider",
                 "dataCategories": ["Préférences de démonstration uniquement"],
@@ -111,7 +120,7 @@ def demo_policy(property_id: str, channel: str, retention_days: int) -> dict:
                 "transfers": ["Aucun transfert réel configuré dans cette démo"],
             },
             "ar": {
-                "controllerName": "كيان مصرفي افتراضي لأغراض العرض التوضيحي",
+                "controllerName": controller_name_ar,
                 "contact": "privacy@example.invalid",
                 "processingReference": "مرجع افتراضي يجب استبداله والتحقق منه",
                 "dataCategories": ["تفضيلات تجريبية فقط"],
@@ -125,12 +134,17 @@ def demo_policy(property_id: str, channel: str, retention_days: int) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--owner-email", help="Email of the existing Aman user who will own the demo organization")
+    parser.add_argument("--industry", choices=tuple(ORG_NAMES), default="bank",
+                        help="Fictional organization profile to seed")
     parser.add_argument(
         "--web-only",
         action="store_true",
         help="Seed only the fictional Web property (use with a dedicated local database)",
     )
     args = parser.parse_args()
+    org_name = ORG_NAMES[args.industry]
+    controller_name = "Entité d’assurance fictive de démonstration" if args.industry == "insurance" else "Entité bancaire fictive de démonstration"
+    controller_name_ar = "كيان تأمين افتراضي لأغراض العرض التوضيحي" if args.industry == "insurance" else "كيان مصرفي افتراضي لأغراض العرض التوضيحي"
     if ENVIRONMENT != "development":
         print("Demo seeding is allowed only in the development environment.", file=sys.stderr)
         return 2
@@ -145,7 +159,7 @@ def main() -> int:
             existing_owner = conn.execute(
                 "SELECT u.id,u.email FROM users u JOIN memberships m ON m.user_id=u.id "
                 "JOIN organizations o ON o.id=m.org_id WHERE o.name=? AND m.role='owner' AND u.disabled=0",
-                (ORG_NAME,),
+                (org_name,),
             ).fetchone()
             users = [existing_owner] if existing_owner else conn.execute(
                 "SELECT id,email FROM users WHERE disabled=0 ORDER BY created_at"
@@ -158,7 +172,7 @@ def main() -> int:
     property_definitions = DEMO_PROPERTIES[:1] if args.web_only else DEMO_PROPERTIES
     now = utc_now()
     with transaction() as conn:
-        organization = conn.execute("SELECT id FROM organizations WHERE name=?", (ORG_NAME,)).fetchone()
+        organization = conn.execute("SELECT id FROM organizations WHERE name=?", (org_name,)).fetchone()
         if organization:
             org_id = organization["id"]
             if not conn.execute("SELECT 1 FROM memberships WHERE org_id=? AND user_id=?", (org_id, owner["id"])).fetchone():
@@ -168,7 +182,7 @@ def main() -> int:
             org_id = secrets.token_hex(16)
             conn.execute(
                 "INSERT INTO organizations(id,name,require_two_person_publish,created_at) VALUES(?,?,1,?)",
-                (org_id, ORG_NAME, now),
+                (org_id, org_name, now),
             )
             conn.execute(
                 "INSERT INTO memberships(org_id,user_id,role,created_at) VALUES(?,?,?,?)",
@@ -235,7 +249,8 @@ def main() -> int:
                 ).fetchone()["n"]
                 policy_id = secrets.token_hex(16)
                 policy = validate_policy(
-                    demo_policy(property_id, channel, definition["retention_days"]), property_id, channel
+                    demo_policy(property_id, channel, definition["retention_days"], controller_name,
+                                controller_name_ar), property_id, channel
                 )
                 policy["policyVersion"] = str(version)
                 conn.execute(
@@ -249,13 +264,14 @@ def main() -> int:
             seeded_properties.append({"name": property_name, "channel": channel, "id": property_id,
                                      "version": version, "retention_days": definition["retention_days"]})
 
-    print(f"Fictional demo organization ready: {ORG_NAME}")
+    print(f"Fictional demo organization ready: {org_name}")
     print(f"Organization ID: {org_id}")
     for seeded_property in seeded_properties:
         print(f"{seeded_property['channel']} property ID: {seeded_property['id']}")
         print(f"  {seeded_property['name']} · draft v{seeded_property['version']} · {seeded_property['retention_days']} illustrative days")
     web_property = next(item for item in seeded_properties if item["channel"] == "web")
-    print(f"Demo site: http://localhost:8000/demo-site.html?property={web_property['id']}")
+    demo_page = "demo-assurance.html" if args.industry == "insurance" else "demo-site.html"
+    print(f"Demo site: http://localhost:8000/{demo_page}?property={web_property['id']}")
     print("Invite and sign in as a second demo member to publish. No consent events or visitor data were generated.")
     print(f"Database: {DATABASE_PATH}")
     return 0

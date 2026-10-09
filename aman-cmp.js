@@ -24,9 +24,9 @@
     message: 'Choisissez les catégories de cookies que vous souhaitez autoriser.',
     color: '#176447',
     categories: [
-      { id: 'essential', label: 'Essentiels', description: 'Nécessaires au fonctionnement du site.', required: true, consentRequired: false, initiallyEnabled: true },
-      { id: 'analytics', label: 'Mesure d’audience', description: 'Aide à comprendre la fréquentation du site.', required: false, consentRequired: true, initiallyEnabled: false },
-      { id: 'marketing', label: 'Publicité personnalisée', description: 'Permet de mesurer ou personnaliser des campagnes.', required: false, consentRequired: true, initiallyEnabled: false }
+      { id: 'essential', label: 'Essentiels', description: 'Nécessaires au fonctionnement du site.', required: true, consentRequired: false, initiallyEnabled: true, vendors: [] },
+      { id: 'analytics', label: 'Mesure d’audience', description: 'Aide à comprendre la fréquentation du site.', required: false, consentRequired: true, initiallyEnabled: false, vendors: [] },
+      { id: 'marketing', label: 'Publicité personnalisée', description: 'Permet de mesurer ou personnaliser des campagnes.', required: false, consentRequired: true, initiallyEnabled: false, vendors: [] }
     ]
   };
   const LABELS = {
@@ -692,7 +692,7 @@
       const row = make('label', 'aman-option');
       const copy = make('span', 'aman-option-copy');
       copy.append(make('strong', '', category.label), make('small', '', category.description));
-      if (category.vendors.length) {
+      if (Array.isArray(category.vendors) && category.vendors.length) {
         const vendorText = rtl ? 'الموردون المرتبطون (للاسترشاد): ' : 'Fournisseurs associés (indicatif) : ';
         copy.append(make('small', '', vendorText + category.vendors.join(', ')));
       }
