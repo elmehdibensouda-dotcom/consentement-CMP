@@ -20,7 +20,7 @@
   <p class="demo-note">Mode démo local : utilise la <a href="index.html">console web</a>. Mode politique publiée : configure une propriété web dans la <a href="admin.html">console entreprise</a>, puis ouvre cette page avec <code>?property=ID_PROPRIÉTÉ</code>. Les choix de démonstration restent sur cet appareil.</p>
   <div id="aman-demo-status" class="aman-demo-status" aria-live="polite"></div>
   <script>
-    window.AmanConsentConfig = { version: '1', locale: 'fr', channel: 'web', title: 'Votre vie privée, notre priorité', message: 'Nous utilisons des cookies pour améliorer votre expérience. Choisissez ceux que vous acceptez.', color: '#176447', propertyId: new URLSearchParams(window.location.search).get('property') || '', apiBaseUrl: 'http://localhost:8001' };
+    window.AmanConsentConfig = { version: '1', locale: 'fr', channel: 'web', title: 'Votre vie privée, notre priorité', message: 'Nous utilisons des cookies pour améliorer votre expérience. Choisissez ceux que vous acceptez.', color: '#176447', propertyId: new URLSearchParams(window.location.search).get('property') || '', apiBaseUrl: location.pathname.startsWith('/console/') ? location.origin : 'http://localhost:8001' };
   </script>
   <script src="aman-cmp.js"></script>
   <script type="text/plain" data-aman-category="analytics" data-aman-src="demo-tags/analytics.js"></script>

@@ -8,9 +8,23 @@ DEMO_MODE="${1:-full}"
 case "$DEMO_MODE" in
   full)
     DEMO_DB="$REPO_ROOT/.local/alamane-demo.sqlite3"
+    CHECK_PORTS="8000 8001"
+    API_PORT=8001
+    CONSOLE_URL="http://localhost:8000/index.html"
+    DEMO_SITE_PATH="/demo-site.html"
+    API_DOCS_URL="http://localhost:8001/docs"
+    READY_API_URL="http://127.0.0.1:8001/health/ready"
+    READY_SITE_URL="http://127.0.0.1:8000/index.html"
     ;;
   --web-only)
     DEMO_DB="$REPO_ROOT/.local/alamane-web-pilot.sqlite3"
+    CHECK_PORTS="8000"
+    API_PORT=8000
+    CONSOLE_URL="http://localhost:8000/console/admin.html"
+    DEMO_SITE_PATH="/console/demo-site.html"
+    API_DOCS_URL="http://localhost:8000/docs"
+    READY_API_URL="http://127.0.0.1:8000/health/ready"
+    READY_SITE_URL="http://127.0.0.1:8000/console/admin.html"
     ;;
   *)
     echo "Usage: $0 [--web-only]" >&2
@@ -34,7 +48,7 @@ if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) e
   exit 1
 fi
 
-if ! python3 - 8000 8001 <<'PY'
+if ! python3 - $CHECK_PORTS <<'PY'
 import errno
 import socket
 import sys
@@ -121,7 +135,7 @@ fi
 if [[ "$DEMO_MODE" == "--web-only" ]]; then
   seed_output=$("$PYTHON" backend/seed_demo.py --web-only --owner-email "$owner_email")
 else
-  seed_output=$("$PYTHON" backend/seed_demo.py --owner-email "$owner_email")
+seed_output=$("$PYTHON" backend/seed_demo.py --owner-email "$owner_email")
 fi
 printf '%s\n' "$seed_output"
 property_id=$(printf '%s\n' "$seed_output" | sed -n 's/^web property ID: //p')
@@ -130,14 +144,28 @@ if [[ -z "$property_id" ]]; then
   exit 1
 fi
 
-"$PYTHON" -m uvicorn backend.aman_api.main:app --host 127.0.0.1 --port 8001 --no-access-log &
-api_pid=$!
-"$PYTHON" -m http.server 8000 --bind 127.0.0.1 &
-web_pid=$!
+api_pid=""
+web_pid=""
+if [[ "$DEMO_MODE" == "--web-only" ]]; then
+  PILOT_CONSOLE_DIR="$REPO_ROOT/.local/alamane-web-pilot-console"
+  mkdir -p "$PILOT_CONSOLE_DIR/demo-tags"
+  cp "$REPO_ROOT/admin.html" "$REPO_ROOT/index.html" "$REPO_ROOT/demo-site.html" \
+    "$REPO_ROOT/aman-cmp.js" "$REPO_ROOT/aman-scanner.js" "$REPO_ROOT/scanner-tool.html" \
+    "$PILOT_CONSOLE_DIR/"
+  cp -R "$REPO_ROOT/demo-tags/." "$PILOT_CONSOLE_DIR/demo-tags/"
+  export AMAN_STATIC_CONSOLE_DIR="$PILOT_CONSOLE_DIR"
+  "$PYTHON" -m uvicorn backend.aman_api.main:app --host 127.0.0.1 --port "$API_PORT" --no-access-log &
+  api_pid=$!
+else
+  "$PYTHON" -m uvicorn backend.aman_api.main:app --host 127.0.0.1 --port "$API_PORT" --no-access-log &
+  api_pid=$!
+  "$PYTHON" -m http.server 8000 --bind 127.0.0.1 &
+  web_pid=$!
+fi
 
 cleanup() {
-  kill "$api_pid" "$web_pid" 2>/dev/null || true
-  wait "$api_pid" "$web_pid" 2>/dev/null || true
+  if [[ -n "$api_pid" ]]; then kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true; fi
+  if [[ -n "$web_pid" ]]; then kill "$web_pid" 2>/dev/null || true; wait "$web_pid" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -145,18 +173,16 @@ trap 'exit 143' TERM
 
 ready=0
 for attempt in {1..40}; do
-  if ! kill -0 "$api_pid" 2>/dev/null || ! kill -0 "$web_pid" 2>/dev/null; then
+  if ! kill -0 "$api_pid" 2>/dev/null || { [[ -n "$web_pid" ]] && ! kill -0 "$web_pid" 2>/dev/null; }; then
     break
   fi
-if "$PYTHON" - <<'PY' >/dev/null 2>&1
+ if "$PYTHON" - "$READY_API_URL" "$READY_SITE_URL" <<'PY' >/dev/null 2>&1
+import sys
 from urllib.request import ProxyHandler, build_opener
 
 opener = build_opener(ProxyHandler({}))
 
-for url in (
-    "http://127.0.0.1:8001/health/ready",
-    "http://127.0.0.1:8000/index.html",
-):
+for url in sys.argv[1:]:
     with opener.open(url, timeout=1) as response:
         if response.status != 200:
             raise SystemExit(1)
@@ -178,17 +204,25 @@ if [[ "$DEMO_MODE" == "--web-only" ]]; then
 else
   echo "ALAMANE local demo is ready (fictional data only)."
 fi
-echo "Console:   http://localhost:8000/index.html"
-echo "Demo site: http://localhost:8000/demo-site.html?property=$property_id"
-echo "API docs:  http://localhost:8001/docs"
+echo "Console:   $CONSOLE_URL"
+echo "Demo site: http://localhost:8000$DEMO_SITE_PATH?property=$property_id"
+echo "API docs:  $API_DOCS_URL"
 echo "Database:  $DEMO_DB"
-echo "Press Ctrl+C to stop both local servers."
-
-if [[ "${OSTYPE:-}" == darwin* ]] && command -v open >/dev/null 2>&1; then
-  open "http://localhost:8000/index.html"
+if [[ "$DEMO_MODE" == "--web-only" ]]; then
+  echo "Press Ctrl+C to stop the local API and console."
+else
+  echo "Press Ctrl+C to stop both local servers."
 fi
 
-while kill -0 "$api_pid" 2>/dev/null && kill -0 "$web_pid" 2>/dev/null; do
+if [[ "${OSTYPE:-}" == darwin* ]] && command -v open >/dev/null 2>&1; then
+  open "$CONSOLE_URL"
+fi
+
+server_alive() {
+  kill -0 "$api_pid" 2>/dev/null || return 1
+  if [[ -n "$web_pid" ]]; then kill -0 "$web_pid" 2>/dev/null || return 1; fi
+}
+while server_alive; do
   sleep 1
 done
 echo "A local server stopped." >&2

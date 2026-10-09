@@ -68,8 +68,9 @@
   <script>
     const localHosts=['localhost','127.0.0.1','::1','[::1]'];
     const localPage=location.protocol==='file:'||localHosts.includes(location.hostname);
+    const sameOriginConsole=location.pathname.startsWith('/console/');
     const configuredApi=document.querySelector('meta[name="aman-api-base-url"]')?.content.trim();
-    const defaultApi=location.protocol==='file:'?'http://localhost:8001':localPage?`${location.protocol}//${location.hostname}:8001`:location.origin;
+    const defaultApi=location.protocol==='file:'?'http://localhost:8001':localPage&&!sameOriginConsole?`${location.protocol}//${location.hostname}:8001`:location.origin;
     const API=(configuredApi||defaultApi).replace(/\/+$/,'');
     const state={csrf:'',user:null,orgs:[],org:null,members:[],properties:[],property:null,editingPolicyId:null,editingPolicy:null,editingPolicyRevision:null};
     const $=id=>document.getElementById(id);
@@ -381,7 +382,7 @@ class ConsentActivity : Activity() {
     private fun showPolicyRetry() {
         // Afficher une action permettant de relancer le chargement de la politique.
     }
-}``;
+}`;
     }
     function renderScanDetails(report, target){
       target.replaceChildren();

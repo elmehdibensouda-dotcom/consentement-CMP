@@ -23,7 +23,7 @@ bash scripts/start-demo.sh --web-only
 
 Le script utilise une base dédiée, `.local/alamane-web-pilot.sqlite3`, distincte de la démonstration multi-canal. Il crée un compte administrateur local si nécessaire, puis une organisation fictive « Banque Démo » et **une seule propriété `web`**. Les politiques sont des brouillons d’exemple en français et en arabe ; aucun événement visiteur n’est créé. Le script refuse les URL PostgreSQL pour éviter de toucher une base partagée.
 
-La sortie affiche les adresses de la console, de la page fictive et de l’API. Les services n’écoutent que sur `127.0.0.1`; `Ctrl+C` les arrête. Il faut des ports locaux 8000 et 8001 libres.
+La sortie affiche les adresses de la console, de la page fictive et de l’API. Pour ce mode, console, API et page de démonstration passent par la même origine `http://localhost:8000/console/`; l’API écoute sur `127.0.0.1` et le port 8001 n’est pas nécessaire. Cela évite le blocage navigateur rencontré avec une API sur un port séparé. `Ctrl+C` arrête le service local. Le port 8000 doit être libre.
 
 Pour démontrer la publication avec l’approbation à deux personnes activée, créer un second compte local, l’inviter depuis la console, accepter l’invitation avec ce compte, puis publier le brouillon depuis ce second compte. Une propriété de développement ne remplace pas un déploiement isolé : cette règle de gouvernance ne constitue pas une séparation technique d’environnements.
 

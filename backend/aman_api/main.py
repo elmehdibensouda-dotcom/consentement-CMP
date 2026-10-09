@@ -637,7 +637,7 @@ async def purge_expired_consent_events() -> None:
 
 
 app = FastAPI(title="Aman Consent API", version="0.1.0", lifespan=lifespan)
-STATIC_CONSOLE_DIR = ROOT / "console"
+STATIC_CONSOLE_DIR = Path(os.environ.get("AMAN_STATIC_CONSOLE_DIR", str(ROOT / "console")))
 if STATIC_CONSOLE_DIR.is_dir():
     app.mount(
         "/console",
