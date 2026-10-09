@@ -15,19 +15,21 @@ Avant de publier, le responsable du traitement et ses conseils doivent examiner 
 Télécharger `aman-cmp.js` depuis le dépôt ou l’artefact `alamane-web-preview-<commit>`, vérifier son empreinte avec `SHA256SUMS`, puis l’héberger, par exemple sous `/assets/aman-cmp.js`, sur un domaine contrôlé et approuvé par l’équipe cliente.
 
 ```html
-<script src="/assets/aman-cmp.js"
+<script nonce="{{CSP_NONCE}}"
+        src="/assets/aman-cmp.js"
         data-aman-api-base-url="https://cmp.example.ma"
         data-aman-property-id="PROPERTY_ID"
         data-aman-channel="web"
         data-aman-collect-decision-events="false"
-        data-aman-request-timeout-ms="10000"></script>
+        data-aman-request-timeout-ms="10000"
+        data-aman-locale="fr"></script>
 
 <script type="text/plain"
         data-aman-category="analytics"
         data-aman-src="/assets/analytics.js"></script>
 ```
 
-Remplacer `cmp.example.ma`, `PROPERTY_ID` et les ressources d’exemple. L’URL distante de l’API doit être en HTTPS ; HTTP est limité aux hôtes loopback de développement. Le canal Web laisse la remontée des décisions désactivée par défaut.
+Remplacer `cmp.example.ma`, `PROPERTY_ID`, le chemin du SDK et les ressources d’exemple. L’URL distante de l’API doit être en HTTPS ; HTTP est limité aux hôtes loopback de développement. Le canal Web laisse la remontée des décisions désactivée par défaut. Le serveur de l’application doit remplacer `{{CSP_NONCE}}` par une valeur aléatoire propre à la réponse HTTP et réutiliser cette même valeur dans son en-tête CSP.
 
 ## 3. Raccorder les technologies
 
@@ -52,6 +54,26 @@ Les requêtes de politique et de décision expirent après 10 secondes par défa
 
 ## 5. CSP et revue de sécurité
 
-La CSP du site doit autoriser le domaine du SDK dans `script-src`, l’hôte de l’API dans `connect-src` et le style inline requis par la bannière dans `style-src`. Avec une CSP à nonce, ajouter le nonce de la réponse à la balise `<script src>` afin qu’il soit propagé aux éléments gérés.
+Le SDK peut être hébergé sur le domaine du client, comme `/assets/aman-cmp.js` dans l’exemple. L’API distante doit être autorisée dans `connect-src`. Le module crée une feuille `<style>` et, après un choix favorable, les balises `<script>` des ressources gérées. Il copie le nonce de sa propre balise vers ces éléments.
+
+Exemple de valeur d’en-tête à adapter à la CSP déjà administrée par l’application :
+
+```text
+Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{{CSP_NONCE}}'; style-src 'self' 'nonce-{{CSP_NONCE}}'; connect-src 'self' https://cmp.example.ma; object-src 'none'; base-uri 'self'; frame-ancestors 'self'
+```
+
+`{{CSP_NONCE}}` doit être remplacé par le nonce aléatoire de la réponse, avec la même valeur sur la balise du SDK et dans les directives `script-src` et `style-src`. Si les ressources du SDK ou les scripts approuvés sont servis depuis d’autres hôtes, l’équipe cliente doit les ajouter explicitement à la directive appropriée. Cette liste ne couvre pas les fournisseurs tiers du client. Ne pas ajouter globalement `'unsafe-inline'` pour résoudre une erreur CSP : faire examiner toute exception et limiter sa portée.
 
 Avant le pilote, l’équipe cliente doit examiner le code, les hôtes réseau, la CSP, l’accessibilité et le comportement des scripts réels dans son environnement. L’artefact est une source de prévisualisation vérifiable par checksum, sans signature d’origine, attestation ni garantie de production. Ne pas l’utiliser sur un site bancaire ou avec des données réelles tant que les validations, l’hébergement et les responsabilités ne sont pas convenus.
+
+## 6. Retour arrière de la route de test
+
+Préparer et faire approuver ces étapes avant l’intégration. Les exécuter uniquement sur la route autorisée :
+
+1. Restaurer la version précédente de la route ou du composant applicatif via le mécanisme de livraison du client.
+2. Retirer la balise `aman-cmp.js`, les balises `type="text/plain"` portant `data-aman-src` et les appels à `AmanCMP.registerPurposeHandler` ajoutés pour le pilote. Vérifier aussi les déclencheurs GTM ou les initialisations directes des fournisseurs modifiés pour l’essai.
+3. Retirer de la CSP uniquement les hôtes et le nonce qui ne sont plus utilisés par cette intégration, après vérification qu’aucune autre fonctionnalité ne les requiert. Garder l’en-tête de sécurité du client sous le contrôle de son équipe.
+4. Recharger la route et vérifier dans l’onglet réseau que les ressources ALAMANE et les traceurs optionnels du pilote ne sont plus demandés. Un fournisseur déjà démarré peut nécessiter son propre mécanisme d’arrêt ; le retrait de la balise ALAMANE ne peut pas annuler une requête déjà envoyée.
+5. Si le client veut aussi effacer le choix local de cette propriété sur ce navigateur de test, supprimer uniquement les deux clés correspondant à son identifiant depuis `localStorage` et `sessionStorage` : `aman:choice:PROPERTY_ID` et `aman:policy:PROPERTY_ID`. Ne pas appeler `AmanCMP.clearDemoData()` sur une origine partagée : cette fonction efface les caches et choix ALAMANE de toutes les propriétés de cette origine.
+
+Consigner l’heure, la version restaurée, les vérifications réseau et toute limite d’arrêt fournisseur dans le compte rendu de recette. Cette procédure doit être testée par l’équipe du client avant d’autoriser une fenêtre d’intervention.

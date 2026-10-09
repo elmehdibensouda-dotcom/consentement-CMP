@@ -47,7 +47,7 @@ L’origine déclarée pour une propriété Web autorise uniquement les routes p
 
 ### Web
 
-Héberger `aman-cmp.js` sur un domaine contrôlé par le client, puis ajouter le script avec l’URL d’API et l’identifiant de propriété. Le code complet, la configuration CSP, le raccordement des balises et les limites GTM figurent dans [README.md — intégration Web](./README.md#intégration-web-minimale). Les scripts facultatifs doivent être balisés et ne démarrer qu’après l’état applicable. Pour raccorder le retrait d’un choix au mécanisme d’arrêt fourni par un SDK Web, voir `AmanCMP.registerPurposeHandler` dans [SDK_WEB.md](./SDK_WEB.md). Un script déjà exécuté ne peut pas être universellement déchargé ; le comportement dépend de l’API fournisseur.
+Héberger `aman-cmp.js` sur un domaine contrôlé par le client, puis ajouter le script avec l’URL d’API et l’identifiant de propriété. Le [guide d’intégration Web](./SDK_WEB.md) contient l’extrait complet, un exemple CSP avec nonce et une procédure de retour arrière. Les scripts facultatifs doivent être balisés et ne démarrer qu’après l’état applicable. `AmanCMP.registerPurposeHandler` permet de raccorder l’arrêt prévu par un fournisseur. Un script déjà exécuté ne peut pas être universellement déchargé ; le comportement dépend de l’API fournisseur. La CSP et le retour arrière doivent être relus puis testés par l’équipe cliente dans la route autorisée avant la fenêtre d’intervention.
 
 ### React Native
 
