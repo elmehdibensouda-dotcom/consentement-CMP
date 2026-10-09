@@ -4,7 +4,19 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="$REPO_ROOT/.venv"
 PYTHON="$VENV_DIR/bin/python"
-DEMO_DB="$REPO_ROOT/.local/alamane-demo.sqlite3"
+DEMO_MODE="${1:-full}"
+case "$DEMO_MODE" in
+  full)
+    DEMO_DB="$REPO_ROOT/.local/alamane-demo.sqlite3"
+    ;;
+  --web-only)
+    DEMO_DB="$REPO_ROOT/.local/alamane-web-pilot.sqlite3"
+    ;;
+  *)
+    echo "Usage: $0 [--web-only]" >&2
+    exit 2
+    ;;
+esac
 
 cd "$REPO_ROOT"
 
@@ -106,7 +118,11 @@ if [[ -z "$owner_email" ]]; then
   exit 1
 fi
 
-seed_output=$("$PYTHON" backend/seed_demo.py --owner-email "$owner_email")
+if [[ "$DEMO_MODE" == "--web-only" ]]; then
+  seed_output=$("$PYTHON" backend/seed_demo.py --web-only --owner-email "$owner_email")
+else
+  seed_output=$("$PYTHON" backend/seed_demo.py --owner-email "$owner_email")
+fi
 printf '%s\n' "$seed_output"
 property_id=$(printf '%s\n' "$seed_output" | sed -n 's/^web property ID: //p')
 if [[ -z "$property_id" ]]; then
@@ -157,7 +173,11 @@ if [[ "$ready" != "1" ]]; then
 fi
 
 echo
-echo "ALAMANE local demo is ready (fictional data only)."
+if [[ "$DEMO_MODE" == "--web-only" ]]; then
+  echo "ALAMANE local Web-only pilot demo is ready (fictional data only; not a client deployment)."
+else
+  echo "ALAMANE local demo is ready (fictional data only)."
+fi
 echo "Console:   http://localhost:8000/index.html"
 echo "Demo site: http://localhost:8000/demo-site.html?property=$property_id"
 echo "API docs:  http://localhost:8001/docs"

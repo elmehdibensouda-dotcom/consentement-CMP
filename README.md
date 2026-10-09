@@ -14,6 +14,8 @@ bash scripts/start-demo.sh
 
 Le script vérifie d’abord que les ports locaux 8000 et 8001 sont libres, utilise une base SQLite distincte dans `.local/`, crée le premier compte si nécessaire en demandant l’adresse et un mot de passe saisi sans affichage, prépare l’organisation et la propriété fictives, démarre l’API et le site, attend leurs réponses de disponibilité, puis ouvre la console. Les deux serveurs restent dans le terminal jusqu’à `Ctrl+C`. Si plusieurs comptes sont présents, le script demande lequel détiendra l’organisation fictive. Aucune donnée réelle de banque ou de visiteur ne doit être saisie.
 
+Pour préparer le scénario **Web uniquement** avec une base locale séparée et une seule propriété fictive, lancer `bash scripts/start-demo.sh --web-only`. Le périmètre et les conditions à réunir avant tout déploiement sur un domaine client sont dans [PILOTE_WEB_FERME.md](./PILOTE_WEB_FERME.md). Ce mode reste une démonstration sur `localhost` : il ne déploie aucun service public.
+
 ### Démarrage manuel
 
 Pour lancer chaque composant séparément :
@@ -75,6 +77,7 @@ L’entrée [index.html](http://localhost:8000/index.html) redirige vers la cons
 - [Mises à jour des dépendances](./.github/dependabot.yml) : Dependabot surveille chaque semaine les actions GitHub, les dépendances Python et Gradle, puis ouvre des pull requests à examiner ; aucune mise à jour n’est fusionnée automatiquement.
 - La console génère pour chaque propriété un extrait de démarrage Web, iOS ou Android avec son identifiant réel. Le SDK React Native a un guide d’intégration séparé. Les URL sont des exemples, et les packages mobiles ne sont pas encore publiés.
 - [`PLAN_COMMERCIALISATION.md`](./PLAN_COMMERCIALISATION.md) : segment pilote, découverte client et conditions de préparation commerciale.
+- [`PILOTE_WEB_FERME.md`](./PILOTE_WEB_FERME.md) : kit d’exécution local Web-only, scénario de démo fictive et prérequis d’un pilote fermé sur un domaine autorisé.
 - [`PROSPECTION_BANQUES_MAROC.md`](./PROSPECTION_BANQUES_MAROC.md) : première liste interne de comptes à qualifier, basée sur des signaux publics ; aucun établissement n’a été contacté.
 - [`FICHE_DECOUVERTE_CIH_BANK.md`](./FICHE_DECOUVERTE_CIH_BANK.md) : guide interne pour préparer un entretien exploratoire CIH, qualifier un éventuel besoin Web et consigner les critères d’un pilote sans présumer d’un achat.
 - [`SEQUENCE_PROSPECTION.md`](./SEQUENCE_PROSPECTION.md) : brouillons d’introduction par compte et suivi de qualification, à personnaliser ; aucun message n’a été envoyé.

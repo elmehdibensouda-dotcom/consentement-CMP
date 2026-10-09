@@ -1,4 +1,4 @@
-"""Create a fictional Aman demo organization, web and mobile properties, and draft policies."""
+"""Create a fictional Aman demo organization, Web and mobile properties, and draft policies."""
 from __future__ import annotations
 
 import argparse
@@ -125,6 +125,11 @@ def demo_policy(property_id: str, channel: str, retention_days: int) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--owner-email", help="Email of the existing Aman user who will own the demo organization")
+    parser.add_argument(
+        "--web-only",
+        action="store_true",
+        help="Seed only the fictional Web property (use with a dedicated local database)",
+    )
     args = parser.parse_args()
     if ENVIRONMENT != "development":
         print("Demo seeding is allowed only in the development environment.", file=sys.stderr)
@@ -150,6 +155,7 @@ def main() -> int:
         return 2
 
     owner = users[0]
+    property_definitions = DEMO_PROPERTIES[:1] if args.web_only else DEMO_PROPERTIES
     now = utc_now()
     with transaction() as conn:
         organization = conn.execute("SELECT id FROM organizations WHERE name=?", (ORG_NAME,)).fetchone()
@@ -172,7 +178,18 @@ def main() -> int:
                   {"source": "local_demo_seed", "fictitious": True})
 
         existing_properties = {}
-        for definition in DEMO_PROPERTIES:
+        if args.web_only:
+            property_count = conn.execute(
+                "SELECT COUNT(*) AS count FROM properties WHERE org_id=?", (org_id,)
+            ).fetchone()["count"]
+            non_web_count = conn.execute(
+                "SELECT COUNT(*) AS count FROM properties WHERE org_id=? AND channel!='web'", (org_id,)
+            ).fetchone()["count"]
+            if property_count > 1 or non_web_count:
+                print("The web-only demo organization is not limited to one Web property; no changes made.", file=sys.stderr)
+                return 2
+
+        for definition in property_definitions:
             property_name = definition["name"]
             channel = definition["channel"]
             prop = conn.execute(
@@ -188,7 +205,7 @@ def main() -> int:
             existing_properties[(channel, property_name)] = prop
 
         seeded_properties = []
-        for definition in DEMO_PROPERTIES:
+        for definition in property_definitions:
             property_name = definition["name"]
             channel = definition["channel"]
             configured_origin = definition["origin"]
