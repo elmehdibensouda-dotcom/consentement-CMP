@@ -170,19 +170,25 @@ LOGIN_THROTTLED_DETAIL = "Too many sign-in attempts. Try again later."
 CONSENT_EVENT_WINDOW_SECONDS = 60
 CONSENT_EVENT_CLIENT_LIMIT = 120
 CONSENT_EVENT_PROPERTY_LIMIT = 6000
-def positive_int_setting(name: str, default: int) -> int:
+def positive_int_setting(name: str, default: int, maximum: Optional[int] = None) -> int:
     raw_value = os.environ.get(name, str(default))
     try:
         parsed = int(raw_value)
     except ValueError as error:
         raise RuntimeError(f"{name} must be a positive integer") from error
-    if parsed < 1:
-        raise RuntimeError(f"{name} must be a positive integer")
+    if parsed < 1 or (maximum is not None and parsed > maximum):
+        raise RuntimeError(f"{name} must be a positive integer" + (f" no greater than {maximum}" if maximum else ""))
     return parsed
 
 
-CONSENT_EVENT_ACTIVE_TOTAL_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_TOTAL_LIMIT", 100_000)
+# Admission quotas isolate tenants; the total is an emergency bound on storage growth
+# that refuses new events for every property once reached.
+CONSENT_EVENT_ACTIVE_TOTAL_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_TOTAL_LIMIT", 500_000)
+CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT", 50_000)
 CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT", 25_000)
+CONSENT_EVENT_CAPACITY_WARNING_PERCENT = positive_int_setting(
+    "AMAN_CONSENT_EVENT_CAPACITY_WARNING_PERCENT", 80, maximum=100
+)
 CONSENT_EVENT_MAX_BUCKETS = 20000
 INVITATION_PREVIEW_LIMIT = 120
 INVITATION_ACCEPT_LIMIT = 20
@@ -488,6 +494,22 @@ def enforce_invitation_rate_limit(
             detail="Too many invitation attempts from this network. Try again later.",
             headers={"Retry-After": str(retry_after)},
         )
+
+
+def consent_event_capacity_level(active_total: int) -> str:
+    if active_total >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT:
+        return "exhausted"
+    if active_total * 100 >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT * CONSENT_EVENT_CAPACITY_WARNING_PERCENT:
+        return "warning"
+    return "ok"
+
+
+def consent_event_capacity_state() -> str:
+    with connection() as conn:
+        active_total = conn.execute(
+            "SELECT COUNT(*) AS event_count FROM consent_events WHERE expires_at>?", (utc_now(),)
+        ).fetchone()["event_count"]
+    return consent_event_capacity_level(active_total)
 
 
 def audit(conn: Connection, org_id: str, actor: str, action: str,
@@ -813,6 +835,7 @@ def readiness():
         with connection() as conn:
             conn.execute("SELECT 1").fetchone()
             conn.require_current_schema()
+        capacity = consent_event_capacity_state()
     except Exception as error:
         LOGGER.warning("Readiness check failed (%s)", type(error).__name__)
         return JSONResponse(
@@ -820,8 +843,9 @@ def readiness():
             status_code=503,
             headers={"Cache-Control": "no-store"},
         )
+    # Capacity is reported, not gated: an exhausted event store must not take the console down.
     return JSONResponse(
-        {"service": "aman-consent-api", "status": "ready"},
+        {"service": "aman-consent-api", "status": "ready", "consentEventCapacity": capacity},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -1764,10 +1788,11 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
     event_id_conflict = False
     duplicate_event = False
     storage_capacity_full = False
+    storage_capacity_detail = ""
     storage_retry_after = 1
     with transaction() as conn:
         row = conn.execute(
-            "SELECT pr.channel,pr.origin,p.body FROM properties pr JOIN policies p ON p.property_id=pr.id "
+            "SELECT pr.org_id,pr.channel,pr.origin,p.body FROM properties pr JOIN policies p ON p.property_id=pr.id "
             "WHERE pr.id=? AND p.status='published'",
             (property_id,),
         ).fetchone()
@@ -1819,31 +1844,44 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
                 duplicate_event = True
         else:
             conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (now,))
-            total_count = conn.execute(
-                "SELECT COUNT(*) AS event_count FROM consent_events WHERE expires_at>?", (now,)
-            ).fetchone()["event_count"]
-            property_count = conn.execute(
-                "SELECT COUNT(*) AS event_count FROM consent_events WHERE property_id=? AND expires_at>?",
-                (property_id, now),
-            ).fetchone()["event_count"]
-            if total_count >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT or property_count >= CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT:
+            # Tenant quotas first, so one saturated property or organization reports its own
+            # limit; the global emergency bound applies only when every tenant is within quota.
+            scopes = (
+                ("property", "WHERE property_id=? AND expires_at>?", (property_id, now),
+                 CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT),
+                ("organization",
+                 "WHERE property_id IN (SELECT id FROM properties WHERE org_id=?) AND expires_at>?",
+                 (row["org_id"], now), CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT),
+                ("global", "WHERE expires_at>?", (now,), CONSENT_EVENT_ACTIVE_TOTAL_LIMIT),
+            )
+            for scope_name, where, parameters, limit in scopes:
+                count = conn.execute(
+                    f"SELECT COUNT(*) AS event_count FROM consent_events {where}", parameters
+                ).fetchone()["event_count"]
+                if scope_name == "global":
+                    previous_level = consent_event_capacity_level(count)
+                    next_level = consent_event_capacity_level(count + 1)
+                    if previous_level == "ok" and next_level == "warning":
+                        LOGGER.warning("Consent event storage reached %s%% of its emergency limit",
+                                       CONSENT_EVENT_CAPACITY_WARNING_PERCENT)
+                if count < limit:
+                    continue
                 storage_capacity_full = True
-                retry_expiries = []
-                if total_count >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT:
-                    first_global_expiry = conn.execute(
-                        "SELECT MIN(expires_at) AS first_expiry FROM consent_events WHERE expires_at>?", (now,)
-                    ).fetchone()["first_expiry"]
-                    if first_global_expiry is not None:
-                        retry_expiries.append(int(first_global_expiry))
-                if property_count >= CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT:
-                    first_property_expiry = conn.execute(
-                        "SELECT MIN(expires_at) AS first_expiry FROM consent_events WHERE property_id=? AND expires_at>?",
-                        (property_id, now),
-                    ).fetchone()["first_expiry"]
-                    if first_property_expiry is not None:
-                        retry_expiries.append(int(first_property_expiry))
-                storage_retry_after = max(1, max(retry_expiries) - now) if retry_expiries else 60
-            else:
+                first_expiry = conn.execute(
+                    f"SELECT MIN(expires_at) AS first_expiry FROM consent_events {where}", parameters
+                ).fetchone()["first_expiry"]
+                storage_retry_after = max(1, int(first_expiry) - now) if first_expiry is not None else 60
+                if scope_name == "global":
+                    LOGGER.error("Consent event storage reached its emergency limit; all properties refuse new events")
+                    storage_capacity_detail = (
+                        "Consent event storage reached its global emergency limit; retry after the indicated time"
+                    )
+                else:
+                    storage_capacity_detail = (
+                        f"This {scope_name} reached its active consent event quota; retry after the indicated time"
+                    )
+                break
+            if not storage_capacity_full:
                 conn.execute(
                     "INSERT INTO consent_events(event_id,property_id,policy_version,channel,action,purposes,recorded_at,expires_at) "
                     "VALUES(?,?,?,?,?,?,?,?)",
@@ -1856,7 +1894,7 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
     if storage_capacity_full:
         raise HTTPException(
             status_code=503,
-            detail="Consent event storage is at its configured active-record limit; retry after the indicated time",
+            detail=storage_capacity_detail,
             headers={"Retry-After": str(storage_retry_after)},
         )
     if duplicate_event:
@@ -1977,7 +2015,7 @@ def organization_consent_metrics(org_id: str, request: Request,
         "periodDays": days,
         "decisionCount": len(events),
         "activeEventCount": sum(active_counts.values()),
-        "activeEventLimit": CONSENT_EVENT_ACTIVE_TOTAL_LIMIT,
+        "activeEventLimit": CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT,
         "actions": total_actions,
         "properties": output_properties,
     }
