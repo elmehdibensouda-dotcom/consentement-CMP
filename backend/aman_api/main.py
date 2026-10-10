@@ -56,6 +56,13 @@ from .consent_event_repository import (
     iter_events_for_export,
     iter_organization_events_for_export,
 )
+from .approval_setting_repository import (
+    create_change as persist_approval_setting_change,
+    get_change as get_approval_setting_change,
+    get_pending_change as get_pending_approval_setting_change,
+    mark_change_approved as mark_approval_setting_change_approved,
+    revoke_pending_changes as revoke_pending_approval_setting_changes,
+)
 from .client_address import rate_limit_address
 from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
@@ -154,6 +161,7 @@ CSRF_COOKIE = "aman_csrf"
 SESSION_TTL_SECONDS = 8 * 60 * 60
 INVITE_TTL_SECONDS = 72 * 60 * 60
 OWNERSHIP_TRANSFER_TTL_SECONDS = 24 * 60 * 60
+APPROVAL_SETTING_CHANGE_TTL_SECONDS = 24 * 60 * 60
 LOGIN_FAILURE_LIMIT = 20
 LOGIN_WINDOW_SECONDS = 10 * 60
 LOGIN_LOCK_SECONDS = 10 * 60
@@ -1073,34 +1081,123 @@ def create_organization(body: OrganizationBody, request: Request,
             "requireTwoPersonPublish": body.requireTwoPersonPublish}
 
 
+def approval_settings_payload(conn: Connection, org_id: str, enabled: bool, now: int) -> dict:
+    pending = get_pending_approval_setting_change(conn, org_id, now)
+    return {
+        "id": org_id,
+        "requireTwoPersonPublish": enabled,
+        "pendingChange": {
+            "id": pending["id"],
+            "requestedBy": pending["requestedBy"],
+            "requestedByEmail": pending["requestedByEmail"],
+            "requireTwoPersonPublish": bool(pending["require_two_person_publish"]),
+            "createdAt": pending["createdAt"],
+            "expiresAt": pending["expiresAt"],
+        } if pending else None,
+    }
+
+
+@app.get("/v1/organizations/{org_id}/approval-settings")
+def get_organization_approval_settings(org_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        row = get_organization_approval_setting(conn, org_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        return approval_settings_payload(conn, org_id, bool(row["require_two_person_publish"]), utc_now())
+
+
 @app.put("/v1/organizations/{org_id}/approval-settings")
 def update_organization_approval_settings(
     org_id: str,
     body: OrganizationApprovalSettingsBody,
     request: Request,
+    response: Response,
     x_aman_csrf: Optional[str] = Header(default=None),
 ):
+    """Strengthen the rule at once; weakening it only opens a request for a second approver."""
     context = current_session(request)
     require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
     with transaction() as conn:
+        conn.lock_organization(org_id)
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
         row = get_organization_approval_setting(conn, org_id)
         if not row:
             raise HTTPException(status_code=404, detail="Organization not found")
         previous = bool(row["require_two_person_publish"])
-        if previous != body.requireTwoPersonPublish:
-            update_organization_approval_setting(conn, org_id, body.requireTwoPersonPublish)
-            audit(
-                conn,
-                org_id,
-                context.user_id,
-                "organization.approval_setting_updated",
-                "organization",
-                org_id,
-                {"requireTwoPersonPublish": {"before": previous, "after": body.requireTwoPersonPublish}},
-            )
-    return {"id": org_id, "requireTwoPersonPublish": body.requireTwoPersonPublish}
+        if body.requireTwoPersonPublish:
+            for change in revoke_pending_approval_setting_changes(conn, org_id, context.user_id, now):
+                audit(conn, org_id, context.user_id, "organization.approval_setting_change_revoked",
+                      "approval_setting_change", change["id"], {"reason": "rule_kept_enabled"})
+            if not previous:
+                update_organization_approval_setting(conn, org_id, True)
+                audit(conn, org_id, context.user_id, "organization.approval_setting_updated", "organization", org_id,
+                      {"requireTwoPersonPublish": {"before": False, "after": True}})
+            return approval_settings_payload(conn, org_id, True, now)
+        if not previous:
+            return approval_settings_payload(conn, org_id, False, now)
+        if get_pending_approval_setting_change(conn, org_id, now):
+            raise HTTPException(status_code=409, detail="A change to the approval rule is already awaiting approval")
+        change_id = secrets.token_hex(16)
+        persist_approval_setting_change(
+            conn, change_id, org_id, context.user_id, False, now, now + APPROVAL_SETTING_CHANGE_TTL_SECONDS,
+        )
+        audit(conn, org_id, context.user_id, "organization.approval_setting_change_requested",
+              "approval_setting_change", change_id,
+              {"requireTwoPersonPublish": {"before": True, "after": False}})
+        response.status_code = status.HTTP_202_ACCEPTED
+        return approval_settings_payload(conn, org_id, True, now)
+
+
+@app.post("/v1/organizations/{org_id}/approval-settings/changes/{change_id}/approve")
+def approve_approval_setting_change(org_id: str, change_id: str, request: Request,
+                                    x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        conn.lock_organization(org_id)
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        change = get_approval_setting_change(conn, org_id, change_id)
+        if not change:
+            raise HTTPException(status_code=404, detail="Approval rule change not found")
+        if change["approved_at"] is not None or change["revoked_at"] is not None or change["expires_at"] <= now:
+            raise HTTPException(status_code=409, detail="This approval rule change is no longer pending")
+        if change["requested_by"] == context.user_id:
+            raise HTTPException(status_code=403, detail="A different owner or administrator must approve this change")
+        row = get_organization_approval_setting(conn, org_id)
+        enabled = bool(change["require_two_person_publish"])
+        mark_approval_setting_change_approved(conn, change_id, context.user_id, now)
+        update_organization_approval_setting(conn, org_id, enabled)
+        audit(conn, org_id, context.user_id, "organization.approval_setting_updated", "organization", org_id,
+              {"requireTwoPersonPublish": {"before": bool(row["require_two_person_publish"]), "after": enabled},
+               "changeId": change_id, "requestedBy": change["requested_by"], "approvedBy": context.user_id})
+        return approval_settings_payload(conn, org_id, enabled, now)
+
+
+@app.delete("/v1/organizations/{org_id}/approval-settings/changes/{change_id}")
+def revoke_approval_setting_change(org_id: str, change_id: str, request: Request,
+                                   x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        conn.lock_organization(org_id)
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        change = get_approval_setting_change(conn, org_id, change_id)
+        if not change:
+            raise HTTPException(status_code=404, detail="Approval rule change not found")
+        if change["approved_at"] is not None or change["revoked_at"] is not None or change["expires_at"] <= now:
+            raise HTTPException(status_code=409, detail="This approval rule change is no longer pending")
+        revoke_pending_approval_setting_changes(conn, org_id, context.user_id, now)
+        audit(conn, org_id, context.user_id, "organization.approval_setting_change_revoked",
+              "approval_setting_change", change_id, {"requestedBy": change["requested_by"]})
+    return {"ok": True}
 
 
 @app.post("/v1/organizations/{org_id}/invitations", status_code=status.HTTP_201_CREATED)

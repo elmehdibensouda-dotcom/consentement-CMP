@@ -158,8 +158,9 @@ class SecurityFixture(unittest.TestCase):
         }
 
     def session(self, user_id: str = "active-user") -> tuple[Request, str]:
-        token = f"session-{user_id}"
-        csrf = f"csrf-{user_id}"
+        suffix = uuid4().hex
+        token = f"session-{user_id}-{suffix}"
+        csrf = f"csrf-{user_id}-{suffix}"
         with api.transaction() as conn:
             conn.execute(
                 "INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,created_at) VALUES(?,?,?,?,?)",

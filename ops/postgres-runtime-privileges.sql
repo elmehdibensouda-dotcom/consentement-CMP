@@ -21,7 +21,8 @@ GRANT SELECT ON TABLE
     public.audit_events,
     public.consent_events,
     public.scan_reports,
-    public.rate_limit_buckets
+    public.rate_limit_buckets,
+    public.approval_setting_changes
 TO :"api_role";
 
 GRANT INSERT ON TABLE
@@ -36,16 +37,19 @@ GRANT INSERT ON TABLE
     public.audit_events,
     public.consent_events,
     public.scan_reports,
-    public.rate_limit_buckets
+    public.rate_limit_buckets,
+    public.approval_setting_changes
 TO :"api_role";
 
 GRANT UPDATE ON TABLE
+    public.organizations,
     public.memberships,
     public.invitations,
     public.ownership_transfers,
     public.properties,
     public.policies,
-    public.rate_limit_buckets
+    public.rate_limit_buckets,
+    public.approval_setting_changes
 TO :"api_role";
 
 GRANT DELETE ON TABLE
