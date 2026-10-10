@@ -1,4 +1,5 @@
-FROM python:3.13-slim
+# Pinned by digest (multi-architecture index of python:3.13-slim); update procedure in ops/container/README.md.
+FROM python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,8 +12,8 @@ RUN groupadd --system --gid 10001 aman \
 
 WORKDIR /app
 
-COPY backend/requirements.txt /app/backend/requirements.txt
-RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt
+COPY backend/requirements.lock /app/backend/requirements.lock
+RUN python -m pip install --no-cache-dir --require-hashes --no-deps -r /app/backend/requirements.lock
 
 COPY --chown=aman:aman backend/ /app/backend/
 COPY --chown=aman:aman schemas/ /app/schemas/

@@ -1,20 +1,44 @@
 """HSTS only over confirmed HTTPS, and a report-only CSP on the static console."""
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.staticfiles import StaticFiles
-from fastapi.testclient import TestClient
 
 from backend.aman_api import main as api
 
 
+def asgi_get(base_url: str, path: str) -> SimpleNamespace:
+    """Drive one GET through the full ASGI stack without an HTTP client dependency."""
+    scheme = base_url.split("://", 1)[0]
+    messages: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    scope = {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET",
+        "scheme": scheme, "server": ("testserver", 443 if scheme == "https" else 80),
+        "client": ("198.51.100.5", 50000), "root_path": "", "path": path,
+        "raw_path": path.encode("ascii"), "query_string": b"", "headers": [(b"host", b"testserver")],
+    }
+    asyncio.run(api.app(scope, receive, send))
+    start = next(message for message in messages if message["type"] == "http.response.start")
+    headers = {name.decode("latin-1").lower(): value.decode("latin-1") for name, value in start["headers"]}
+    return SimpleNamespace(status_code=start["status"], headers=headers)
+
+
 class TransportHeaderTests(unittest.TestCase):
-    def get(self, base_url: str, path: str = "/health"):
-        return TestClient(api.app, base_url=base_url).get(path)
+    def get(self, base_url: str, path: str = "/health") -> SimpleNamespace:
+        return asgi_get(base_url, path)
 
     def test_hsts_is_absent_over_http(self) -> None:
         self.assertNotIn("strict-transport-security", self.get("http://testserver").headers)

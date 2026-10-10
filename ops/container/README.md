@@ -10,6 +10,8 @@ Depuis la racine du dépôt :
 docker build -t alamane-api:staging .
 ```
 
+L’image de base est épinglée par digest (index multi-architecture de `python:3.13-slim`) et les dépendances Python sont installées depuis `backend/requirements.lock` avec vérification des empreintes. Pour mettre à jour l’image de base : relever le nouveau digest avec `docker buildx imagetools inspect python:3.13-slim` (ligne `Digest` de l’index), remplacer la valeur dans le `Dockerfile`, reconstruire et relancer les contrôles, puis consigner le changement dans le commit.
+
 Ne pas transmettre de mot de passe ou d’URL de base dans un argument `--build-arg` : les secrets ne doivent pas être intégrés à l’image. L’image contient l’API, ses exigences Python, le schéma de politique et les fichiers statiques de la console. Après démarrage, la console est disponible sur `/console/`, la maquette assurance sur `/console/demo-assurance.html`, le SDK Web sur `/aman-cmp.js` et l’API sur les routes `/v1/` et `/health/ready`. La maquette utilise des comptes et scripts fictifs ; elle ne constitue pas un portail client authentifié. En hébergement distant, la console utilise la même origine pour l’API ; place l’ensemble derrière un proxy TLS et configure une URL HTTPS côté intégration.
 
 ## Préparer une préproduction

@@ -25,7 +25,7 @@ Pour lancer chaque composant séparément :
    ```sh
    python3 -m venv .venv
    . .venv/bin/activate
-   python -m pip install -r backend/requirements.txt
+   python -m pip install --require-hashes --no-deps -r backend/requirements.lock
    ```
 
 2. Démarrer l’API dans un terminal :

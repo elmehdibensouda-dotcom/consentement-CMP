@@ -9,11 +9,23 @@ Depuis la racine du dépôt :
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -r backend/requirements.txt
+python -m pip install --require-hashes --no-deps -r backend/requirements.lock
 python backend/migrate_db.py
 python backend/create_admin.py
 uvicorn aman_api.main:app --app-dir backend --host 127.0.0.1 --port 8001 --no-access-log
 ```
+
+### Dépendances verrouillées
+
+`backend/requirements.txt` déclare les plages acceptées ; `backend/requirements.lock` fixe chaque paquet, dépendances transitives comprises, avec les empreintes SHA-256 de tous ses fichiers publiés. Le `Dockerfile` et la CI installent uniquement ce fichier (`--require-hashes --no-deps`), et la CI le passe à `pip-audit` (version épinglée, exécutée via `pipx`, hors des dépendances de l’API). Pour mettre à jour : modifier si besoin `requirements.txt`, régénérer avec Python 3.13 et `pip-tools`, puis relire le diff et relancer les tests :
+
+```sh
+CUSTOM_COMPILE_COMMAND="see backend/README.md (Dépendances verrouillées)" \
+  pip-compile --generate-hashes --strip-extras --no-emit-index-url \
+  --upgrade --output-file backend/requirements.lock backend/requirements.txt
+```
+
+Un échec de `pip-audit` bloque la CI : corriger en montant la version concernée. Une vulnérabilité jugée non applicable ne doit être ignorée qu’avec `--ignore-vuln <ID>` dans le workflow, accompagnée de sa justification et d’une date de revue.
 
 Pour rétablir localement l’accès d’un compte de démonstration, arrêter l’API puis lancer `python backend/reset_password.py`. La commande ne fonctionne qu’en environnement `development` avec SQLite local, demande le nouveau mot de passe sans l’afficher et révoque les sessions existantes du compte. C’est une opération d’administrateur de la machine, pas une récupération autonome pour l’utilisateur ni une procédure à utiliser en production.
 
