@@ -1853,10 +1853,18 @@ def list_audit(org_id: str, request: Request, limit: int = 100):
     ]}
 
 
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\uff1d", "\uff0b", "\uff0d", "\uff20")
+CSV_CONTROL_PREFIXES = ("\t", "\r", "\n")
+
+
 def audit_csv_cell(value: Any) -> str:
-    """Keep exported cells from being interpreted as spreadsheet formulas."""
+    """Keep exported cells from being interpreted as spreadsheet formulas.
+
+    A leading apostrophe is added when a cell starts with a formula trigger (ASCII or
+    full-width), a tab or line break, or whitespace followed by a trigger.
+    """
     text = "" if value is None else str(value)
-    if text.lstrip().startswith(("=", "+", "-", "@")):
+    if text.startswith(CSV_CONTROL_PREFIXES) or text.lstrip().startswith(CSV_FORMULA_PREFIXES):
         return "'" + text
     return text
 
