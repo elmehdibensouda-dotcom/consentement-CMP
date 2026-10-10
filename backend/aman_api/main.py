@@ -1024,30 +1024,49 @@ def accept_invitation(body: AcceptInviteBody, request: Request):
     enforce_invitation_rate_limit(request, "accept", INVITATION_ACCEPT_LIMIT)
     now = utc_now()
     token_hash = digest(body.token)
-    with transaction() as conn:
-        invite = get_invitation_for_acceptance(conn, token_hash)
-        if invite:
-            conn.lock_invitation(invite["id"])
+    # The existing-account password check shares the sign-in per-account budget, applied
+    # to every invited address so the throttle does not reveal whether an account exists.
+    with connection() as conn:
+        pending = get_invitation_for_acceptance(conn, token_hash)
+    account_key = login_account_key(pending["email"]) if pending else None
+    if account_key:
+        enforce_login_rate_limit(account_key, "login_account")
+    password_mismatch = False
+    try:
+        with transaction() as conn:
             invite = get_invitation_for_acceptance(conn, token_hash)
-        if not invite or invite["accepted_at"] or invite["expires_at"] <= now:
-            raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
-        existing_user = get_invited_user_account(conn, invite["email"])
-        if existing_user:
-            if existing_user["disabled"]:
-                raise HTTPException(status_code=403, detail="This Aman account is disabled")
-            if not check_password(body.password, existing_user["password_hash"]):
-                raise HTTPException(status_code=401, detail="The password does not match the invited Aman account")
-            user_id = existing_user["id"]
-            account_created = False
-        else:
-            user_id = secrets.token_hex(16)
-            create_invited_user(conn, user_id, invite["email"], hash_password(body.password), now)
-            account_created = True
-        if is_organization_member(conn, invite["org_id"], user_id):
-            raise HTTPException(status_code=409, detail="This account is already a member of the organization")
-        add_invited_member(conn, invite["org_id"], user_id, invite["role"], now)
-        mark_invitation_accepted(conn, invite["id"], now)
-        audit(conn, invite["org_id"], user_id, "member.joined", "user", user_id, {"role": invite["role"]})
+            if invite:
+                conn.lock_invitation(invite["id"])
+                invite = get_invitation_for_acceptance(conn, token_hash)
+            if not invite or invite["accepted_at"] or invite["expires_at"] <= now:
+                raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+            existing_user = get_invited_user_account(conn, invite["email"])
+            if existing_user:
+                if existing_user["disabled"]:
+                    raise HTTPException(status_code=403, detail="This Aman account is disabled")
+                if not check_password(body.password, existing_user["password_hash"]):
+                    password_mismatch = True
+                    raise HTTPException(status_code=401, detail="The password does not match the invited Aman account")
+                user_id = existing_user["id"]
+                account_created = False
+            else:
+                user_id = secrets.token_hex(16)
+                create_invited_user(conn, user_id, invite["email"], hash_password(body.password), now)
+                account_created = True
+            if is_organization_member(conn, invite["org_id"], user_id):
+                raise HTTPException(status_code=409, detail="This account is already a member of the organization")
+            add_invited_member(conn, invite["org_id"], user_id, invite["role"], now)
+            mark_invitation_accepted(conn, invite["id"], now)
+            audit(conn, invite["org_id"], user_id, "member.joined", "user", user_id, {"role": invite["role"]})
+    except HTTPException:
+        # Counted after the transaction ends: the limiter writes through its own connection.
+        if password_mismatch and account_key:
+            retry_after = note_failed_account_login("login_account", account_key, LOGIN_ACCOUNT_FAILURE_LIMIT)
+            if retry_after:
+                raise login_throttled(retry_after)
+        raise
+    if not account_created and account_key:
+        clear_login_failures(account_key, "login_account")
     return {"ok": True, "accountCreated": account_created}
 
 
