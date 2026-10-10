@@ -215,6 +215,27 @@ _LOGIN_BLOCKED_UNTIL: Dict[str, int] = {}
 _CONFIGURED_RATE_LIMIT_HASH_KEY = os.environ.get("AMAN_RATE_LIMIT_HASH_KEY", "").encode("utf-8")
 _RATE_LIMIT_HASH_KEY = _CONFIGURED_RATE_LIMIT_HASH_KEY or secrets.token_bytes(32)
 COOKIE_SECURE = ENVIRONMENT != "development"
+
+
+def load_hsts_settings() -> Tuple[int, bool]:
+    raw_age = os.environ.get("AMAN_HSTS_MAX_AGE", "31536000").strip()
+    if not raw_age.isdecimal():
+        raise RuntimeError("AMAN_HSTS_MAX_AGE must be a non-negative integer number of seconds")
+    raw_subdomains = os.environ.get("AMAN_HSTS_INCLUDE_SUBDOMAINS", "false").strip().lower()
+    if raw_subdomains not in {"true", "false"}:
+        raise RuntimeError("AMAN_HSTS_INCLUDE_SUBDOMAINS must be true or false")
+    return int(raw_age), raw_subdomains == "true"
+
+
+# HSTS is sent only on requests that arrived over HTTPS: direct TLS, or a TLS proxy
+# trusted through AMAN_TRUSTED_PROXY_IPS (Uvicorn then applies X-Forwarded-Proto).
+HSTS_MAX_AGE_SECONDS, HSTS_INCLUDE_SUBDOMAINS = load_hsts_settings()
+CONSOLE_PATH_PREFIXES = ("/console/",)
+# Report-only until the console's inline script and styles move to files or nonces.
+CONSOLE_CSP_REPORT_ONLY = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
+    "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+)
 if ENVIRONMENT == "production":
     raise RuntimeError(
         "This development API is not production-deployable: it uses SQLite and has no reviewed deployment controls."
@@ -769,8 +790,12 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cache-Control"] = response.headers.get("Cache-Control", "no-store")
-    if ENVIRONMENT == "production":
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.url.scheme == "https" and HSTS_MAX_AGE_SECONDS > 0:
+        response.headers["Strict-Transport-Security"] = f"max-age={HSTS_MAX_AGE_SECONDS}" + (
+            "; includeSubDomains" if HSTS_INCLUDE_SUBDOMAINS else ""
+        )
+    if request.url.path.startswith(CONSOLE_PATH_PREFIXES):
+        response.headers["Content-Security-Policy-Report-Only"] = CONSOLE_CSP_REPORT_ONLY
     return response
 
 
