@@ -56,6 +56,11 @@ jobs:
         run: |
           node --check aman-cmp.js
           node --check aman-scanner.js
+      - name: Run Web SDK browser regressions
+        env:
+          # Ubuntu 24.04 runners restrict the Chrome user-namespace sandbox; the pages are local fixtures.
+          CHROME_FLAGS: --no-sandbox
+        run: bash scripts/run-web-sdk-tests.sh
       - name: Prepare traceable Web source preview
         if: github.event_name == 'workflow_dispatch'
         env:

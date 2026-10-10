@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>SDK managed tags · sans nonce</title>
+</head>
+<body data-result="pending" data-property-id="web-test-no-nonce"
+      data-expect='{"static-same-origin":true,"dynamic-no-nonce":true,"dynamic-wrong-nonce":true,"dynamic-matching":true,"javascript-url":false,"data-url":false,"credentials-url":false,"unlisted-origin":false,"allowed-cross-origin":true}'>
+  <h1>Test navigateur : SDK sans nonce (intégrations existantes)</h1>
+  <p>Sans nonce, les sources de même origine et les origines autorisées démarrent après consentement ; les autres sources sont refusées.</p>
+  <pre id="results"></pre>
+  <script type="text/plain" data-aman-category="analytics" data-aman-src="fixtures/tag.js?id=static-same-origin" data-test-id="static-same-origin"></script>
+  <script src="managed-tags-harness.js"></script>
+</body>
+</html>

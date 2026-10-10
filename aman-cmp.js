@@ -15,6 +15,9 @@
   const POLICY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
   const POLICY_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
   const MANAGED_TAG_SELECTOR = 'script[type="text/plain"][data-aman-src]';
+  // Captured once: browsers may hide the nonce attribute after parsing, but keep the property.
+  const SDK_NONCE = SDK_SCRIPT ? (SDK_SCRIPT.nonce || SDK_SCRIPT.getAttribute('nonce') || '') : '';
+  const ALLOWED_SCRIPT_ORIGINS = allowedScriptOrigins();
   const PURPOSE_HANDLERS = new Map();
   let currentConsentContext = null;
   const DEFAULTS = {
@@ -196,6 +199,37 @@
       throw new Error('Aman policy does not contain a purpose for this channel.');
     }
     return policy;
+  }
+  function isLoopbackHost(hostname) {
+    return ['localhost', '127.0.0.1', '::1'].includes(String(hostname).toLowerCase().replace(/^\[|\]$/g, ''));
+  }
+  function allowedScriptOrigins() {
+    // The page origin, plus origins listed on the SDK tag itself (server-rendered with the nonce).
+    const origins = new Set();
+    if (window.location.origin && window.location.origin !== 'null') origins.add(window.location.origin);
+    const raw = SDK_SCRIPT && SDK_SCRIPT.dataset ? SDK_SCRIPT.dataset.amanAllowedScriptOrigins || '' : '';
+    raw.split(/[\s,]+/).filter(Boolean).forEach(function (value) {
+      let url;
+      try { url = new URL(value); } catch (_) { return; }
+      if (url.username || url.password || url.search || url.hash || url.pathname !== '/') return;
+      if (url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackHost(url.hostname))) origins.add(url.origin);
+    });
+    return origins;
+  }
+  function managedScriptSource(placeholder) {
+    if (SDK_NONCE && placeholder.nonce !== SDK_NONCE) return { error: 'nonce' };
+    let url;
+    try { url = new URL(placeholder.dataset.amanSrc, window.location.href); }
+    catch (_) { return { error: 'url' }; }
+    if (url.username || url.password) return { error: 'credentials' };
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return { error: 'protocol' };
+    if (!ALLOWED_SCRIPT_ORIGINS.has(url.origin)) return { error: 'origin' };
+    return { src: url.href };
+  }
+  function reportBlockedTag(placeholder, categoryId, reason) {
+    if (placeholder.dataset.amanBlocked === reason) return;
+    placeholder.dataset.amanBlocked = reason;
+    document.dispatchEvent(new CustomEvent('aman:tag-blocked', { detail: { category: categoryId, reason: reason } }));
   }
   function secureApiBase(value) {
     let url;
@@ -505,10 +539,14 @@
     document.querySelectorAll(MANAGED_TAG_SELECTOR).forEach(function (placeholder) {
       const category = cfg.categories.find(function (item) { return item.id === placeholder.dataset.amanCategory; });
       if (!category || !consentFor(category, choice, cfg) || placeholder.dataset.amanLoaded === 'true') return;
+      // With a nonce, only placeholders rendered with that same nonce can start, so injected
+      // markup cannot borrow it; the source must also be HTTP(S) from an allowed origin.
+      const source = managedScriptSource(placeholder);
+      if (source.error) { reportBlockedTag(placeholder, category.id, source.error); return; }
       const script = document.createElement('script');
-      script.src = placeholder.dataset.amanSrc;
+      script.src = source.src;
       script.async = true;
-      if (SDK_SCRIPT && SDK_SCRIPT.nonce) script.nonce = SDK_SCRIPT.nonce;
+      if (SDK_NONCE) script.nonce = SDK_NONCE;
       script.dataset.amanLoaded = 'true';
       script.dataset.amanCategory = category.id;
       placeholder.dataset.amanLoaded = 'true';
