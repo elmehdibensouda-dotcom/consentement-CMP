@@ -154,10 +154,10 @@ if [[ "$DEMO_MODE" == "--web-only" ]]; then
     "$PILOT_CONSOLE_DIR/"
   cp -R "$REPO_ROOT/demo-tags/." "$PILOT_CONSOLE_DIR/demo-tags/"
   export AMAN_STATIC_CONSOLE_DIR="$PILOT_CONSOLE_DIR"
-  "$PYTHON" -m uvicorn backend.aman_api.main:app --host 127.0.0.1 --port "$API_PORT" --no-access-log &
+  "$PYTHON" -m uvicorn backend.aman_api.main:app --host 127.0.0.1 --port "$API_PORT" --no-access-log --no-proxy-headers &
   api_pid=$!
 else
-  "$PYTHON" -m uvicorn backend.aman_api.main:app --host 127.0.0.1 --port "$API_PORT" --no-access-log &
+  "$PYTHON" -m uvicorn backend.aman_api.main:app --host 127.0.0.1 --port "$API_PORT" --no-access-log --no-proxy-headers &
   api_pid=$!
   "$PYTHON" -m http.server 8000 --bind 127.0.0.1 &
   web_pid=$!

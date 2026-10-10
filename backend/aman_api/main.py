@@ -56,6 +56,7 @@ from .consent_event_repository import (
     iter_events_for_export,
     iter_organization_events_for_export,
 )
+from .client_address import rate_limit_address
 from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
 from .property_repository import (
@@ -157,6 +158,15 @@ LOGIN_FAILURE_LIMIT = 20
 LOGIN_WINDOW_SECONDS = 10 * 60
 LOGIN_LOCK_SECONDS = 10 * 60
 LOGIN_RATE_MAX_BUCKETS = 20000
+# Per-account throttle: bounded and temporary, so a third party cannot lock an account
+# for long; browsers that already signed in to the account (device cookie) are exempt.
+LOGIN_ACCOUNT_FAILURE_LIMIT = 10
+LOGIN_ACCOUNT_WINDOW_SECONDS = 15 * 60
+LOGIN_ACCOUNT_LOCK_SECONDS = 15 * 60
+LOGIN_DEVICE_FAILURE_LIMIT = 10
+DEVICE_COOKIE = "aman_device"
+DEVICE_COOKIE_TTL_SECONDS = 90 * 24 * 60 * 60
+LOGIN_THROTTLED_DETAIL = "Too many sign-in attempts. Try again later."
 CONSENT_EVENT_WINDOW_SECONDS = 60
 CONSENT_EVENT_CLIENT_LIMIT = 120
 CONSENT_EVENT_PROPERTY_LIMIT = 6000
@@ -329,10 +339,38 @@ def ensure_scrypt_available() -> None:
         )
 
 
+def client_ip(request: Request) -> str:
+    """Return the rate-limit source for a request.
+
+    Only the socket peer is used. Behind a reverse proxy, Uvicorn rewrites it from
+    X-Forwarded-For solely for peers listed in AMAN_TRUSTED_PROXY_IPS.
+    """
+    return rate_limit_address(request.client.host if request.client else None)
+
+
 def login_client_key(request: Request) -> str:
-    # Trust only the socket peer. Forwarded headers require an explicitly trusted proxy.
-    remote_ip = request.client.host if request.client else "unknown"
-    return rate_limit_hash("login", remote_ip)
+    return rate_limit_hash("login", client_ip(request))
+
+
+def login_account_key(email: str) -> str:
+    return rate_limit_hash("login_account", email)
+
+
+def device_cookie_value(account_key: str, nonce: Optional[str] = None) -> str:
+    nonce = nonce or secrets.token_urlsafe(18)
+    mac = hmac.new(_RATE_LIMIT_HASH_KEY, f"device:{account_key}:{nonce}".encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{nonce}.{mac}"
+
+
+def recognized_device(request: Request, account_key: str) -> Optional[str]:
+    """Return the device nonce when the request carries this account's device cookie."""
+    value = request.cookies.get(DEVICE_COOKIE, "")
+    nonce, separator, _ = value.partition(".")
+    if not separator or not nonce or len(value) > 256:
+        return None
+    if not hmac.compare_digest(value, device_cookie_value(account_key, nonce)):
+        return None
+    return nonce
 
 
 def rate_limit_hash(scope: str, value: str) -> str:
@@ -344,15 +382,15 @@ def ensure_rate_limit_hash_key() -> None:
         raise RuntimeError("AMAN_RATE_LIMIT_HASH_KEY must contain at least 32 bytes when PostgreSQL is configured")
 
 
-def enforce_login_rate_limit(client_key: str) -> None:
-    now = utc_now()
-    retry_after = login_rate_limit_status(DATABASE_PATH, LOGGER, client_key, now)
+def login_throttled(retry_after: int) -> HTTPException:
+    return HTTPException(status_code=429, detail=LOGIN_THROTTLED_DETAIL,
+                         headers={"Retry-After": str(max(1, retry_after))})
+
+
+def enforce_login_rate_limit(client_key: str, scope: str = "login") -> None:
+    retry_after = login_rate_limit_status(DATABASE_PATH, LOGGER, client_key, utc_now(), scope)
     if retry_after:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many sign-in failures from this network. Try again later.",
-            headers={"Retry-After": str(retry_after)},
-        )
+        raise login_throttled(retry_after)
 
 
 def note_failed_login(client_key: str) -> int:
@@ -362,8 +400,40 @@ def note_failed_login(client_key: str) -> int:
     )
 
 
-def clear_login_failures(client_key: str) -> None:
-    clear_login_rate_limit(DATABASE_PATH, LOGGER, client_key)
+def note_failed_account_login(scope: str, bucket_hash: str, limit: int) -> int:
+    # Secondary limits fail open at bucket capacity: the source limit still applies.
+    return record_login_failure(
+        DATABASE_PATH, LOGGER, bucket_hash, utc_now(), LOGIN_ACCOUNT_WINDOW_SECONDS, limit,
+        LOGIN_ACCOUNT_LOCK_SECONDS, LOGIN_RATE_MAX_BUCKETS, scope=scope, block_when_full=False,
+    )
+
+
+def clear_login_failures(client_key: str, scope: str = "login") -> None:
+    clear_login_rate_limit(DATABASE_PATH, LOGGER, client_key, scope)
+
+
+def enforce_account_rate_limit(request: Request, email: str) -> Tuple[str, Optional[str]]:
+    """Apply the per-account throttle, unless this browser already signed in to the account.
+
+    Returns the account bucket and, for a recognized browser, its device bucket.
+    """
+    account_key = login_account_key(email)
+    nonce = recognized_device(request, account_key)
+    device_key = rate_limit_hash("login_device", f"{account_key}:{nonce}") if nonce else None
+    if device_key and not login_rate_limit_status(DATABASE_PATH, LOGGER, device_key, utc_now(), "login_device"):
+        return account_key, device_key
+    enforce_login_rate_limit(account_key, "login_account")
+    return account_key, None
+
+
+def note_failed_password(client_key: str, account_key: str, device_key: Optional[str]) -> None:
+    retry_after = max(
+        note_failed_login(client_key),
+        note_failed_account_login("login_device", device_key, LOGIN_DEVICE_FAILURE_LIMIT) if device_key
+        else note_failed_account_login("login_account", account_key, LOGIN_ACCOUNT_FAILURE_LIMIT),
+    )
+    if retry_after:
+        raise login_throttled(retry_after)
 
 
 def enforce_consent_event_rate_limit(
@@ -373,7 +443,7 @@ def enforce_consent_event_rate_limit(
 ) -> None:
     """Rate-limit by source before lookup, then by property after request validation."""
     now = utc_now()
-    remote_ip = request.client.host if request.client else "unknown"
+    remote_ip = client_ip(request)
     if property_id is None:
         limits = (("consent_client", rate_limit_hash("consent_client", remote_ip), CONSENT_EVENT_CLIENT_LIMIT),)
     else:
@@ -403,7 +473,7 @@ def enforce_invitation_rate_limit(
 ) -> None:
     """Atomically bound invitation attempts by socket peer or HMAC-scoped actor."""
     now = utc_now()
-    remote_ip = request.client.host if request.client else "unknown"
+    remote_ip = client_ip(request)
     scope = "invitation_" + operation
     limits = ((scope, rate_limit_hash(scope, identity or remote_ip), limit),)
     retry_after, capacity_limited = consume_rate_limits(
@@ -761,6 +831,7 @@ def login(body: LoginBody, request: Request, response: Response):
     client_key = login_client_key(request)
     enforce_login_rate_limit(client_key)
     email = str(body.email).strip().lower()
+    account_key, device_key = enforce_account_rate_limit(request, email)
     with connection() as conn:
         user = get_user_credentials(conn, email)
     password_hash = (
@@ -770,16 +841,14 @@ def login(body: LoginBody, request: Request, response: Response):
     )
     password_matches = check_password(body.password, password_hash)
     if not user or user["disabled"] or not password_matches:
-        retry_after = note_failed_login(client_key)
-        if retry_after:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many sign-in failures from this network. Try again later.",
-                headers={"Retry-After": str(retry_after)},
-            )
+        note_failed_password(client_key, account_key, device_key)
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
 
-    clear_login_failures(client_key)
+    # The source counter is not reset on success, so one valid account cannot be
+    # used to keep guessing other accounts from the same source.
+    clear_login_failures(account_key, "login_account")
+    if device_key:
+        clear_login_failures(device_key, "login_device")
 
     token = secrets.token_urlsafe(48)
     csrf_token = secrets.token_urlsafe(32)
@@ -793,6 +862,8 @@ def login(body: LoginBody, request: Request, response: Response):
                         samesite="strict", max_age=SESSION_TTL_SECONDS, path="/")
     response.set_cookie(CSRF_COOKIE, csrf_token, httponly=False, secure=COOKIE_SECURE,
                         samesite="strict", max_age=SESSION_TTL_SECONDS, path="/")
+    response.set_cookie(DEVICE_COOKIE, device_cookie_value(account_key), httponly=True, secure=COOKIE_SECURE,
+                        samesite="strict", max_age=DEVICE_COOKIE_TTL_SECONDS, path="/v1/auth/login")
     return {"csrfToken": csrf_token, "expiresAt": now + SESSION_TTL_SECONDS}
 
 

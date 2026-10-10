@@ -204,11 +204,13 @@ def _rate_limit_bucket(conn: Connection, scope: str, bucket_hash: str, now: int)
     ).fetchone()
 
 
-def login_rate_limit_status(database_path: Path, logger: logging.Logger, bucket_hash: str, now: int) -> int:
+def login_rate_limit_status(
+    database_path: Path, logger: logging.Logger, bucket_hash: str, now: int, scope: str = "login",
+) -> int:
     with database_connection(database_path, logger) as conn:
         row = conn.execute(
-            "SELECT blocked_until FROM rate_limit_buckets WHERE scope='login' AND bucket_hash=?",
-            (bucket_hash,),
+            "SELECT blocked_until FROM rate_limit_buckets WHERE scope=? AND bucket_hash=?",
+            (scope, bucket_hash),
         ).fetchone()
     return max(0, row["blocked_until"] - now) if row else 0
 
@@ -222,21 +224,31 @@ def record_login_failure(
     limit: int,
     block_seconds: int,
     max_buckets: int,
+    scope: str = "login",
+    block_when_full: bool = True,
 ) -> int:
+    """Count one failure; return the remaining block in seconds, or 0 when not blocked.
+
+    When the scope has no room for a new bucket, ``block_when_full`` selects
+    between refusing the attempt and not tracking it (for secondary limits).
+    """
     with database_transaction(database_path, logger) as conn:
-        conn.lock_rate_limit_scope("login")
+        conn.lock_rate_limit_scope(scope)
         exists = conn.execute(
-            "SELECT 1 FROM rate_limit_buckets WHERE scope='login' AND bucket_hash=?", (bucket_hash,)
+            "SELECT 1 FROM rate_limit_buckets WHERE scope=? AND bucket_hash=?", (scope, bucket_hash)
         ).fetchone()
         if exists is None:
             active = conn.execute(
                 "SELECT COUNT(*) AS n FROM rate_limit_buckets "
-                "WHERE scope='login' AND (window_started_at>? OR blocked_until>?)",
-                (now - max(window_seconds, 1200), now),
+                "WHERE scope=? AND (window_started_at>? OR blocked_until>?)",
+                (scope, now - max(window_seconds, 1200), now),
             ).fetchone()["n"]
             if active >= max_buckets:
-                return block_seconds
-        row = _rate_limit_bucket(conn, "login", bucket_hash, now)
+                if block_when_full:
+                    return block_seconds
+                logger.warning("Rate-limit scope %s is at bucket capacity; failure not tracked", scope)
+                return 0
+        row = _rate_limit_bucket(conn, scope, bucket_hash, now)
         if row["blocked_until"] > now:
             return row["blocked_until"] - now
         start = row["window_started_at"]
@@ -248,16 +260,18 @@ def record_login_failure(
         blocked_until = now + block_seconds if count >= limit else 0
         conn.execute(
             "UPDATE rate_limit_buckets SET window_started_at=?,request_count=?,blocked_until=? "
-            "WHERE scope='login' AND bucket_hash=?",
-            (start, count, blocked_until, bucket_hash),
+            "WHERE scope=? AND bucket_hash=?",
+            (start, count, blocked_until, scope, bucket_hash),
         )
         return max(0, blocked_until - now)
 
 
-def clear_login_rate_limit(database_path: Path, logger: logging.Logger, bucket_hash: str) -> None:
+def clear_login_rate_limit(
+    database_path: Path, logger: logging.Logger, bucket_hash: str, scope: str = "login",
+) -> None:
     with database_transaction(database_path, logger) as conn:
-        conn.lock_rate_limit_scope("login")
-        conn.execute("DELETE FROM rate_limit_buckets WHERE scope='login' AND bucket_hash=?", (bucket_hash,))
+        conn.lock_rate_limit_scope(scope)
+        conn.execute("DELETE FROM rate_limit_buckets WHERE scope=? AND bucket_hash=?", (scope, bucket_hash))
 
 
 def consume_rate_limits(

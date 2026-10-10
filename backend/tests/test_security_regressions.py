@@ -43,7 +43,9 @@ def make_request(
     )
 
 
-class SecurityRegressionTests(unittest.TestCase):
+class SecurityFixture(unittest.TestCase):
+    """Shared two-organization fixture for security regression suites."""
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.previous_database_path = api.DATABASE_PATH
@@ -171,6 +173,8 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, expected)
         return raised.exception
 
+
+class SecurityRegressionTests(SecurityFixture):
     def test_login_failure_runs_one_password_kdf_for_known_missing_and_disabled_users(self) -> None:
         results = []
         emails = ("active@example.com", "missing@example.com", "disabled@example.com")

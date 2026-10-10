@@ -39,7 +39,9 @@ if [ -z "${AMAN_RATE_LIMIT_HASH_KEY:-}" ]; then
     exit 1
 fi
 
-case "${AMAN_PORT:-8000}" in
+AMAN_PORT="${AMAN_PORT:-8000}"
+
+case "$AMAN_PORT" in
     ''|*[!0-9]*)
         printf '%s\n' "AMAN_PORT must be a numeric TCP port." >&2
         exit 1
@@ -54,10 +56,23 @@ fi
 command_name="${1:-serve}"
 case "$command_name" in
     serve)
+        # Forwarding headers are honored only from explicitly listed proxy IPs/CIDRs.
+        if ! trusted_proxies=$(python -m backend.aman_api.client_address); then
+            printf '%s\n' "AMAN_TRUSTED_PROXY_IPS is invalid; list proxy IP addresses or CIDR networks." >&2
+            exit 1
+        fi
+        if [ -n "$trusted_proxies" ]; then
+            exec python -m uvicorn backend.aman_api.main:app \
+                --host 0.0.0.0 \
+                --port "$AMAN_PORT" \
+                --no-access-log \
+                --proxy-headers --forwarded-allow-ips "$trusted_proxies"
+        fi
         exec python -m uvicorn backend.aman_api.main:app \
             --host 0.0.0.0 \
             --port "$AMAN_PORT" \
-            --no-access-log
+            --no-access-log \
+            --no-proxy-headers
         ;;
     migrate)
         exec python /app/backend/migrate_db.py
