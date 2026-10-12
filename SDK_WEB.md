@@ -22,9 +22,11 @@ Télécharger `aman-cmp.js` depuis le dépôt ou l’artefact `alamane-web-previ
         data-aman-channel="web"
         data-aman-collect-decision-events="false"
         data-aman-request-timeout-ms="10000"
-        data-aman-locale="fr"></script>
+        data-aman-locale="fr"
+        data-aman-allowed-script-origins="https://cdn.fournisseur.example"></script>
 
 <script type="text/plain"
+        nonce="{{CSP_NONCE}}"
         data-aman-category="analytics"
         data-aman-src="/assets/analytics.js"></script>
 ```
@@ -33,7 +35,15 @@ Remplacer `cmp.example.ma`, `PROPERTY_ID`, le chemin du SDK et les ressources d�
 
 ## 3. Raccorder les technologies
 
-Les scripts facultatifs doivent être configurés pour ne pas démarrer avant le choix applicable. Pour le chargement géré par ALAMANE, utiliser un élément `type="text/plain"`, `data-aman-src` et l’identifiant de finalité dans `data-aman-category`. Vérifier les déclencheurs de GTM séparément : un déclencheur `Page View` peut partir avant l’événement de consentement.
+Les scripts facultatifs doivent être configurés pour ne pas démarrer avant le choix applicable. Pour le chargement géré par ALAMANE, utiliser un élément `type="text/plain"`, `data-aman-src` et l’identifiant de finalité dans `data-aman-category`.
+
+Contrat de chargement des scripts gérés :
+
+- **Nonce.** Si la balise du SDK porte un nonce, un placeholder ne démarre que s’il porte **le même nonce** (`nonce="{{CSP_NONCE}}"`), et seul ce placeholder reçoit le nonce sur le `<script>` créé. Un placeholder sans nonce, ou avec un autre nonce, est ignoré : du balisage injecté dans la page ne peut donc pas emprunter le nonce du SDK.
+- **Source.** `data-aman-src` est résolu en URL absolue par rapport à l’adresse de la page. Sont refusés les URL avec identifiants, les protocoles autres que `https:`/`http:` (`javascript:`, `data:`, `blob:`…) et les origines non autorisées. Par défaut, seule l’origine de la page est autorisée ; ajouter chaque autre origine réellement utilisée dans `data-aman-allowed-script-origins` sur la balise du SDK (liste séparée par des espaces, origine seule : `https://hôte[:port]`, sans chemin ; `http:` n’est accepté que pour un hôte loopback). Cette liste n’est lue que sur la balise du SDK, jamais depuis `window.AmanConsentConfig`.
+- **Sans nonce.** Les intégrations existantes sans nonce continuent de fonctionner pour les scripts de même origine ; les scripts tiers doivent désormais être ajoutés à `data-aman-allowed-script-origins`.
+- **Refus.** Un placeholder refusé n’est pas chargé ; le SDK émet `aman:tag-blocked` avec la finalité et le motif (`nonce`, `url`, `credentials`, `protocol` ou `origin`), une seule fois par motif.
+- **Limites.** Ces contrôles réduisent l’exploitation d’une injection HTML à travers le SDK ; ils ne remplacent ni l’assainissement des contenus, ni la CSP du site, et ne corrigent pas une XSS existante. Une injection capable d’exécuter du JavaScript, ou une page qui divulgue son nonce, reste hors de leur portée. Vérifier les déclencheurs de GTM séparément : un déclencheur `Page View` peut partir avant l’événement de consentement.
 
 Raccorder aussi chaque finalité à son mécanisme de démarrage et d’arrêt fournisseur. Pour une intégration JavaScript directe, `AmanCMP.registerPurposeHandler` reçoit l’état initial puis les changements applicables. La fonction `start` n’est appelée que lorsque la finalité est active ; elle peut renvoyer une fonction de nettoyage exécutée quand elle devient inactive, quand l’inscription est retirée ou quand le contexte de politique (propriété/version/canal) change alors que la finalité reste active :
 
@@ -54,7 +64,7 @@ Les requêtes de politique et de décision expirent après 10 secondes par défa
 
 ## 5. CSP et revue de sécurité
 
-Le SDK peut être hébergé sur le domaine du client, comme `/assets/aman-cmp.js` dans l’exemple. L’API distante doit être autorisée dans `connect-src`. Le module crée une feuille `<style>` et, après un choix favorable, les balises `<script>` des ressources gérées. Il copie le nonce de sa propre balise vers ces éléments.
+Le SDK peut être hébergé sur le domaine du client, comme `/assets/aman-cmp.js` dans l’exemple. L’API distante doit être autorisée dans `connect-src`. Le module crée une feuille `<style>` et, après un choix favorable, les balises `<script>` des ressources gérées. Il donne le nonce de sa propre balise à sa feuille de style et aux seuls scripts créés depuis un placeholder portant ce même nonce (voir section 3).
 
 Exemple de valeur d’en-tête à adapter à la CSP déjà administrée par l’application :
 
@@ -62,9 +72,9 @@ Exemple de valeur d’en-tête à adapter à la CSP déjà administrée par l’
 Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{{CSP_NONCE}}'; style-src 'self' 'nonce-{{CSP_NONCE}}'; connect-src 'self' https://cmp.example.ma; object-src 'none'; base-uri 'self'; frame-ancestors 'self'
 ```
 
-`{{CSP_NONCE}}` doit être remplacé par le nonce aléatoire de la réponse, avec la même valeur sur la balise du SDK et dans les directives `script-src` et `style-src`. Si les ressources du SDK ou les scripts approuvés sont servis depuis d’autres hôtes, l’équipe cliente doit les ajouter explicitement à la directive appropriée. Cette liste ne couvre pas les fournisseurs tiers du client. Ne pas ajouter globalement `'unsafe-inline'` pour résoudre une erreur CSP : faire examiner toute exception et limiter sa portée.
+`{{CSP_NONCE}}` doit être remplacé par le nonce aléatoire de la réponse, avec la même valeur sur la balise du SDK, sur chaque placeholder géré et dans les directives `script-src` et `style-src`. Si les ressources du SDK ou les scripts approuvés sont servis depuis d’autres hôtes, l’équipe cliente doit les ajouter explicitement à la directive appropriée. Cette liste ne couvre pas les fournisseurs tiers du client. Ne pas ajouter globalement `'unsafe-inline'` pour résoudre une erreur CSP : faire examiner toute exception et limiter sa portée.
 
-Avant le pilote, l’équipe cliente doit examiner le code, les hôtes réseau, la CSP, l’accessibilité et le comportement des scripts réels dans son environnement. L’artefact est une source de prévisualisation vérifiable par checksum, sans signature d’origine, attestation ni garantie de production. Ne pas l’utiliser sur un site bancaire ou avec des données réelles tant que les validations, l’hébergement et les responsabilités ne sont pas convenus.
+Le test navigateur `bash scripts/run-web-sdk-tests.sh` (Chrome ou Chromium headless) vérifie ces règles avec et sans nonce. Avant le pilote, l’équipe cliente doit examiner le code, les hôtes réseau, la CSP, l’accessibilité et le comportement des scripts réels dans son environnement. L’artefact est une source de prévisualisation vérifiable par checksum, sans signature d’origine, attestation ni garantie de production. Ne pas l’utiliser sur un site bancaire ou avec des données réelles tant que les validations, l’hébergement et les responsabilités ne sont pas convenus.
 
 ## 6. Retour arrière de la route de test
 

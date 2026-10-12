@@ -82,6 +82,24 @@ Décider avec le client du mode dédié ou mutualisé, des connexions sortantes,
 
 **Critères de sortie :** approbations sécurité, juridique, DPO, achats et opérations du client; procédure de retour arrière et de suppression vérifiée; aucune promesse générale de conformité ou de résidence avant validation documentée.
 
+### Proposition : MFA de la console (conception, non implémentée)
+
+La console ne demande aujourd’hui qu’un email et un mot de passe. Cette proposition doit faire l’objet d’une décision distincte avant tout code ; aucune dépendance n’est retenue à ce stade. Si le client impose son fournisseur d’identité (OIDC ou SAML), le SSO avec MFA côté client peut remplacer tout ou partie de ce mécanisme local.
+
+| Option | Atouts | Coûts et contraintes |
+| --- | --- | --- |
+| WebAuthn (clés FIDO2, passkeys) | Résiste à l’hameçonnage, aucun secret partagé côté serveur (clé publique seulement). | Vérification des attestations et des signatures : bibliothèque serveur éprouvée à choisir et auditer ; parcours de récupération indispensable en cas de perte de clé ; compatibilité navigateur et matériel à valider avec le client. |
+| TOTP (RFC 6238) | Simple, applications d’authentification courantes, implémentable avec la bibliothèque standard. | Secret partagé à chiffrer au repos (clé gérée par le gestionnaire de secrets) ; sensible à l’hameçonnage en temps réel ; tolérance d’horloge et rejeu d’un code dans sa fenêtre à interdire. |
+
+Recommandation : WebAuthn comme facteur cible pour owner/admin, TOTP accepté comme facteur de repli pendant le pilote.
+
+- **Enrôlement :** depuis une session récente (réauthentification par mot de passe de moins de 5 minutes), avec confirmation par un premier code ou une première assertion avant activation ; événement d’audit `mfa.enrolled` sans secret.
+- **Vérification :** connexion en deux étapes ; la session complète n’est créée qu’après le second facteur. L’étape intermédiaire utilise un jeton court, à usage unique et lié au compte. Les échecs MFA réutilisent les limites par source, par compte et par appareil introduites pour la connexion, avec une pause temporaire et non un verrouillage définitif.
+- **Codes de secours :** 10 codes aléatoires à usage unique, affichés une seule fois, stockés uniquement sous forme de hash lent (scrypt) ; utilisation et régénération auditées.
+- **Exigence :** MFA obligatoire pour owner et admin avant toute mutation (publication, membres, réglages, transfert de propriété, exports) ; facultatif puis obligatoire pour editor et viewer selon la décision du client. Un owner/admin sans MFA garde un accès en lecture et une invite d’enrôlement.
+- **Récupération par opérateur :** réinitialisation MFA uniquement par un opérateur habilité, après vérification d’identité hors bande documentée ; révocation de toutes les sessions et cookies `aman_device` du compte ; audit `mfa.reset` avec l’opérateur, le motif et la référence du ticket ; notification au compte et aux autres owners.
+- **Sessions et opérations sensibles :** à l’activation de l’exigence, les sessions existantes sans MFA passent en lecture seule jusqu’à la vérification. Réauthentification MFA de moins de 15 minutes pour les opérations sensibles (désactivation de l’approbation à deux personnes, transfert de propriété, changement de rôle admin, exports). Le CSRF existant s’applique à toutes les routes MFA ; les jetons MFA ne sont jamais journalisés.
+
 ## Conditions CI et release à ajouter avec la migration
 
 - Exécuter la suite sur SQLite et sur une version PostgreSQL déclarée, sans remplacer l’une par l’autre.

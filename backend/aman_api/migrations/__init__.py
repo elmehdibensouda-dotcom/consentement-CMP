@@ -10,6 +10,7 @@ from . import (
     v0002_legacy_columns,
     v0003_rate_limit_buckets,
     v0004_single_published_policy,
+    v0005_approval_setting_changes,
 )
 
 
@@ -36,6 +37,13 @@ MIGRATIONS = (
         "single_published_policy",
         v0004_single_published_policy,
         v0004_single_published_policy.upgrade,
+        _now,
+    ),
+    Migration(
+        5,
+        "approval_setting_changes",
+        v0005_approval_setting_changes,
+        v0005_approval_setting_changes.upgrade,
         _now,
     ),
 )

@@ -43,7 +43,9 @@ def make_request(
     )
 
 
-class SecurityRegressionTests(unittest.TestCase):
+class SecurityFixture(unittest.TestCase):
+    """Shared two-organization fixture for security regression suites."""
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.previous_database_path = api.DATABASE_PATH
@@ -156,8 +158,9 @@ class SecurityRegressionTests(unittest.TestCase):
         }
 
     def session(self, user_id: str = "active-user") -> tuple[Request, str]:
-        token = f"session-{user_id}"
-        csrf = f"csrf-{user_id}"
+        suffix = uuid4().hex
+        token = f"session-{user_id}-{suffix}"
+        csrf = f"csrf-{user_id}-{suffix}"
         with api.transaction() as conn:
             conn.execute(
                 "INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,created_at) VALUES(?,?,?,?,?)",
@@ -171,6 +174,8 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, expected)
         return raised.exception
 
+
+class SecurityRegressionTests(SecurityFixture):
     def test_login_failure_runs_one_password_kdf_for_known_missing_and_disabled_users(self) -> None:
         results = []
         emails = ("active@example.com", "missing@example.com", "disabled@example.com")

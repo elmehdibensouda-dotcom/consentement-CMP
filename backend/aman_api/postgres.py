@@ -18,7 +18,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from .database import Connection, DatabaseError, IntegrityError
-from . import postgres_migrations, postgres_rate_limit_migration
+from . import postgres_approval_change_migration, postgres_migrations, postgres_rate_limit_migration
 
 
 POSTGRES_MIGRATIONS = (
@@ -28,6 +28,12 @@ POSTGRES_MIGRATIONS = (
         postgres_rate_limit_migration.NAME,
         postgres_rate_limit_migration,
         postgres_rate_limit_migration.upgrade,
+    ),
+    (
+        postgres_approval_change_migration.VERSION,
+        postgres_approval_change_migration.NAME,
+        postgres_approval_change_migration,
+        postgres_approval_change_migration.upgrade,
     ),
 )
 

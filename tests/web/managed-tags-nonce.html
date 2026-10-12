@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-aman-test-nonce'; style-src 'nonce-aman-test-nonce'; connect-src 'self'; object-src 'none'; base-uri 'none'">
+  <title>SDK managed tags · nonce</title>
+</head>
+<body data-result="pending" data-test-nonce="aman-test-nonce" data-property-id="web-test-nonce"
+      data-expect='{"static-matching":true,"static-injected-no-nonce":false,"dynamic-no-nonce":false,"dynamic-wrong-nonce":false,"dynamic-matching":true,"javascript-url":false,"data-url":false,"credentials-url":false,"unlisted-origin":false,"allowed-cross-origin":true}'>
+  <h1>Test navigateur : SDK avec nonce CSP</h1>
+  <p>Les placeholders sans le nonce de la page, ou hors des origines autorisées, ne doivent jamais démarrer.</p>
+  <pre id="results"></pre>
+  <script type="text/plain" nonce="aman-test-nonce" data-aman-category="analytics" data-aman-src="fixtures/tag.js?id=static-matching" data-test-id="static-matching"></script>
+  <!-- Simulates markup injected into the page without knowledge of the nonce. -->
+  <script type="text/plain" data-aman-category="analytics" data-aman-src="fixtures/tag.js?id=static-injected-no-nonce" data-test-id="static-injected-no-nonce"></script>
+  <script nonce="aman-test-nonce" src="managed-tags-harness.js"></script>
+</body>
+</html>

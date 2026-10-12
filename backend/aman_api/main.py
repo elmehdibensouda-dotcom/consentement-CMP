@@ -56,6 +56,14 @@ from .consent_event_repository import (
     iter_events_for_export,
     iter_organization_events_for_export,
 )
+from .approval_setting_repository import (
+    create_change as persist_approval_setting_change,
+    get_change as get_approval_setting_change,
+    get_pending_change as get_pending_approval_setting_change,
+    mark_change_approved as mark_approval_setting_change_approved,
+    revoke_pending_changes as revoke_pending_approval_setting_changes,
+)
+from .client_address import rate_limit_address
 from .dashboard_repository import load_dashboard_sources
 from .audit_repository import append_audit_event, iter_audit_export_events, list_audit_events
 from .property_repository import (
@@ -153,26 +161,42 @@ CSRF_COOKIE = "aman_csrf"
 SESSION_TTL_SECONDS = 8 * 60 * 60
 INVITE_TTL_SECONDS = 72 * 60 * 60
 OWNERSHIP_TRANSFER_TTL_SECONDS = 24 * 60 * 60
+APPROVAL_SETTING_CHANGE_TTL_SECONDS = 24 * 60 * 60
 LOGIN_FAILURE_LIMIT = 20
 LOGIN_WINDOW_SECONDS = 10 * 60
 LOGIN_LOCK_SECONDS = 10 * 60
 LOGIN_RATE_MAX_BUCKETS = 20000
+# Per-account throttle: bounded and temporary, so a third party cannot lock an account
+# for long; browsers that already signed in to the account (device cookie) are exempt.
+LOGIN_ACCOUNT_FAILURE_LIMIT = 10
+LOGIN_ACCOUNT_WINDOW_SECONDS = 15 * 60
+LOGIN_ACCOUNT_LOCK_SECONDS = 15 * 60
+LOGIN_DEVICE_FAILURE_LIMIT = 10
+DEVICE_COOKIE = "aman_device"
+DEVICE_COOKIE_TTL_SECONDS = 90 * 24 * 60 * 60
+LOGIN_THROTTLED_DETAIL = "Too many sign-in attempts. Try again later."
 CONSENT_EVENT_WINDOW_SECONDS = 60
 CONSENT_EVENT_CLIENT_LIMIT = 120
 CONSENT_EVENT_PROPERTY_LIMIT = 6000
-def positive_int_setting(name: str, default: int) -> int:
+def positive_int_setting(name: str, default: int, maximum: Optional[int] = None) -> int:
     raw_value = os.environ.get(name, str(default))
     try:
         parsed = int(raw_value)
     except ValueError as error:
         raise RuntimeError(f"{name} must be a positive integer") from error
-    if parsed < 1:
-        raise RuntimeError(f"{name} must be a positive integer")
+    if parsed < 1 or (maximum is not None and parsed > maximum):
+        raise RuntimeError(f"{name} must be a positive integer" + (f" no greater than {maximum}" if maximum else ""))
     return parsed
 
 
-CONSENT_EVENT_ACTIVE_TOTAL_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_TOTAL_LIMIT", 100_000)
+# Admission quotas isolate tenants; the total is an emergency bound on storage growth
+# that refuses new events for every property once reached.
+CONSENT_EVENT_ACTIVE_TOTAL_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_TOTAL_LIMIT", 500_000)
+CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT", 50_000)
 CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT = positive_int_setting("AMAN_CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT", 25_000)
+CONSENT_EVENT_CAPACITY_WARNING_PERCENT = positive_int_setting(
+    "AMAN_CONSENT_EVENT_CAPACITY_WARNING_PERCENT", 80, maximum=100
+)
 CONSENT_EVENT_MAX_BUCKETS = 20000
 INVITATION_PREVIEW_LIMIT = 120
 INVITATION_ACCEPT_LIMIT = 20
@@ -191,6 +215,27 @@ _LOGIN_BLOCKED_UNTIL: Dict[str, int] = {}
 _CONFIGURED_RATE_LIMIT_HASH_KEY = os.environ.get("AMAN_RATE_LIMIT_HASH_KEY", "").encode("utf-8")
 _RATE_LIMIT_HASH_KEY = _CONFIGURED_RATE_LIMIT_HASH_KEY or secrets.token_bytes(32)
 COOKIE_SECURE = ENVIRONMENT != "development"
+
+
+def load_hsts_settings() -> Tuple[int, bool]:
+    raw_age = os.environ.get("AMAN_HSTS_MAX_AGE", "31536000").strip()
+    if not raw_age.isdecimal():
+        raise RuntimeError("AMAN_HSTS_MAX_AGE must be a non-negative integer number of seconds")
+    raw_subdomains = os.environ.get("AMAN_HSTS_INCLUDE_SUBDOMAINS", "false").strip().lower()
+    if raw_subdomains not in {"true", "false"}:
+        raise RuntimeError("AMAN_HSTS_INCLUDE_SUBDOMAINS must be true or false")
+    return int(raw_age), raw_subdomains == "true"
+
+
+# HSTS is sent only on requests that arrived over HTTPS: direct TLS, or a TLS proxy
+# trusted through AMAN_TRUSTED_PROXY_IPS (Uvicorn then applies X-Forwarded-Proto).
+HSTS_MAX_AGE_SECONDS, HSTS_INCLUDE_SUBDOMAINS = load_hsts_settings()
+CONSOLE_PATH_PREFIXES = ("/console/",)
+# Report-only until the console's inline script and styles move to files or nonces.
+CONSOLE_CSP_REPORT_ONLY = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
+    "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+)
 if ENVIRONMENT == "production":
     raise RuntimeError(
         "This development API is not production-deployable: it uses SQLite and has no reviewed deployment controls."
@@ -329,10 +374,38 @@ def ensure_scrypt_available() -> None:
         )
 
 
+def client_ip(request: Request) -> str:
+    """Return the rate-limit source for a request.
+
+    Only the socket peer is used. Behind a reverse proxy, Uvicorn rewrites it from
+    X-Forwarded-For solely for peers listed in AMAN_TRUSTED_PROXY_IPS.
+    """
+    return rate_limit_address(request.client.host if request.client else None)
+
+
 def login_client_key(request: Request) -> str:
-    # Trust only the socket peer. Forwarded headers require an explicitly trusted proxy.
-    remote_ip = request.client.host if request.client else "unknown"
-    return rate_limit_hash("login", remote_ip)
+    return rate_limit_hash("login", client_ip(request))
+
+
+def login_account_key(email: str) -> str:
+    return rate_limit_hash("login_account", email)
+
+
+def device_cookie_value(account_key: str, nonce: Optional[str] = None) -> str:
+    nonce = nonce or secrets.token_urlsafe(18)
+    mac = hmac.new(_RATE_LIMIT_HASH_KEY, f"device:{account_key}:{nonce}".encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{nonce}.{mac}"
+
+
+def recognized_device(request: Request, account_key: str) -> Optional[str]:
+    """Return the device nonce when the request carries this account's device cookie."""
+    value = request.cookies.get(DEVICE_COOKIE, "")
+    nonce, separator, _ = value.partition(".")
+    if not separator or not nonce or len(value) > 256:
+        return None
+    if not hmac.compare_digest(value, device_cookie_value(account_key, nonce)):
+        return None
+    return nonce
 
 
 def rate_limit_hash(scope: str, value: str) -> str:
@@ -344,15 +417,15 @@ def ensure_rate_limit_hash_key() -> None:
         raise RuntimeError("AMAN_RATE_LIMIT_HASH_KEY must contain at least 32 bytes when PostgreSQL is configured")
 
 
-def enforce_login_rate_limit(client_key: str) -> None:
-    now = utc_now()
-    retry_after = login_rate_limit_status(DATABASE_PATH, LOGGER, client_key, now)
+def login_throttled(retry_after: int) -> HTTPException:
+    return HTTPException(status_code=429, detail=LOGIN_THROTTLED_DETAIL,
+                         headers={"Retry-After": str(max(1, retry_after))})
+
+
+def enforce_login_rate_limit(client_key: str, scope: str = "login") -> None:
+    retry_after = login_rate_limit_status(DATABASE_PATH, LOGGER, client_key, utc_now(), scope)
     if retry_after:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many sign-in failures from this network. Try again later.",
-            headers={"Retry-After": str(retry_after)},
-        )
+        raise login_throttled(retry_after)
 
 
 def note_failed_login(client_key: str) -> int:
@@ -362,8 +435,40 @@ def note_failed_login(client_key: str) -> int:
     )
 
 
-def clear_login_failures(client_key: str) -> None:
-    clear_login_rate_limit(DATABASE_PATH, LOGGER, client_key)
+def note_failed_account_login(scope: str, bucket_hash: str, limit: int) -> int:
+    # Secondary limits fail open at bucket capacity: the source limit still applies.
+    return record_login_failure(
+        DATABASE_PATH, LOGGER, bucket_hash, utc_now(), LOGIN_ACCOUNT_WINDOW_SECONDS, limit,
+        LOGIN_ACCOUNT_LOCK_SECONDS, LOGIN_RATE_MAX_BUCKETS, scope=scope, block_when_full=False,
+    )
+
+
+def clear_login_failures(client_key: str, scope: str = "login") -> None:
+    clear_login_rate_limit(DATABASE_PATH, LOGGER, client_key, scope)
+
+
+def enforce_account_rate_limit(request: Request, email: str) -> Tuple[str, Optional[str]]:
+    """Apply the per-account throttle, unless this browser already signed in to the account.
+
+    Returns the account bucket and, for a recognized browser, its device bucket.
+    """
+    account_key = login_account_key(email)
+    nonce = recognized_device(request, account_key)
+    device_key = rate_limit_hash("login_device", f"{account_key}:{nonce}") if nonce else None
+    if device_key and not login_rate_limit_status(DATABASE_PATH, LOGGER, device_key, utc_now(), "login_device"):
+        return account_key, device_key
+    enforce_login_rate_limit(account_key, "login_account")
+    return account_key, None
+
+
+def note_failed_password(client_key: str, account_key: str, device_key: Optional[str]) -> None:
+    retry_after = max(
+        note_failed_login(client_key),
+        note_failed_account_login("login_device", device_key, LOGIN_DEVICE_FAILURE_LIMIT) if device_key
+        else note_failed_account_login("login_account", account_key, LOGIN_ACCOUNT_FAILURE_LIMIT),
+    )
+    if retry_after:
+        raise login_throttled(retry_after)
 
 
 def enforce_consent_event_rate_limit(
@@ -373,7 +478,7 @@ def enforce_consent_event_rate_limit(
 ) -> None:
     """Rate-limit by source before lookup, then by property after request validation."""
     now = utc_now()
-    remote_ip = request.client.host if request.client else "unknown"
+    remote_ip = client_ip(request)
     if property_id is None:
         limits = (("consent_client", rate_limit_hash("consent_client", remote_ip), CONSENT_EVENT_CLIENT_LIMIT),)
     else:
@@ -403,7 +508,7 @@ def enforce_invitation_rate_limit(
 ) -> None:
     """Atomically bound invitation attempts by socket peer or HMAC-scoped actor."""
     now = utc_now()
-    remote_ip = request.client.host if request.client else "unknown"
+    remote_ip = client_ip(request)
     scope = "invitation_" + operation
     limits = ((scope, rate_limit_hash(scope, identity or remote_ip), limit),)
     retry_after, capacity_limited = consume_rate_limits(
@@ -418,6 +523,22 @@ def enforce_invitation_rate_limit(
             detail="Too many invitation attempts from this network. Try again later.",
             headers={"Retry-After": str(retry_after)},
         )
+
+
+def consent_event_capacity_level(active_total: int) -> str:
+    if active_total >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT:
+        return "exhausted"
+    if active_total * 100 >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT * CONSENT_EVENT_CAPACITY_WARNING_PERCENT:
+        return "warning"
+    return "ok"
+
+
+def consent_event_capacity_state() -> str:
+    with connection() as conn:
+        active_total = conn.execute(
+            "SELECT COUNT(*) AS event_count FROM consent_events WHERE expires_at>?", (utc_now(),)
+        ).fetchone()["event_count"]
+    return consent_event_capacity_level(active_total)
 
 
 def audit(conn: Connection, org_id: str, actor: str, action: str,
@@ -669,8 +790,12 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cache-Control"] = response.headers.get("Cache-Control", "no-store")
-    if ENVIRONMENT == "production":
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.url.scheme == "https" and HSTS_MAX_AGE_SECONDS > 0:
+        response.headers["Strict-Transport-Security"] = f"max-age={HSTS_MAX_AGE_SECONDS}" + (
+            "; includeSubDomains" if HSTS_INCLUDE_SUBDOMAINS else ""
+        )
+    if request.url.path.startswith(CONSOLE_PATH_PREFIXES):
+        response.headers["Content-Security-Policy-Report-Only"] = CONSOLE_CSP_REPORT_ONLY
     return response
 
 
@@ -743,6 +868,7 @@ def readiness():
         with connection() as conn:
             conn.execute("SELECT 1").fetchone()
             conn.require_current_schema()
+        capacity = consent_event_capacity_state()
     except Exception as error:
         LOGGER.warning("Readiness check failed (%s)", type(error).__name__)
         return JSONResponse(
@@ -750,8 +876,9 @@ def readiness():
             status_code=503,
             headers={"Cache-Control": "no-store"},
         )
+    # Capacity is reported, not gated: an exhausted event store must not take the console down.
     return JSONResponse(
-        {"service": "aman-consent-api", "status": "ready"},
+        {"service": "aman-consent-api", "status": "ready", "consentEventCapacity": capacity},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -761,6 +888,7 @@ def login(body: LoginBody, request: Request, response: Response):
     client_key = login_client_key(request)
     enforce_login_rate_limit(client_key)
     email = str(body.email).strip().lower()
+    account_key, device_key = enforce_account_rate_limit(request, email)
     with connection() as conn:
         user = get_user_credentials(conn, email)
     password_hash = (
@@ -770,16 +898,14 @@ def login(body: LoginBody, request: Request, response: Response):
     )
     password_matches = check_password(body.password, password_hash)
     if not user or user["disabled"] or not password_matches:
-        retry_after = note_failed_login(client_key)
-        if retry_after:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many sign-in failures from this network. Try again later.",
-                headers={"Retry-After": str(retry_after)},
-            )
+        note_failed_password(client_key, account_key, device_key)
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
 
-    clear_login_failures(client_key)
+    # The source counter is not reset on success, so one valid account cannot be
+    # used to keep guessing other accounts from the same source.
+    clear_login_failures(account_key, "login_account")
+    if device_key:
+        clear_login_failures(device_key, "login_device")
 
     token = secrets.token_urlsafe(48)
     csrf_token = secrets.token_urlsafe(32)
@@ -793,6 +919,8 @@ def login(body: LoginBody, request: Request, response: Response):
                         samesite="strict", max_age=SESSION_TTL_SECONDS, path="/")
     response.set_cookie(CSRF_COOKIE, csrf_token, httponly=False, secure=COOKIE_SECURE,
                         samesite="strict", max_age=SESSION_TTL_SECONDS, path="/")
+    response.set_cookie(DEVICE_COOKIE, device_cookie_value(account_key), httponly=True, secure=COOKIE_SECURE,
+                        samesite="strict", max_age=DEVICE_COOKIE_TTL_SECONDS, path="/v1/auth/login")
     return {"csrfToken": csrf_token, "expiresAt": now + SESSION_TTL_SECONDS}
 
 
@@ -896,30 +1024,49 @@ def accept_invitation(body: AcceptInviteBody, request: Request):
     enforce_invitation_rate_limit(request, "accept", INVITATION_ACCEPT_LIMIT)
     now = utc_now()
     token_hash = digest(body.token)
-    with transaction() as conn:
-        invite = get_invitation_for_acceptance(conn, token_hash)
-        if invite:
-            conn.lock_invitation(invite["id"])
+    # The existing-account password check shares the sign-in per-account budget, applied
+    # to every invited address so the throttle does not reveal whether an account exists.
+    with connection() as conn:
+        pending = get_invitation_for_acceptance(conn, token_hash)
+    account_key = login_account_key(pending["email"]) if pending else None
+    if account_key:
+        enforce_login_rate_limit(account_key, "login_account")
+    password_mismatch = False
+    try:
+        with transaction() as conn:
             invite = get_invitation_for_acceptance(conn, token_hash)
-        if not invite or invite["accepted_at"] or invite["expires_at"] <= now:
-            raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
-        existing_user = get_invited_user_account(conn, invite["email"])
-        if existing_user:
-            if existing_user["disabled"]:
-                raise HTTPException(status_code=403, detail="This Aman account is disabled")
-            if not check_password(body.password, existing_user["password_hash"]):
-                raise HTTPException(status_code=401, detail="The password does not match the invited Aman account")
-            user_id = existing_user["id"]
-            account_created = False
-        else:
-            user_id = secrets.token_hex(16)
-            create_invited_user(conn, user_id, invite["email"], hash_password(body.password), now)
-            account_created = True
-        if is_organization_member(conn, invite["org_id"], user_id):
-            raise HTTPException(status_code=409, detail="This account is already a member of the organization")
-        add_invited_member(conn, invite["org_id"], user_id, invite["role"], now)
-        mark_invitation_accepted(conn, invite["id"], now)
-        audit(conn, invite["org_id"], user_id, "member.joined", "user", user_id, {"role": invite["role"]})
+            if invite:
+                conn.lock_invitation(invite["id"])
+                invite = get_invitation_for_acceptance(conn, token_hash)
+            if not invite or invite["accepted_at"] or invite["expires_at"] <= now:
+                raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+            existing_user = get_invited_user_account(conn, invite["email"])
+            if existing_user:
+                if existing_user["disabled"]:
+                    raise HTTPException(status_code=403, detail="This Aman account is disabled")
+                if not check_password(body.password, existing_user["password_hash"]):
+                    password_mismatch = True
+                    raise HTTPException(status_code=401, detail="The password does not match the invited Aman account")
+                user_id = existing_user["id"]
+                account_created = False
+            else:
+                user_id = secrets.token_hex(16)
+                create_invited_user(conn, user_id, invite["email"], hash_password(body.password), now)
+                account_created = True
+            if is_organization_member(conn, invite["org_id"], user_id):
+                raise HTTPException(status_code=409, detail="This account is already a member of the organization")
+            add_invited_member(conn, invite["org_id"], user_id, invite["role"], now)
+            mark_invitation_accepted(conn, invite["id"], now)
+            audit(conn, invite["org_id"], user_id, "member.joined", "user", user_id, {"role": invite["role"]})
+    except HTTPException:
+        # Counted after the transaction ends: the limiter writes through its own connection.
+        if password_mismatch and account_key:
+            retry_after = note_failed_account_login("login_account", account_key, LOGIN_ACCOUNT_FAILURE_LIMIT)
+            if retry_after:
+                raise login_throttled(retry_after)
+        raise
+    if not account_created and account_key:
+        clear_login_failures(account_key, "login_account")
     return {"ok": True, "accountCreated": account_created}
 
 
@@ -978,34 +1125,123 @@ def create_organization(body: OrganizationBody, request: Request,
             "requireTwoPersonPublish": body.requireTwoPersonPublish}
 
 
+def approval_settings_payload(conn: Connection, org_id: str, enabled: bool, now: int) -> dict:
+    pending = get_pending_approval_setting_change(conn, org_id, now)
+    return {
+        "id": org_id,
+        "requireTwoPersonPublish": enabled,
+        "pendingChange": {
+            "id": pending["id"],
+            "requestedBy": pending["requestedBy"],
+            "requestedByEmail": pending["requestedByEmail"],
+            "requireTwoPersonPublish": bool(pending["require_two_person_publish"]),
+            "createdAt": pending["createdAt"],
+            "expiresAt": pending["expiresAt"],
+        } if pending else None,
+    }
+
+
+@app.get("/v1/organizations/{org_id}/approval-settings")
+def get_organization_approval_settings(org_id: str, request: Request):
+    context = current_session(request)
+    with connection() as conn:
+        membership(conn, org_id, context.user_id)
+        row = get_organization_approval_setting(conn, org_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        return approval_settings_payload(conn, org_id, bool(row["require_two_person_publish"]), utc_now())
+
+
 @app.put("/v1/organizations/{org_id}/approval-settings")
 def update_organization_approval_settings(
     org_id: str,
     body: OrganizationApprovalSettingsBody,
     request: Request,
+    response: Response,
     x_aman_csrf: Optional[str] = Header(default=None),
 ):
+    """Strengthen the rule at once; weakening it only opens a request for a second approver."""
     context = current_session(request)
     require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
     with transaction() as conn:
+        conn.lock_organization(org_id)
         role = membership(conn, org_id, context.user_id)
         require_role(role, {"owner", "admin"})
         row = get_organization_approval_setting(conn, org_id)
         if not row:
             raise HTTPException(status_code=404, detail="Organization not found")
         previous = bool(row["require_two_person_publish"])
-        if previous != body.requireTwoPersonPublish:
-            update_organization_approval_setting(conn, org_id, body.requireTwoPersonPublish)
-            audit(
-                conn,
-                org_id,
-                context.user_id,
-                "organization.approval_setting_updated",
-                "organization",
-                org_id,
-                {"requireTwoPersonPublish": {"before": previous, "after": body.requireTwoPersonPublish}},
-            )
-    return {"id": org_id, "requireTwoPersonPublish": body.requireTwoPersonPublish}
+        if body.requireTwoPersonPublish:
+            for change in revoke_pending_approval_setting_changes(conn, org_id, context.user_id, now):
+                audit(conn, org_id, context.user_id, "organization.approval_setting_change_revoked",
+                      "approval_setting_change", change["id"], {"reason": "rule_kept_enabled"})
+            if not previous:
+                update_organization_approval_setting(conn, org_id, True)
+                audit(conn, org_id, context.user_id, "organization.approval_setting_updated", "organization", org_id,
+                      {"requireTwoPersonPublish": {"before": False, "after": True}})
+            return approval_settings_payload(conn, org_id, True, now)
+        if not previous:
+            return approval_settings_payload(conn, org_id, False, now)
+        if get_pending_approval_setting_change(conn, org_id, now):
+            raise HTTPException(status_code=409, detail="A change to the approval rule is already awaiting approval")
+        change_id = secrets.token_hex(16)
+        persist_approval_setting_change(
+            conn, change_id, org_id, context.user_id, False, now, now + APPROVAL_SETTING_CHANGE_TTL_SECONDS,
+        )
+        audit(conn, org_id, context.user_id, "organization.approval_setting_change_requested",
+              "approval_setting_change", change_id,
+              {"requireTwoPersonPublish": {"before": True, "after": False}})
+        response.status_code = status.HTTP_202_ACCEPTED
+        return approval_settings_payload(conn, org_id, True, now)
+
+
+@app.post("/v1/organizations/{org_id}/approval-settings/changes/{change_id}/approve")
+def approve_approval_setting_change(org_id: str, change_id: str, request: Request,
+                                    x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        conn.lock_organization(org_id)
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        change = get_approval_setting_change(conn, org_id, change_id)
+        if not change:
+            raise HTTPException(status_code=404, detail="Approval rule change not found")
+        if change["approved_at"] is not None or change["revoked_at"] is not None or change["expires_at"] <= now:
+            raise HTTPException(status_code=409, detail="This approval rule change is no longer pending")
+        if change["requested_by"] == context.user_id:
+            raise HTTPException(status_code=403, detail="A different owner or administrator must approve this change")
+        row = get_organization_approval_setting(conn, org_id)
+        enabled = bool(change["require_two_person_publish"])
+        mark_approval_setting_change_approved(conn, change_id, context.user_id, now)
+        update_organization_approval_setting(conn, org_id, enabled)
+        audit(conn, org_id, context.user_id, "organization.approval_setting_updated", "organization", org_id,
+              {"requireTwoPersonPublish": {"before": bool(row["require_two_person_publish"]), "after": enabled},
+               "changeId": change_id, "requestedBy": change["requested_by"], "approvedBy": context.user_id})
+        return approval_settings_payload(conn, org_id, enabled, now)
+
+
+@app.delete("/v1/organizations/{org_id}/approval-settings/changes/{change_id}")
+def revoke_approval_setting_change(org_id: str, change_id: str, request: Request,
+                                   x_aman_csrf: Optional[str] = Header(default=None)):
+    context = current_session(request)
+    require_csrf(request, context, x_aman_csrf)
+    now = utc_now()
+    with transaction() as conn:
+        conn.lock_organization(org_id)
+        role = membership(conn, org_id, context.user_id)
+        require_role(role, {"owner", "admin"})
+        change = get_approval_setting_change(conn, org_id, change_id)
+        if not change:
+            raise HTTPException(status_code=404, detail="Approval rule change not found")
+        if change["approved_at"] is not None or change["revoked_at"] is not None or change["expires_at"] <= now:
+            raise HTTPException(status_code=409, detail="This approval rule change is no longer pending")
+        revoke_pending_approval_setting_changes(conn, org_id, context.user_id, now)
+        audit(conn, org_id, context.user_id, "organization.approval_setting_change_revoked",
+              "approval_setting_change", change_id, {"requestedBy": change["requested_by"]})
+    return {"ok": True}
 
 
 @app.post("/v1/organizations/{org_id}/invitations", status_code=status.HTTP_201_CREATED)
@@ -1617,10 +1853,18 @@ def list_audit(org_id: str, request: Request, limit: int = 100):
     ]}
 
 
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\uff1d", "\uff0b", "\uff0d", "\uff20")
+CSV_CONTROL_PREFIXES = ("\t", "\r", "\n")
+
+
 def audit_csv_cell(value: Any) -> str:
-    """Keep exported cells from being interpreted as spreadsheet formulas."""
+    """Keep exported cells from being interpreted as spreadsheet formulas.
+
+    A leading apostrophe is added when a cell starts with a formula trigger (ASCII or
+    full-width), a tab or line break, or whitespace followed by a trigger.
+    """
     text = "" if value is None else str(value)
-    if text.lstrip().startswith(("=", "+", "-", "@")):
+    if text.startswith(CSV_CONTROL_PREFIXES) or text.lstrip().startswith(CSV_FORMULA_PREFIXES):
         return "'" + text
     return text
 
@@ -1693,10 +1937,11 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
     event_id_conflict = False
     duplicate_event = False
     storage_capacity_full = False
+    storage_capacity_detail = ""
     storage_retry_after = 1
     with transaction() as conn:
         row = conn.execute(
-            "SELECT pr.channel,pr.origin,p.body FROM properties pr JOIN policies p ON p.property_id=pr.id "
+            "SELECT pr.org_id,pr.channel,pr.origin,p.body FROM properties pr JOIN policies p ON p.property_id=pr.id "
             "WHERE pr.id=? AND p.status='published'",
             (property_id,),
         ).fetchone()
@@ -1748,31 +1993,44 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
                 duplicate_event = True
         else:
             conn.execute("DELETE FROM consent_events WHERE expires_at <= ?", (now,))
-            total_count = conn.execute(
-                "SELECT COUNT(*) AS event_count FROM consent_events WHERE expires_at>?", (now,)
-            ).fetchone()["event_count"]
-            property_count = conn.execute(
-                "SELECT COUNT(*) AS event_count FROM consent_events WHERE property_id=? AND expires_at>?",
-                (property_id, now),
-            ).fetchone()["event_count"]
-            if total_count >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT or property_count >= CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT:
+            # Tenant quotas first, so one saturated property or organization reports its own
+            # limit; the global emergency bound applies only when every tenant is within quota.
+            scopes = (
+                ("property", "WHERE property_id=? AND expires_at>?", (property_id, now),
+                 CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT),
+                ("organization",
+                 "WHERE property_id IN (SELECT id FROM properties WHERE org_id=?) AND expires_at>?",
+                 (row["org_id"], now), CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT),
+                ("global", "WHERE expires_at>?", (now,), CONSENT_EVENT_ACTIVE_TOTAL_LIMIT),
+            )
+            for scope_name, where, parameters, limit in scopes:
+                count = conn.execute(
+                    f"SELECT COUNT(*) AS event_count FROM consent_events {where}", parameters
+                ).fetchone()["event_count"]
+                if scope_name == "global":
+                    previous_level = consent_event_capacity_level(count)
+                    next_level = consent_event_capacity_level(count + 1)
+                    if previous_level == "ok" and next_level == "warning":
+                        LOGGER.warning("Consent event storage reached %s%% of its emergency limit",
+                                       CONSENT_EVENT_CAPACITY_WARNING_PERCENT)
+                if count < limit:
+                    continue
                 storage_capacity_full = True
-                retry_expiries = []
-                if total_count >= CONSENT_EVENT_ACTIVE_TOTAL_LIMIT:
-                    first_global_expiry = conn.execute(
-                        "SELECT MIN(expires_at) AS first_expiry FROM consent_events WHERE expires_at>?", (now,)
-                    ).fetchone()["first_expiry"]
-                    if first_global_expiry is not None:
-                        retry_expiries.append(int(first_global_expiry))
-                if property_count >= CONSENT_EVENT_ACTIVE_PROPERTY_LIMIT:
-                    first_property_expiry = conn.execute(
-                        "SELECT MIN(expires_at) AS first_expiry FROM consent_events WHERE property_id=? AND expires_at>?",
-                        (property_id, now),
-                    ).fetchone()["first_expiry"]
-                    if first_property_expiry is not None:
-                        retry_expiries.append(int(first_property_expiry))
-                storage_retry_after = max(1, max(retry_expiries) - now) if retry_expiries else 60
-            else:
+                first_expiry = conn.execute(
+                    f"SELECT MIN(expires_at) AS first_expiry FROM consent_events {where}", parameters
+                ).fetchone()["first_expiry"]
+                storage_retry_after = max(1, int(first_expiry) - now) if first_expiry is not None else 60
+                if scope_name == "global":
+                    LOGGER.error("Consent event storage reached its emergency limit; all properties refuse new events")
+                    storage_capacity_detail = (
+                        "Consent event storage reached its global emergency limit; retry after the indicated time"
+                    )
+                else:
+                    storage_capacity_detail = (
+                        f"This {scope_name} reached its active consent event quota; retry after the indicated time"
+                    )
+                break
+            if not storage_capacity_full:
                 conn.execute(
                     "INSERT INTO consent_events(event_id,property_id,policy_version,channel,action,purposes,recorded_at,expires_at) "
                     "VALUES(?,?,?,?,?,?,?,?)",
@@ -1785,7 +2043,7 @@ def record_consent_event(property_id: str, body: ConsentEventBody, request: Requ
     if storage_capacity_full:
         raise HTTPException(
             status_code=503,
-            detail="Consent event storage is at its configured active-record limit; retry after the indicated time",
+            detail=storage_capacity_detail,
             headers={"Retry-After": str(storage_retry_after)},
         )
     if duplicate_event:
@@ -1906,7 +2164,7 @@ def organization_consent_metrics(org_id: str, request: Request,
         "periodDays": days,
         "decisionCount": len(events),
         "activeEventCount": sum(active_counts.values()),
-        "activeEventLimit": CONSENT_EVENT_ACTIVE_TOTAL_LIMIT,
+        "activeEventLimit": CONSENT_EVENT_ACTIVE_ORGANIZATION_LIMIT,
         "actions": total_actions,
         "properties": output_properties,
     }
