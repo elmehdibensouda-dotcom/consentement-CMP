@@ -54,6 +54,8 @@ Si les conditions d’accès et de sécurité du prospect ne sont pas satisfaite
 
 ## Documents de référence
 
+- [Kit de test Web dans l’environnement du client](./PILOTE_CLIENT_WEB.md)
+- [Déroulé de démonstration pour un assureur](./SCRIPT_DEMONSTRATION_ASSUREUR.md)
 - [Préparation d’un pilote Web fermé](./PILOTE_WEB_FERME.md)
 - [Guide d’intégration du pilote](./GUIDE_INTEGRATION_PILOTE.md)
 - [Dossier de sécurité fournisseur — état interne](./DOSSIER_SECURITE_FOURNISSEUR.md)

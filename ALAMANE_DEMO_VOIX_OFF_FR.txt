@@ -1,0 +1,32 @@
+ALAMANE — vidéo de présentation
+Voix off française — version de travail
+
+SCÈNE 1 — PRÉSENTATION
+ALAMANE est une plateforme de gestion des préférences de consentement. Elle aide les organisations à configurer et gouverner les choix présentés à leurs clients sur leurs parcours numériques.
+
+SCÈNE 2 — CONSOLE DE PILOTAGE
+Depuis une console centralisée, les équipes peuvent organiser leurs propriétés numériques, par exemple un site Web ou une application, et associer à chacune une politique de consentement. Chaque propriété dispose de sa configuration et de sa version.
+
+SCÈNE 3 — POLITIQUES ET GOUVERNANCE
+Une politique décrit les finalités, les langues, l’information présentée et l’état initial des technologies facultatives. Les équipes peuvent relire les changements, publier une version et consulter les actions d’administration dans le journal d’audit. Le responsable et ses conseils restent maîtres des choix juridiques et des textes.
+
+SCÈNE 4 — PARCOURS VISITEUR
+Sur le site, le visiteur découvre un panneau clair, puis peut tout accepter, tout refuser ou personnaliser ses préférences. L’interface du prototype prend en charge le français et l’arabe, avec une présentation adaptée au sens de lecture.
+
+SCÈNE 5 — APPLICATION DU CHOIX
+Le choix effectif peut être relié aux technologies facultatives du site. Dans cette démonstration, les indicateurs d’audience et de personnalisation sont de simples scripts locaux fictifs : aucun fournisseur tiers n’est appelé. Dans une intégration réelle, le client raccorde chaque finalité à ses propres mécanismes de démarrage et d’arrêt.
+
+SCÈNE 6 — MODIFICATION ET NOUVELLE POLITIQUE
+Le visiteur peut rouvrir le centre et modifier son choix. Une nouvelle version de politique peut demander une nouvelle décision. Si aucune politique valide n’est disponible, les technologies facultatives restent désactivées. Par défaut, le choix est conservé localement ; l’envoi d’événements au serveur est une option séparée.
+
+SCÈNE 7 — INTÉGRATION WEB
+Le SDK Web s’intègre sur une route définie par le client et charge la politique publiée pour cette propriété. Pour un essai, l’API et la console doivent être installées dans un environnement de préproduction isolé, derrière le HTTPS et les contrôles réseau du client. L’intégration et le retour arrière sont validés avec ses équipes.
+
+SCÈNE 8 — MARCHÉ MAROCAIN
+ALAMANE est conçu pour des parcours francophones et arabophones. Le pilote présenté ici se concentre sur le Web. Des SDK de démarrage existent aussi pour iOS, Android et React Native, mais leurs intégrations doivent être validées dans les applications et sur les versions du client.
+
+SCÈNE 9 — LIMITES ET PROCHAINE ÉTAPE
+ALAMANE est aujourd’hui un prototype de préproduction : ce n’est pas encore un service de production et il ne garantit pas la conformité juridique. La prochaine étape est un pilote Web limité, autorisé par le client, avec une route de recette, des comptes et données fictifs, une revue sécurité et un retour arrière convenu.
+
+FIN
+ALAMANE — configurer, faire relire et appliquer les préférences, étape par étape.
