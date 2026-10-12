@@ -109,7 +109,7 @@ jobs:
           gradle-version: "9.6.0"
           cache-provider: basic
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4.0.0
+        uses: android-actions/setup-android@v4.0.4
         with:
           packages: platforms;android-36
       - name: Build Android library and sample
